@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { font-family: -apple-system, system-ui, sans-serif; background: #f0f2f5; margin: 0; color: #333; }
+        .tabs { display: flex; background: #fff; border-bottom: 1px solid #dfe1e5; position: sticky; top: 0; z-index: 100; }
+        .tab { flex: 1; text-align: center; padding: 12px; font-weight: 600; color: #70757a; cursor: pointer; }
+        .tab.active { color: #0088cc; border-bottom: 2px solid #0088cc; }
+        .container { padding: 12px; padding-bottom: 100px; }
+        .section-title { font-size: 18px; font-weight: bold; margin: 15px 0 10px; }
+        .date-card { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; }
+        input[type="date"] { border: 1px solid #ddd; border-radius: 8px; padding: 8px; font-size: 16px; outline: none; }
+        .product-card { background: #fff; border-radius: 15px; padding: 12px 16px; margin-bottom: 10px; display: flex; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .product-info { flex: 1; }
+        .product-name { font-weight: 600; font-size: 15px; display: block; }
+        .product-price { color: #888; font-size: 13px; }
+        .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 4px; }
+        .step-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #0088cc; cursor: pointer; }
+        .step-value { min-width: 30px; text-align: center; font-weight: bold; }
+        .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #ddd; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; z-index: 1000; }
+        .total-amount { font-size: 20px; font-weight: bold; }
+        .submit-btn { background: #0088cc; color: #fff; border: none; border-radius: 10px; padding: 12px 24px; font-weight: bold; }
+        .hidden { display: none; }
+        .history-card { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; }
+    </style>
+</head>
+<body>
+
+<div class="tabs">
+    <div class="tab active" onclick="showPage('order', this)">Заказ</div>
+    <div class="tab" onclick="showPage('history', this)">Мои Заказы</div>
+</div>
+
+<div id="order-page" class="container">
+    <div class="date-card">
+        <span>Дата доставки:</span>
+        <input type="date" id="deliveryDate">
+    </div>
+    <div id="products-list">Загрузка товаров...</div>
+</div>
+
+<div id="history-page" class="container hidden">
+    <div id="history-list">Загрузка истории...</div>
+</div>
+
+<div class="bottom-bar" id="footer">
+    <div><div style="font-size: 12px; color: #888;">Итого:</div><div class="total-amount" id="totalDisplay">0 ₽</div></div>
+    <button class="submit-btn" onclick="sendOrder()">ОТПРАВИТЬ</button>
+</div>
+
+<script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    const WEB_APP_URL = 'ССЫЛКА_НА_ТВОЙ_ГУГЛ_СКРИПТ';
+    let cart = {};
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    document.getElementById('deliveryDate').value = d.toISOString().split('T')[0];
+
+    // Загрузка товаров из таблицы
+    async function loadProducts() {
+        try {
+            const resp = await fetch(`${WEB_APP_URL}?type=products`);
+            const products = await resp.json();
+            const list = document.getElementById('products-list');
+            list.innerHTML = '';
+            
+            products.forEach(p => {
+                list.innerHTML += `
+                <div class="product-card" data-name="${p.name}" data-price="${p.price}">
+                    <div class="product-info">
+                        <span class="product-name">${p.name}</span>
+                        <span class="product-price">${p.price} ₽</span>
+                    </div>
+                    <div class="stepper">
+                        <div class="step-btn" onclick="updateQty(this, -1)">−</div>
+                        <div class="step-value">0</div>
+                        <div class="step-btn" onclick="updateQty(this, 1)">+</div>
+                    </div>
+                </div>`;
+            });
+        } catch (e) { document.getElementById('products-list').innerText = 'Ошибка загрузки товаров'; }
+    }
+
+    function updateQty(btn, delta) {
+        const card = btn.closest('.product-card');
+        const valDisp = card.querySelector('.step-value');
+        const name = card.dataset.name;
+        const price = parseInt(card.dataset.price);
+        let qty = parseInt(valDisp.innerText) + delta;
+        if (qty < 0) qty = 0;
+        valDisp.innerText = qty;
+        if (qty > 0) cart[name] = { qty, price }; else delete cart[name];
+        let total = 0;
+        for (let k in cart) total += cart[k].qty * cart[k].price;
+        document.getElementById('totalDisplay').innerText = total + " ₽";
+    }
+
+    function showPage(page, el) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        document.getElementById('order-page').classList.toggle('hidden', page !== 'order');
+        document.getElementById('history-page').classList.toggle('hidden', page !== 'history');
+        document.getElementById('footer').classList.toggle('hidden', page !== 'order');
+        if (page === 'history') loadHistory();
+    }
+
+    async function sendOrder() {
+        const date = document.getElementById('deliveryDate').value;
+        if (Object.keys(cart).length === 0) return tg.showAlert("Выберите товары!");
+        const payload = { user: tg.initDataUnsafe.user?.username || "Guest", date, items: cart };
+        await fetch(WEB_APP_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+        tg.showAlert("✅ Заказ отправлен!");
+        tg.close();
+    }
+
+    async function loadHistory() {
+        const user = tg.initDataUnsafe.user?.username || "Guest";
+        const resp = await fetch(`${WEB_APP_URL}?type=history&user=${user}`);
+        const data = await resp.json();
+        const list = document.getElementById('history-list');
+        list.innerHTML = data.length ? '' : 'Заказов нет';
+        data.forEach(o => {
+            list.innerHTML += `<div class="history-card"><b>${o.date}</b> <span>${o.item} (x${o.qty})</span></div>`;
+        });
+    }
+
+    loadProducts();
+</script>
+</body>
+</html>
