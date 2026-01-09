@@ -10,7 +10,6 @@
         .tab { flex: 1; text-align: center; padding: 12px; font-weight: 600; color: #70757a; cursor: pointer; }
         .tab.active { color: #0088cc; border-bottom: 2px solid #0088cc; }
         .container { padding: 12px; padding-bottom: 100px; }
-        .section-title { font-size: 18px; font-weight: bold; margin: 15px 0 10px; }
         .date-card { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; }
         input[type="date"] { border: 1px solid #ddd; border-radius: 8px; padding: 8px; font-size: 16px; outline: none; }
         .product-card { background: #fff; border-radius: 15px; padding: 12px 16px; margin-bottom: 10px; display: flex; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -39,7 +38,7 @@
         <span>Дата доставки:</span>
         <input type="date" id="deliveryDate">
     </div>
-    <div id="products-list">Загрузка товаров...</div>
+    <div id="products-list">Загрузка товаров из таблицы...</div>
 </div>
 
 <div id="history-page" class="container hidden">
@@ -55,19 +54,25 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    const WEB_APP_URL = 'ССЫЛКА_НА_ТВОЙ_ГУГЛ_СКРИПТ';
+    // СЮДА ВСТАВЬ СВОЮ ССЫЛКУ ИЗ ГУГЛ ТАБЛИЦЫ
+    const WEB_APP_URL = 'ТВОЯ_ССЫЛКА_ИЗ_GOOGLE_SCRIPT';
+    
     let cart = {};
     const d = new Date(); d.setDate(d.getDate() + 1);
     document.getElementById('deliveryDate').value = d.toISOString().split('T')[0];
 
-    // Загрузка товаров из таблицы
     async function loadProducts() {
         try {
             const resp = await fetch(`${WEB_APP_URL}?type=products`);
             const products = await resp.json();
             const list = document.getElementById('products-list');
-            list.innerHTML = '';
             
+            if (products.error) {
+                list.innerText = 'Ошибка: ' + products.error;
+                return;
+            }
+
+            list.innerHTML = '';
             products.forEach(p => {
                 list.innerHTML += `
                 <div class="product-card" data-name="${p.name}" data-price="${p.price}">
@@ -82,7 +87,9 @@
                     </div>
                 </div>`;
             });
-        } catch (e) { document.getElementById('products-list').innerText = 'Ошибка загрузки товаров'; }
+        } catch (e) { 
+            document.getElementById('products-list').innerText = 'Не удалось загрузить товары. Проверь ссылку и права доступа в Google Script.'; 
+        }
     }
 
     function updateQty(btn, delta) {
@@ -111,21 +118,31 @@
     async function sendOrder() {
         const date = document.getElementById('deliveryDate').value;
         if (Object.keys(cart).length === 0) return tg.showAlert("Выберите товары!");
-        const payload = { user: tg.initDataUnsafe.user?.username || "Guest", date, items: cart };
-        await fetch(WEB_APP_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-        tg.showAlert("✅ Заказ отправлен!");
-        tg.close();
+        const payload = { user: tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest", date, items: cart };
+        
+        try {
+            await fetch(WEB_APP_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+            tg.showAlert("✅ Заказ отправлен!");
+            tg.close();
+        } catch (e) { 
+            tg.showAlert("Ошибка при отправке заказа."); 
+        }
     }
 
     async function loadHistory() {
-        const user = tg.initDataUnsafe.user?.username || "Guest";
-        const resp = await fetch(`${WEB_APP_URL}?type=history&user=${user}`);
-        const data = await resp.json();
+        const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
         const list = document.getElementById('history-list');
-        list.innerHTML = data.length ? '' : 'Заказов нет';
-        data.forEach(o => {
-            list.innerHTML += `<div class="history-card"><b>${o.date}</b> <span>${o.item} (x${o.qty})</span></div>`;
-        });
+        list.innerText = 'Загрузка...';
+        try {
+            const resp = await fetch(`${WEB_APP_URL}?type=history&user=${user}`);
+            const data = await resp.json();
+            list.innerHTML = data.length ? '' : 'Заказов пока нет';
+            data.forEach(o => {
+                list.innerHTML += `<div class="history-card"><b>${o.date}</b> <span>${o.item} (x${o.qty})</span></div>`;
+            });
+        } catch (e) { 
+            list.innerText = 'Ошибка загрузки истории.'; 
+        }
     }
 
     loadProducts();
