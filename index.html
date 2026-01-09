@@ -11,7 +11,7 @@
         .tab.active { color: #0088cc; border-bottom: 3px solid #0088cc; }
         .container { padding: 15px; }
         .date-card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        input[type="date"] { border: 1px solid #ccc; border-radius: 8px; padding: 8px; font-size: 16px; outline: none; }
+        input[type="date"] { border: 1px solid #ccc; border-radius: 8px; padding: 8px; font-size: 16px; outline: none; background: #fff; }
         .product-card { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .product-name { font-weight: bold; font-size: 15px; }
         .product-price { color: #888; font-size: 13px; margin-top: 4px; }
@@ -21,7 +21,10 @@
         .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #ddd; padding: 15px; display: flex; align-items: center; justify-content: space-between; z-index: 1000; }
         .submit-btn { background: #0088cc; color: #fff; border: none; border-radius: 10px; padding: 12px 25px; font-weight: bold; font-size: 16px; }
         .hidden { display: none; }
-        .history-card { background: #fff; border-radius: 10px; padding: 12px; margin-bottom: 8px; border-left: 4px solid #0088cc; }
+        .history-group { background: #fff; border-radius: 12px; margin-bottom: 15px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .history-header { background: #f8f9fa; padding: 10px 15px; font-weight: bold; color: #555; border-bottom: 1px solid #eee; }
+        .history-item { padding: 10px 15px; border-bottom: 1px solid #f9f9f9; display: flex; justify-content: space-between; font-size: 14px; }
+        .history-item:last-child { border-bottom: none; }
     </style>
 </head>
 <body>
@@ -36,7 +39,7 @@
         <span>Дата:</span>
         <input type="date" id="deliveryDate" onchange="loadProducts()">
     </div>
-    <div id="products-list">Синхронизация...</div>
+    <div id="products-list">Загрузка...</div>
 </div>
 
 <div id="history-page" class="container hidden">
@@ -52,20 +55,20 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // Твоя проверенная ссылка на Google Script
     const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzwQHlYWw9PmK6EsZIh8psmb2tZIh7PrWQ2h_lgvDbcEjkPAuREPTHAHN2wnISmktbn/exec';
-    
     let cart = {};
 
-    // По умолчанию ставим завтрашнюю дату
-    const d = new Date(); d.setDate(d.getDate() + 1);
-    document.getElementById('deliveryDate').value = d.toISOString().split('T')[0];
+    // ОГРАНИЧЕНИЕ ДАТЫ: Только сегодня и будущее
+    const today = new Date().toISOString().split('T')[0];
+    const dateInput = document.getElementById('deliveryDate');
+    dateInput.setAttribute('min', today);
+    dateInput.value = today;
 
     async function loadProducts() {
-        const date = document.getElementById('deliveryDate').value;
+        const date = dateInput.value;
         const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
         const list = document.getElementById('products-list');
-        list.innerHTML = '<div style="text-align:center; padding:20px;">Синхронизация с таблицей...</div>';
+        list.innerHTML = '<div style="text-align:center; padding:20px;">Синхронизация...</div>';
 
         try {
             const resp = await fetch(`${WEB_APP_URL}?type=products&user=${user}&date=${date}`);
@@ -74,11 +77,9 @@
             cart = {};
 
             products.forEach(p => {
-                // Если данные пришли кривые, превращаем их в 0, чтобы не было NaN
                 const price = parseInt(p.price) || 0;
                 const qty = parseInt(p.currentQty) || 0;
-
-                if (qty > 0) cart[p.name] = { qty: qty, price: price };
+                if (qty > 0) cart[p.name] = { qty, price };
 
                 list.innerHTML += `
                 <div class="product-card" data-name="${p.name}" data-price="${price}">
@@ -94,7 +95,7 @@
                 </div>`;
             });
             updateTotal();
-        } catch (e) { list.innerText = 'Ошибка данных. Проверьте таблицу и доступ.'; }
+        } catch (e) { list.innerText = 'Ошибка загрузки данных.'; }
     }
 
     function updateQty(btn, delta) {
@@ -125,29 +126,49 @@
     }
 
     async function sendOrder() {
-        const date = document.getElementById('deliveryDate').value;
+        const date = dateInput.value;
         const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
         const payload = { user, date, items: cart };
         
         try {
             await fetch(WEB_APP_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-            tg.showAlert("✅ Заказ успешно сохранен в таблице!");
+            tg.showAlert("✅ Заказ на " + date + " обновлен!");
             loadHistory();
-            showPage('history', document.querySelectorAll('.tab')[1]);
         } catch (e) { tg.showAlert("Ошибка при сохранении."); }
     }
 
     async function loadHistory() {
         const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
         const list = document.getElementById('history-list');
-        list.innerHTML = 'Загрузка истории...';
+        list.innerHTML = 'Загрузка...';
         try {
             const resp = await fetch(`${WEB_APP_URL}?type=history&user=${user}`);
             const data = await resp.json();
-            list.innerHTML = data.length ? '' : 'Заказов пока нет';
-            data.forEach(o => {
-                list.innerHTML += `<div class="history-card"><b>${o.date}</b><br>${o.item} — ${o.qty} шт.</div>`;
-            });
+            if (!data.length) { list.innerHTML = 'Заказов пока нет'; return; }
+
+            // ГРУППИРОВКА ПО ДАТАМ
+            const grouped = data.reduce((acc, obj) => {
+                if (!acc[obj.date]) acc[obj.date] = [];
+                acc[obj.date].push(obj);
+                return acc;
+            }, {});
+
+            list.innerHTML = '';
+            for (let date in grouped) {
+                let itemsHtml = grouped[date].map(i => `
+                    <div class="history-item">
+                        <span>${i.item}</span>
+                        <b>x${i.qty}</b>
+                    </div>
+                `).join('');
+                
+                list.innerHTML += `
+                    <div class="history-group">
+                        <div class="history-header">${date}</div>
+                        ${itemsHtml}
+                    </div>
+                `;
+            }
         } catch (e) { list.innerText = 'Ошибка загрузки истории.'; }
     }
 
