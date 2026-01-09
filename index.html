@@ -13,12 +13,12 @@
         .card { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .flex { display: flex; justify-content: space-between; align-items: center; }
         .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 4px; }
-        .step-btn { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #0088cc; cursor: pointer; }
+        .step-btn { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #0088cc; cursor: pointer; }
         .step-val { min-width: 25px; text-align: center; font-weight: bold; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; }
         .btn { background: #0088cc; color: #fff; border: none; padding: 12px 20px; border-radius: 10px; font-weight: bold; }
         .hidden { display: none; }
-        .badge { background: #e1f5fe; color: #0088cc; padding: 2px 8px; border-radius: 8px; font-size: 12px; }
+        .badge { background: #e1f5fe; color: #0088cc; padding: 4px 8px; border-radius: 8px; font-size: 12px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -31,7 +31,7 @@
 <div id="order-page" class="container">
     <div class="card flex">
         <span>Дата доставки:</span>
-        <input type="date" id="deliveryDate" style="border:1px solid #ddd; padding:5px; border-radius:8px;">
+        <input type="date" id="deliveryDate" style="border:1px solid #ddd; padding:5px; border-radius:8px; outline: none;">
     </div>
     <div id="products-list" style="text-align: center; padding: 20px; color: #888;">Загрузка товаров...</div>
 </div>
@@ -39,7 +39,7 @@
 <div id="history-page" class="container hidden"></div>
 
 <div class="footer" id="footer">
-    <div><small>Итого:</small><br><b id="totalSum">0 ₽</b></div>
+    <div><small style="color: #888;">Итого:</small><br><b id="totalSum" style="font-size: 18px;">0 ₽</b></div>
     <button class="btn" onclick="sendOrder()">ОТПРАВИТЬ</button>
 </div>
 
@@ -47,8 +47,7 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // !!! ВАЖНО: ВСТАВЬ СВОЮ ССЫЛКУ ТУТ !!!
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz7-vSecpK0xqQin3SoR9BkOsU5lY-ZJOAzhAqhjFRLxwFl-B3WOo-NA9oYcHBhPELQ/exec';
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzwQHlYWw9PmK6EsZIh8psmb2tZIh7PrWQ2h_lgvDbcEjkPAuREPTHAHN2wnISmktbn/exec';
 
     let cart = {};
     const dateInput = document.getElementById('deliveryDate');
@@ -56,19 +55,24 @@
     dateInput.value = t.toISOString().split('T')[0];
     dateInput.min = t.toISOString().split('T')[0];
 
-    // Функция для общения с таблицей
-    async function api(payload) {
-        const response = await fetch(SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify(payload)
+    // Специальная функция для загрузки через JSONP (обход ошибок)
+    function jsonp(url, callbackName) {
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            window[callbackName] = (data) => {
+                resolve(data);
+                document.body.removeChild(script);
+                delete window[callbackName];
+            };
+            script.src = `${url}&callback=${callbackName}`;
+            script.onerror = () => reject(new Error('Ошибка загрузки'));
+            document.body.appendChild(script);
         });
-        return response.json();
     }
 
-    // Загрузка товаров
     async function loadProducts() {
         try {
-            const products = await api({ action: 'getProducts' });
+            const products = await jsonp(`${SCRIPT_URL}?action=getProducts`, 'cb_prod');
             const list = document.getElementById('products-list');
             list.innerHTML = '';
             products.forEach(p => {
@@ -83,7 +87,7 @@
                     </div>`;
                 list.appendChild(div);
             });
-        } catch (e) { document.getElementById('products-list').innerText = "Ошибка загрузки товаров. Проверьте ссылку скрипта."; }
+        } catch (e) { document.getElementById('products-list').innerText = "Ошибка загрузки товаров. Проверьте лист 'products'"; }
     }
 
     function updateQty(name, price, delta, btn) {
@@ -108,23 +112,22 @@
     async function loadHistory() {
         const histDiv = document.getElementById('history-page');
         const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
-        histDiv.innerHTML = '<p style="text-align:center">Загрузка...</p>';
+        histDiv.innerHTML = '<p style="text-align:center; color:#888;">Загрузка истории...</p>';
         try {
-            const data = await api({ action: 'getHistory', user: user });
+            const data = await jsonp(`${SCRIPT_URL}?action=getHistory&user=${encodeURIComponent(user)}`, 'cb_hist');
             let html = '';
             for (let date in data) {
                 html += `<div class="card"><div class="flex"><b>${date}</b><b class="badge">${data[date].total} ₽</b></div><hr style="border:0; border-top:1px solid #eee; margin:10px 0;">`;
                 data[date].items.forEach(i => { html += `<div class="flex" style="font-size:14px; margin-bottom:4px"><span>${i.name}</span><b>x${i.qty}</b></div>`; });
                 html += `</div>`;
             }
-            histDiv.innerHTML = Object.keys(data).length ? html : '<p style="text-align:center">Заказов пока нет</p>';
-        } catch (e) { histDiv.innerHTML = '<p style="text-align:center; color:red">Ошибка загрузки истории</p>'; }
+            histDiv.innerHTML = Object.keys(data).length ? html : '<p style="text-align:center; color:#888;">Заказов пока нет</p>';
+        } catch (e) { histDiv.innerHTML = '<p style="text-align:center; color:red">Ошибка загрузки</p>'; }
     }
 
     async function sendOrder() {
         if (!Object.keys(cart).length) return tg.showAlert("Выберите товары!");
         const payload = { 
-            action: 'sendOrder', 
             user: tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest", 
             date: dateInput.value, 
             items: cart 
@@ -132,7 +135,7 @@
         tg.showConfirm("Отправить заказ?", async (ok) => {
             if (ok) {
                 await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-                tg.showAlert("Заказ отправлен!");
+                tg.showAlert("✅ Заказ отправлен!");
                 tg.close();
             }
         });
