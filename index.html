@@ -5,21 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: -apple-system, sans-serif; background: #f0f2f5; margin: 0; padding: 0; user-select: none; }
+        body { font-family: -apple-system, sans-serif; background: #f0f2f5; margin: 0; padding: 0; }
         .tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
         .tab { flex: 1; text-align: center; padding: 15px; font-weight: bold; color: #888; cursor: pointer; }
         .tab.active { color: #0088cc; border-bottom: 3px solid #0088cc; }
-        .container { padding: 15px; padding-bottom: 100px; }
-        .card { background: #fff; border-radius: 15px; padding: 15px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .flex { display: flex; justify-content: space-between; align-items: center; }
-        .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 4px; }
-        .step-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #0088cc; cursor: pointer; }
-        .step-val { min-width: 30px; text-align: center; font-weight: bold; }
-        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; z-index: 1000; }
-        .btn { background: #0088cc; color: #fff; border: none; padding: 12px 25px; border-radius: 12px; font-weight: bold; font-size: 16px; }
+        .container { padding: 10px; padding-bottom: 100px; }
+        .category-title { font-size: 14px; color: #888; text-transform: uppercase; margin: 15px 5px 5px; font-weight: bold; }
+        .card { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 3px; }
+        .step-btn { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #0088cc; cursor: pointer; border-radius: 50%; }
+        .step-val { min-width: 25px; text-align: center; font-weight: bold; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; }
+        .btn { background: #0088cc; color: #fff; border: none; padding: 12px 20px; border-radius: 10px; font-weight: bold; }
         .hidden { display: none; }
-        .badge { background: #e1f5fe; color: #0088cc; padding: 5px 10px; border-radius: 10px; font-size: 13px; font-weight: bold; }
-        hr { border: 0; border-top: 1px solid #eee; margin: 10px 0; }
     </style>
 </head>
 <body>
@@ -30,17 +28,17 @@
 </div>
 
 <div id="order-page" class="container">
-    <div class="card flex">
-        <span style="font-weight: 500;">Дата доставки:</span>
-        <input type="date" id="deliveryDate" style="border:1px solid #ddd; padding:8px; border-radius:8px; outline: none; font-size: 14px;">
+    <div class="card">
+        <span>Дата доставки:</span>
+        <input type="date" id="deliveryDate" style="border:none; font-weight:bold; color:#0088cc;">
     </div>
-    <div id="products-list" style="text-align: center; padding: 30px; color: #999;">Загрузка меню...</div>
+    <div id="products-list">Загрузка меню...</div>
 </div>
 
 <div id="history-page" class="container hidden"></div>
 
 <div class="footer" id="footer-ui">
-    <div><small style="color: #888;">Итого:</small><br><b id="totalSum" style="font-size: 18px;">0 ₽</b></div>
+    <div><small>Итого:</small><br><b id="totalSum">0 ₽</b></div>
     <button class="btn" onclick="sendOrder()">ОТПРАВИТЬ</button>
 </div>
 
@@ -48,44 +46,38 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // Твоя новая ссылка
     const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwi1jvtL8e9QLnDJhmGe66b07l-ir0yAtiEjGW8s4YK6u4VzJVhrKZU5cWJzErNFeAv/exec';
 
     let cart = {};
     const dateInput = document.getElementById('deliveryDate');
-    
-    // Блокировка прошлых дат
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-    const minDate = tomorrow.toISOString().split('T')[0];
-    dateInput.value = minDate;
-    dateInput.min = minDate;
+    dateInput.value = tomorrow.toISOString().split('T')[0];
+    dateInput.min = tomorrow.toISOString().split('T')[0];
 
-    // Загрузчик данных (JSONP)
-    function loadData(action, params = '') {
-        return new Promise((resolve) => {
-            const callbackName = 'cb_' + Math.random().toString(36).substr(2, 9);
-            const script = document.createElement('script');
-            window[callbackName] = (data) => {
-                resolve(data);
-                document.head.removeChild(script);
-                delete window[callbackName];
-            };
-            script.src = `${SCRIPT_URL}?action=${action}${params}&callback=${callbackName}`;
-            document.head.appendChild(script);
-        });
+    function loadScript(url) {
+        const script = document.createElement('script');
+        script.src = url;
+        document.head.appendChild(script);
+        script.onload = () => document.head.removeChild(script);
     }
 
-    // Загрузка товаров
-    async function initProducts() {
-        const data = await loadData('getProducts');
+    window.handleProducts = (data) => {
         const list = document.getElementById('products-list');
-        if (!data || data.error) { list.innerText = "Ошибка загрузки товаров"; return; }
         list.innerHTML = '';
+        let currentCat = '';
+        
         data.forEach(p => {
+            if (p.category !== currentCat) {
+                currentCat = p.category;
+                const catDiv = document.createElement('div');
+                catDiv.className = 'category-title';
+                catDiv.innerText = currentCat;
+                list.appendChild(catDiv);
+            }
             const div = document.createElement('div');
-            div.className = 'card flex';
+            div.className = 'card';
             div.innerHTML = `
-                <div><b style="font-size:15px;">${p.name}</b><br><small style="color:#888">${p.price} ₽</small></div>
+                <div><b>${p.name}</b><br><small style="color:#888">${p.price} ₽</small></div>
                 <div class="stepper">
                     <div class="step-btn" onclick="updateQty('${p.name}', ${p.price}, -1, this)">−</div>
                     <div class="step-val">0</div>
@@ -93,7 +85,7 @@
                 </div>`;
             list.appendChild(div);
         });
-    }
+    };
 
     function updateQty(name, price, delta, btn) {
         const valDisp = btn.parentElement.querySelector('.step-val');
@@ -113,49 +105,36 @@
         document.getElementById('order-page').classList.toggle('hidden', page !== 'order');
         document.getElementById('history-page').classList.toggle('hidden', page !== 'history');
         document.getElementById('footer-ui').classList.toggle('hidden', page !== 'order');
-        if (page === 'history') loadHistory();
+        if (page === 'history') {
+            const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
+            loadScript(`${SCRIPT_URL}?action=getHistory&user=${encodeURIComponent(user)}&callback=handleHistory`);
+        }
     }
 
-    async function loadHistory() {
+    window.handleHistory = (data) => {
         const histDiv = document.getElementById('history-page');
-        const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
-        histDiv.innerHTML = '<p style="text-align:center; color:#999; margin-top:20px;">Загрузка истории...</p>';
-        
-        const data = await loadData('getHistory', `&user=${encodeURIComponent(user)}`);
         let html = '';
         for (let date in data) {
-            html += `<div class="card">
-                <div class="flex"><b>${date}</b><b class="badge">${data[date].total} ₽</b></div><hr>`;
-            data[date].items.forEach(i => {
-                if (i.qty > 0) {
-                    html += `<div class="flex" style="font-size:14px; margin-bottom:5px; color:#444;">
-                        <span>${i.name}</span><b>x${i.qty}</b></div>`;
-                }
-            });
+            html += `<div class="card" style="display:block"><b>${date}</b> — ${data[date].total} ₽<hr style="border:0; border-top:1px solid #eee; margin:5px 0">`;
+            data[date].items.forEach(i => { html += `<div style="font-size:14px">${i.name} x${i.qty}</div>`; });
             html += `</div>`;
         }
-        histDiv.innerHTML = Object.keys(data).length ? html : '<p style="text-align:center; color:#999; margin-top:50px;">История пуста</p>';
-    }
+        histDiv.innerHTML = Object.keys(data).length ? html : '<p style="text-align:center; color:#999">История пуста</p>';
+    };
 
     async function sendOrder() {
-        if (!Object.keys(cart).length) return tg.showAlert("Сначала выберите круассаны!");
-        
+        if (!Object.keys(cart).length) return tg.showAlert("Выберите товары!");
         const payload = { 
             user: tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest", 
             date: dateInput.value, 
             items: cart 
         };
-
-        tg.showConfirm("Отправить заказ на " + document.getElementById('totalSum').innerText + "?", async (ok) => {
-            if (ok) {
-                await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-                tg.showAlert("✅ Заказ успешно отправлен!");
-                tg.close();
-            }
-        });
+        await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+        tg.showAlert("Заказ отправлен!");
+        tg.close();
     }
 
-    initProducts();
+    loadScript(`${SCRIPT_URL}?action=getProducts&callback=handleProducts`);
 </script>
 </body>
 </html>
