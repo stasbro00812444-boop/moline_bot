@@ -13,18 +13,18 @@
         .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .product-row { display: flex; align-items: center; justify-content: space-between; }
         .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 4px; }
-        .btn { width: 32px; height: 32px; border: none; background: none; color: #0088cc; font-size: 24px; cursor: pointer; line-height: 1; }
+        .btn { width: 34px; height: 34px; border: none; background: none; color: #0088cc; font-size: 22px; cursor: pointer; }
+        .val { min-width: 30px; text-align: center; font-weight: bold; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
         .send-btn { background: #0088cc; color: #fff; border: none; padding: 12px 25px; border-radius: 12px; font-weight: bold; }
         .hidden { display: none; }
-        .error-msg { color: red; text-align: center; padding: 20px; font-size: 14px; }
     </style>
 </head>
 <body>
 
 <div class="tabs">
-    <div id="t-order" class="tab active" onclick="show('order')">ЗАКАЗАТЬ</div>
-    <div id="t-hist" class="tab" onclick="show('history')">ИСТОРИЯ</div>
+    <div id="tab-1" class="tab active" onclick="showTab('order')">ЗАКАЗАТЬ</div>
+    <div id="tab-2" class="tab" onclick="showTab('hist')">ИСТОРИЯ</div>
 </div>
 
 <div id="page-order" class="container">
@@ -44,7 +44,7 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    // ЗАМЕНИ ССЫЛКУ НИЖЕ
+    // СЮДА ВСТАВЬ СВОЮ ССЫЛКУ ИЗ GOOGLE SCRIPTS
     const API = 'ТВОЯ_ССЫЛКА_EXEC'; 
     const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
     let cart = {};
@@ -52,31 +52,24 @@
     const inp = document.getElementById('date');
     const tom = new Date(); tom.setDate(tom.getDate() + 1);
     inp.value = tom.toISOString().split('T')[0];
-    inp.min = inp.value;
 
     async function loadMenu() {
         const m = document.getElementById('menu');
-        m.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">Загрузка прайса...</p>';
+        m.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">Загрузка...</p>';
         try {
             const r = await fetch(`${API}?type=menu&user=${user}`);
-            const items = await r.json();
-            if (items.error) {
-                m.innerHTML = `<div class="error-msg">Ошибка: ${items.error}</div>`;
-                return;
-            }
+            const data = await r.json();
             m.innerHTML = '';
-            items.forEach(p => {
+            data.forEach(p => {
                 const d = document.createElement('div');
                 d.className = 'card product-row';
                 d.innerHTML = `<div><b>${p.name}</b><br><span style="color:#0088cc">${p.price} ₽</span></div>
                     <div class="stepper"><button class="btn" onclick="upd('${p.name}', ${p.price}, -1, this)">−</button>
-                    <div class="val" style="min-width:30px;text-align:center;font-weight:bold">0</div>
+                    <div class="val">0</div>
                     <button class="btn" onclick="upd('${p.name}', ${p.price}, 1, this)">+</button></div>`;
                 m.appendChild(d);
             });
-        } catch(e) {
-            m.innerHTML = '<div class="error-msg">Сервер недоступен. Проверьте развертывание в Google Scripts.</div>';
-        }
+        } catch(e) { m.innerHTML = '<p style="color:red; text-align:center">Ошибка связи. Проверьте ссылку API.</p>'; }
     }
 
     function upd(n, p, delta, el) {
@@ -88,38 +81,36 @@
         document.getElementById('total').innerText = s + " ₽";
     }
 
-    function show(p) {
-        document.getElementById('t-order').className = p=='order'?'tab active':'tab';
-        document.getElementById('t-hist').className = p=='history'?'tab active':'tab';
-        document.getElementById('page-order').classList.toggle('hidden', p!='order');
-        document.getElementById('page-hist').classList.toggle('hidden', p!='history');
-        document.getElementById('foot').classList.toggle('hidden', p!='order');
-        if (p=='history') loadHist();
+    function showTab(t) {
+        document.getElementById('tab-1').className = t=='order'?'tab active':'tab';
+        document.getElementById('tab-2').className = t=='hist'?'tab active':'tab';
+        document.getElementById('page-order').classList.toggle('hidden', t!='order');
+        document.getElementById('page-hist').classList.toggle('hidden', t!='hist');
+        document.getElementById('foot').classList.toggle('hidden', t!='order');
+        if (t=='hist') loadHist();
     }
 
     async function loadHist() {
         const d = document.getElementById('page-hist');
-        d.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">Синхронизация...</p>';
-        try {
-            const r = await fetch(`${API}?user=${user}`);
-            const data = await r.json();
-            let h = '<h3>Ваша история заказов</h3>';
-            for (let date in data) {
-                h += `<div class="card"><div style="display:flex;justify-content:space-between;border-bottom:1px solid #eee;padding-bottom:10px;margin-bottom:10px">
-                    <b>${date}</b><b style="color:#0088cc">${data[date].total} ₽</b></div>`;
-                data[date].items.forEach(i => { h += `<div style="display:flex;justify-content:space-between;font-size:14px"><span>${i.name}</span><b>x${i.qty}</b></div>`; });
-                h += `</div>`;
-            }
-            d.innerHTML = Object.keys(data).length > 0 ? h : '<p style="text-align:center;margin-top:50px;color:#999">История пуста</p>';
-        } catch(e) { d.innerHTML = '<div class="error-msg">Ошибка загрузки истории</div>'; }
+        d.innerHTML = '<p style="text-align:center;color:#999">Загрузка истории...</p>';
+        const r = await fetch(`${API}?user=${user}`);
+        const data = await r.json();
+        let h = '';
+        for (let date in data) {
+            h += `<div class="card"><div style="display:flex;justify-content:space-between;border-bottom:1px solid #eee;padding-bottom:10px;margin-bottom:10px">
+                <b>${date}</b><b style="color:#0088cc">${data[date].total} ₽</b></div>`;
+            data[date].items.forEach(i => { h += `<div style="display:flex;justify-content:space-between;font-size:14px"><span>${i.name}</span><b>x${i.qty}</b></div>`; });
+            h += `</div>`;
+        }
+        d.innerHTML = h || '<p style="text-align:center;margin-top:50px;color:#999">История пуста</p>';
     }
 
     async function send() {
         if (!Object.keys(cart).length) return tg.showAlert("Выберите товары!");
-        tg.showConfirm("Подтвердить заказ?", async (ok) => {
+        tg.showConfirm("Оформить заказ?", async (ok) => {
             if (ok) {
                 await fetch(API, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ user, date: inp.value, items: cart }) });
-                tg.showAlert("✅ Заказ успешно оформлен!");
+                tg.showAlert("✅ Заказ отправлен!");
                 tg.close();
             }
         });
