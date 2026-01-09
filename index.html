@@ -38,7 +38,7 @@
         <span>Дата доставки:</span>
         <input type="date" id="deliveryDate">
     </div>
-    <div id="products-list">Загрузка товаров из таблицы...</div>
+    <div id="products-list">Загрузка товаров...</div>
 </div>
 
 <div id="history-page" class="container hidden">
@@ -54,8 +54,8 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // СЮДА ВСТАВЬ СВОЮ ССЫЛКУ ИЗ ГУГЛ ТАБЛИЦЫ
-    const WEB_APP_URL = 'ТВОЯ_ССЫЛКА_ИЗ_GOOGLE_SCRIPT';
+    // Твоя проверенная ссылка на Google Script
+    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzwQHlYWw9PmK6EsZIh8psmb2tZIh7PrWQ2h_lgvDbcEjkPAuREPTHAHN2wnISmktbn/exec';
     
     let cart = {};
     const d = new Date(); d.setDate(d.getDate() + 1);
@@ -68,7 +68,7 @@
             const list = document.getElementById('products-list');
             
             if (products.error) {
-                list.innerText = 'Ошибка: ' + products.error;
+                list.innerText = 'Ошибка таблицы: ' + products.error;
                 return;
             }
 
@@ -88,7 +88,7 @@
                 </div>`;
             });
         } catch (e) { 
-            document.getElementById('products-list').innerText = 'Не удалось загрузить товары. Проверь ссылку и права доступа в Google Script.'; 
+            document.getElementById('products-list').innerText = 'Ошибка подключения к Google Script. Проверь права доступа (Anyone).'; 
         }
     }
 
@@ -118,30 +118,31 @@
     async function sendOrder() {
         const date = document.getElementById('deliveryDate').value;
         if (Object.keys(cart).length === 0) return tg.showAlert("Выберите товары!");
-        const payload = { user: tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest", date, items: cart };
+        const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
+        const payload = { user, date, items: cart };
         
         try {
             await fetch(WEB_APP_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-            tg.showAlert("✅ Заказ отправлен!");
+            tg.showAlert("✅ Заказ успешно отправлен!");
             tg.close();
         } catch (e) { 
-            tg.showAlert("Ошибка при отправке заказа."); 
+            tg.showAlert("Ошибка при отправке. Попробуй еще раз."); 
         }
     }
 
     async function loadHistory() {
         const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
         const list = document.getElementById('history-list');
-        list.innerText = 'Загрузка...';
+        list.innerText = 'Загрузка истории...';
         try {
             const resp = await fetch(`${WEB_APP_URL}?type=history&user=${user}`);
             const data = await resp.json();
-            list.innerHTML = data.length ? '' : 'Заказов пока нет';
+            list.innerHTML = data.length ? '' : 'История пуста';
             data.forEach(o => {
                 list.innerHTML += `<div class="history-card"><b>${o.date}</b> <span>${o.item} (x${o.qty})</span></div>`;
             });
         } catch (e) { 
-            list.innerText = 'Ошибка загрузки истории.'; 
+            list.innerText = 'Не удалось загрузить историю.'; 
         }
     }
 
