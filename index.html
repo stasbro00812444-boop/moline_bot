@@ -36,7 +36,7 @@
         <span>Дата:</span>
         <input type="date" id="deliveryDate" onchange="loadProducts()">
     </div>
-    <div id="products-list">Загрузка товаров...</div>
+    <div id="products-list">Синхронизация...</div>
 </div>
 
 <div id="history-page" class="container hidden">
@@ -52,9 +52,12 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
+    // Твоя проверенная ссылка на Google Script
     const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzwQHlYWw9PmK6EsZIh8psmb2tZIh7PrWQ2h_lgvDbcEjkPAuREPTHAHN2wnISmktbn/exec';
+    
     let cart = {};
 
+    // По умолчанию ставим завтрашнюю дату
     const d = new Date(); d.setDate(d.getDate() + 1);
     document.getElementById('deliveryDate').value = d.toISOString().split('T')[0];
 
@@ -71,22 +74,27 @@
             cart = {};
 
             products.forEach(p => {
-                if (p.currentQty > 0) cart[p.name] = { qty: p.currentQty, price: p.price };
+                // Если данные пришли кривые, превращаем их в 0, чтобы не было NaN
+                const price = parseInt(p.price) || 0;
+                const qty = parseInt(p.currentQty) || 0;
+
+                if (qty > 0) cart[p.name] = { qty: qty, price: price };
+
                 list.innerHTML += `
-                <div class="product-card" data-name="${p.name}" data-price="${p.price}">
+                <div class="product-card" data-name="${p.name}" data-price="${price}">
                     <div>
                         <div class="product-name">${p.name}</div>
-                        <div class="product-price">${p.price} ₽</div>
+                        <div class="product-price">${price} ₽</div>
                     </div>
                     <div class="stepper">
                         <div class="step-btn" onclick="updateQty(this, -1)">−</div>
-                        <div class="step-value">${p.currentQty}</div>
+                        <div class="step-value">${qty}</div>
                         <div class="step-btn" onclick="updateQty(this, 1)">+</div>
                     </div>
                 </div>`;
             });
             updateTotal();
-        } catch (e) { list.innerText = 'Ошибка загрузки данных. Проверь доступ к скрипту.'; }
+        } catch (e) { list.innerText = 'Ошибка данных. Проверьте таблицу и доступ.'; }
     }
 
     function updateQty(btn, delta) {
@@ -94,7 +102,7 @@
         const valDisp = card.querySelector('.step-value');
         const name = card.dataset.name;
         const price = parseInt(card.dataset.price);
-        let qty = parseInt(valDisp.innerText) + delta;
+        let qty = (parseInt(valDisp.innerText) || 0) + delta;
         if (qty < 0) qty = 0;
         valDisp.innerText = qty;
         if (qty > 0) cart[name] = { qty, price }; else delete cart[name];
@@ -123,10 +131,10 @@
         
         try {
             await fetch(WEB_APP_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-            tg.showAlert("✅ Данные в таблице обновлены!");
+            tg.showAlert("✅ Заказ успешно сохранен в таблице!");
             loadHistory();
             showPage('history', document.querySelectorAll('.tab')[1]);
-        } catch (e) { tg.showAlert("Ошибка отправки!"); }
+        } catch (e) { tg.showAlert("Ошибка при сохранении."); }
     }
 
     async function loadHistory() {
