@@ -11,65 +11,63 @@
         .tab.active { color: #0088cc; border-bottom: 3px solid #0088cc; }
         .container { padding: 15px; padding-bottom: 100px; }
         .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .product-row { display: flex; align-items: center; justify-content: space-between; }
+        .product-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
         .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 4px; }
         .btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: #0088cc; font-size: 24px; cursor: pointer; }
-        .val { min-width: 30px; text-align: center; font-weight: bold; font-size: 16px; }
+        .val { min-width: 30px; text-align: center; font-weight: bold; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
         .send-btn { background: #0088cc; color: #fff; border: none; padding: 12px 25px; border-radius: 12px; font-weight: bold; font-size: 16px; }
         .hidden { display: none; }
-        #menu-list.loading { text-align: center; color: #999; margin-top: 20px; }
     </style>
 </head>
 <body>
 
 <div class="tabs">
-    <div class="tab active" onclick="switchPage('order', this)">Заказ</div>
-    <div class="tab" onclick="switchPage('history', this)">Мои Заказы</div>
+    <div class="tab active" onclick="switchPage('order', this)">ЗАКАЗАТЬ</div>
+    <div class="tab" onclick="switchPage('history', this)">МОИ ЗАКАЗЫ</div>
 </div>
 
 <div id="order-page" class="container">
     <div class="card">
-        <label style="font-size:13px; color:#888; text-transform:uppercase; font-weight:bold;">Дата доставки</label>
-        <input type="date" id="date" style="width:100%; margin-top:8px; padding:10px; border-radius:8px; border:1px solid #ddd; font-size:16px; outline:none; background:#fff;">
+        <label style="font-size:12px; color:#888; font-weight:bold;">ДАТА ДОСТАВКИ</label>
+        <input type="date" id="date" style="width:100%; margin-top:8px; padding:10px; border-radius:8px; border:1px solid #ddd; font-size:16px; outline:none;">
     </div>
-    <div id="menu-list" class="loading">Загрузка товаров...</div>
+    <div id="menu-list"><p style="text-align:center; color:#999">Загрузка актуального прайса...</p></div>
 </div>
 
 <div id="history-page" class="container hidden"></div>
 
 <div class="footer" id="footer">
-    <div><small style="color:#888">Итого:</small><br><b id="total" style="font-size:20px">0 ₽</b></div>
-    <button class="send-btn" onclick="send()">ОТПРАВИТЬ</button>
+    <div><small style="color:#888">Итого к оплате:</small><br><b id="total" style="font-size:20px">0 ₽</b></div>
+    <button class="send-btn" onclick="send()">ОФОРМИТЬ</button>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
     
-    const API = 'ТВОЯ_ССЫЛКА_EXEC'; 
+    const API = 'ТВОЯ_ССЫЛКА_ИЗ_GOOGLE_SCRIPTS'; 
     const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
     let cart = {};
 
-    // Блокировка прошлых дат (минимум завтра)
+    // Ограничение даты: только будущее
     const dtInput = document.getElementById('date');
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-    dtInput.value = tomorrow.toISOString().split('T')[0];
-    dtInput.min = dtInput.value;
+    const minStr = tomorrow.toISOString().split('T')[0];
+    dtInput.value = minStr;
+    dtInput.min = minStr;
 
     async function loadMenu() {
         try {
-            const r = await fetch(`${API}?type=menu`);
+            const r = await fetch(`${API}?type=menu&user=${user}`);
             const items = await r.json();
             const list = document.getElementById('menu-list');
             list.innerHTML = '';
-            list.classList.remove('loading');
-            
             items.forEach(p => {
                 const div = document.createElement('div');
                 div.className = 'card product-row';
                 div.innerHTML = `
-                    <div><b style="font-size:15px">${p.name}</b><br><span style="color:#0088cc; font-size:13px; font-weight:bold;">${p.price} ₽</span></div>
+                    <div><b>${p.name}</b><br><span style="color:#0088cc; font-size:13px; font-weight:bold;">${p.price} ₽</span></div>
                     <div class="stepper">
                         <div class="btn" onclick="update('${p.name}', ${p.price}, -1, this)">−</div>
                         <div class="val">0</div>
@@ -77,7 +75,7 @@
                     </div>`;
                 list.appendChild(div);
             });
-        } catch(e) { document.getElementById('menu-list').innerHTML = 'Ошибка загрузки. Проверьте соединение.'; }
+        } catch(e) { document.getElementById('menu-list').innerHTML = 'Ошибка загрузки прайса.'; }
     }
     loadMenu();
 
@@ -104,33 +102,33 @@
 
     async function loadHistory() {
         const div = document.getElementById('history-page');
-        div.innerHTML = '<p style="text-align:center; color:#999; margin-top:20px;">Загружаем историю...</p>';
+        div.innerHTML = '<p style="text-align:center; color:#999; margin-top:20px;">Синхронизация...</p>';
         try {
             const r = await fetch(`${API}?user=${encodeURIComponent(user)}`);
             const data = await r.json();
-            let html = '<h3 style="margin: 0 0 15px 5px;">Ваши заказы</h3>';
+            let html = '<h3>Ваша история заказов</h3>';
             for (let d in data) {
                 html += `<div class="card">
                     <div style="display:flex;justify-content:space-between;border-bottom:1px solid #f0f0f0;padding-bottom:10px;margin-bottom:10px">
-                        <b style="font-size:16px;">${d}</b><b style="color:#0088cc; background:#e1f5fe; padding:2px 8px; border-radius:8px;">${data[d].total} ₽</b>
+                        <b>${d}</b><b style="color:#0088cc; background:#e1f5fe; padding:2px 8px; border-radius:8px;">${data[d].total} ₽</b>
                     </div>`;
                 data[d].items.forEach(i => {
-                    html += `<div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px; color:#444;">
-                        <span>${i.name}</span><b style="color:#000;">x${i.qty}</b></div>`;
+                    html += `<div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:4px; color:#444;">
+                        <span>${i.name}</span><b>x${i.qty}</b></div>`;
                 });
                 html += `</div>`;
             }
-            div.innerHTML = Object.keys(data).length ? html : '<p style="text-align:center;margin-top:50px;color:#999">У вас пока нет заказов</p>';
-        } catch(e) { div.innerHTML = '<p style="color:red; text-align:center;">Ошибка загрузки</p>'; }
+            div.innerHTML = Object.keys(data).length ? html : '<p style="text-align:center;margin-top:50px;color:#999">История пуста</p>';
+        } catch(e) { div.innerHTML = 'Ошибка загрузки истории.'; }
     }
 
     async function send() {
-        if (!Object.keys(cart).length) return tg.showAlert("Выберите хотя бы один товар!");
+        if (!Object.keys(cart).length) return tg.showAlert("Выберите товары!");
         const payload = { user, date: dtInput.value, items: cart };
-        tg.showConfirm("Отправить заказ на " + document.getElementById('total').innerText + "?", async (ok) => {
+        tg.showConfirm("Подтвердить заказ на " + document.getElementById('total').innerText + "?", async (ok) => {
             if (ok) {
                 await fetch(API, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-                tg.showAlert("✅ Заказ успешно отправлен!");
+                tg.showAlert("✅ Заказ принят и записан в таблицу!");
                 tg.close();
             }
         });
