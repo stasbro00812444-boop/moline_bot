@@ -5,22 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: -apple-system, system-ui, sans-serif; background: #f0f2f5; margin: 0; padding: 0; color: #333; }
-        .tabs { display: flex; background: #fff; border-bottom: 1px solid #dfe1e5; position: sticky; top: 0; z-index: 100; }
-        .tab { flex: 1; text-align: center; padding: 12px; font-weight: 600; color: #70757a; cursor: pointer; border-bottom: 2px solid transparent; }
-        .tab.active { color: #0088cc; border-bottom-color: #0088cc; }
-        .container { padding: 12px; padding-bottom: 100px; }
-        .section-title { font-size: 18px; font-weight: bold; margin: 15px 0 10px; padding-left: 5px; }
-        .card-bg { background: #fff; border-radius: 15px; padding: 12px 16px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .product-card { display: flex; align-items: center; justify-content: space-between; }
-        .product-name { font-weight: 600; font-size: 15px; display: block; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: #f0f2f5; margin: 0; padding: 0; }
+        .tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
+        .tab { flex: 1; text-align: center; padding: 15px; font-weight: bold; color: #888; cursor: pointer; }
+        .tab.active { color: #0088cc; border-bottom: 3px solid #0088cc; }
+        .container { padding: 15px; padding-bottom: 100px; }
+        .product-card { background: #fff; border-radius: 15px; padding: 15px; margin-bottom: 10px; display: flex; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .product-info { flex: 1; }
+        .product-name { font-weight: bold; font-size: 15px; }
         .product-price { color: #888; font-size: 13px; }
         .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 4px; }
-        .step-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #0088cc; cursor: pointer; user-select: none; }
+        .step-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #0088cc; cursor: pointer; }
         .step-value { min-width: 30px; text-align: center; font-weight: bold; }
-        .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #ddd; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; z-index: 1000; }
-        .submit-btn { background: #0088cc; color: #fff; border: none; border-radius: 10px; padding: 12px 24px; font-weight: bold; font-size: 16px; }
-        .history-card { background:#fff; border-radius:15px; padding:15px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.1); }
+        .history-card { background: #fff; border-radius: 15px; padding: 15px; margin-bottom: 12px; }
+        .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .total-badge { background: #e1f5fe; color: #0088cc; padding: 5px 12px; border-radius: 10px; font-weight: bold; }
+        .footer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #ddd; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
         .hidden { display: none; }
     </style>
 </head>
@@ -32,110 +32,63 @@
 </div>
 
 <div id="order-page" class="container">
-    <div class="card-bg" style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="color:#666;">Дата доставки:</span>
-        <input type="date" id="deliveryDate" onchange="saveDraft()" style="border:1px solid #ddd; border-radius:8px; padding:8px; font-size:16px;">
+    <div style="background:#fff; padding:12px; border-radius:12px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
+        <span>Дата доставки:</span>
+        <input type="date" id="deliveryDate" style="border:1px solid #ddd; padding:5px; border-radius:8px;">
     </div>
-
-    <div class="section-title">Круассаны и выпечка</div>
     
-    <div id="catalog">
-        <div class="card-bg product-card" data-name="Круассан классический" data-price="115">
-            <div><span class="product-name">Круассан классический</span><span class="product-price">115 ₽</span></div>
-            <div class="stepper"><div class="step-btn" onclick="updateQty(this, -1)">−</div><div class="step-value">0</div><div class="step-btn" onclick="updateQty(this, 1)">+</div></div>
-        </div>
-        <div class="card-bg product-card" data-name="Круассан ваниль" data-price="125">
-            <div><span class="product-name">Круассан ваниль</span><span class="product-price">125 ₽</span></div>
-            <div class="stepper"><div class="step-btn" onclick="updateQty(this, -1)">−</div><div class="step-value">0</div><div class="step-btn" onclick="updateQty(this, 1)">+</div></div>
-        </div>
-        <div class="card-bg product-card" data-name="Круассан ваниль смородина" data-price="125">
-            <div><span class="product-name">Круассан ваниль смородина</span><span class="product-price">125 ₽</span></div>
-            <div class="stepper"><div class="step-btn" onclick="updateQty(this, -1)">−</div><div class="step-value">0</div><div class="step-btn" onclick="updateQty(this, 1)">+</div></div>
-        </div>
-        <div class="card-bg product-card" data-name="Круассан шоколад" data-price="125">
-            <div><span class="product-name">Круассан шоколад</span><span class="product-price">125 ₽</span></div>
-            <div class="stepper"><div class="step-btn" onclick="updateQty(this, -1)">−</div><div class="step-value">0</div><div class="step-btn" onclick="updateQty(this, 1)">+</div></div>
-        </div>
-        <div class="card-bg product-card" data-name="Круассан фисташка малина" data-price="125">
-            <div><span class="product-name">Круассан фисташка малина</span><span class="product-price">125 ₽</span></div>
-            <div class="stepper"><div class="step-btn" onclick="updateQty(this, -1)">−</div><div class="step-value">0</div><div class="step-btn" onclick="updateQty(this, 1)">+</div></div>
-        </div>
-        <div class="card-bg product-card" data-name="Круассан ветчина сыр" data-price="170">
-            <div><span class="product-name">Круассан ветчина сыр</span><span class="product-price">170 ₽</span></div>
-            <div class="stepper"><div class="step-btn" onclick="updateQty(this, -1)">−</div><div class="step-value">0</div><div class="step-btn" onclick="updateQty(this, 1)">+</div></div>
-        </div>
+    <div id="products">
+        <script>
+            const items = [
+                ["Круассан классический", 115], ["Круассан ваниль", 125],
+                ["Круассан ваниль смородина", 125], ["Круассан шоколад", 125],
+                ["Круассан фисташка малина", 125], ["Круассан сгущёнка", 125],
+                ["Круассан ветчина сыр", 170]
+            ];
+            items.forEach(it => {
+                document.write(`
+                    <div class="product-card" data-name="${it[0]}" data-price="${it[1]}">
+                        <div class="product-info"><span class="product-name">${it[0]}</span><br><span class="product-price">${it[1]} ₽</span></div>
+                        <div class="stepper">
+                            <div class="step-btn" onclick="updateQty(this, -1)">−</div>
+                            <div class="step-value">0</div>
+                            <div class="step-btn" onclick="updateQty(this, 1)">+</div>
+                        </div>
+                    </div>
+                `);
+            });
+        </script>
     </div>
 </div>
 
 <div id="history-page" class="container hidden"></div>
 
-<div class="bottom-bar" id="footer">
-    <div><div style="font-size:12px; color:#888;">Итого:</div><div style="font-size:20px; font-weight:bold;" id="totalDisplay">0 ₽</div></div>
-    <button class="submit-btn" onclick="sendOrder()">ОТПРАВИТЬ</button>
+<div class="footer" id="main-footer">
+    <div><span style="font-size:12px;color:#888">Итого:</span><br><b id="totalDisplay" style="font-size:18px">0 ₽</b></div>
+    <button onclick="sendOrder()" style="background:#0088cc; color:#fff; border:none; padding:12px 25px; border-radius:10px; font-weight:bold;">ОТПРАВИТЬ</button>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // ЗАМЕНИ НА СВОЮ ССЫЛКУ ИЗ GOOGLE SCRIPTS
-    const API_URL = 'https://script.google.com/macros/s/AKfycbz7-vSecpK0xqQin3SoR9BkOsU5lY-ZJOAzhAqhjFRLxwFl-B3WOo-NA9oYcHBhPELQ/exec';
+    // ЗАМЕНИ НА СВОЮ НОВУЮ ССЫЛКУ ИЗ ГУГЛ
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby3S_m2tL-K1W_o98R8p18N6B8G_Vz3p12oI3eR7p98R_p18N6B8G_Vz3p/exec';
 
     let cart = {};
-
-    // 1. ЗАГРУЗКА ДАННЫХ ПРИ ОТКРЫТИИ
-    window.onload = function() {
-        const savedCart = localStorage.getItem('cart_draft');
-        const savedDate = localStorage.getItem('date_draft');
-
-        // Ставим дату (из памяти или завтрашнюю)
-        if (savedDate) {
-            document.getElementById('deliveryDate').value = savedDate;
-        } else {
-            const d = new Date(); d.setDate(d.getDate() + 1);
-            document.getElementById('deliveryDate').value = d.toISOString().split('T')[0];
-        }
-
-        // Восстанавливаем корзину
-        if (savedCart) {
-            cart = JSON.parse(savedCart);
-            // Проходим по всем карточкам товаров и проставляем цифры
-            document.querySelectorAll('.product-card').forEach(card => {
-                const name = card.dataset.name;
-                if (cart[name]) {
-                    card.querySelector('.step-value').innerText = cart[name].qty;
-                }
-            });
-            calculateTotal();
-        }
-    };
-
-    // 2. СОХРАНЕНИЕ В ПАМЯТЬ
-    function saveDraft() {
-        localStorage.setItem('cart_draft', JSON.stringify(cart));
-        localStorage.setItem('date_draft', document.getElementById('deliveryDate').value);
-    }
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    document.getElementById('deliveryDate').value = d.toISOString().split('T')[0];
 
     function updateQty(btn, delta) {
         const card = btn.closest('.product-card');
         const valDisp = card.querySelector('.step-value');
         const name = card.dataset.name;
         const price = parseInt(card.dataset.price);
-        
         let qty = parseInt(valDisp.innerText) + delta;
         if (qty < 0) qty = 0;
         valDisp.innerText = qty;
-
-        if (qty > 0) cart[name] = { qty, price };
-        else delete cart[name];
-        
-        calculateTotal();
-        saveDraft(); // Сохраняем после каждого изменения
-    }
-
-    function calculateTotal() {
-        let total = 0;
-        for (let k in cart) total += cart[k].qty * cart[k].price;
+        if (qty > 0) cart[name] = { qty, price }; else delete cart[name];
+        let total = 0; for (let k in cart) total += cart[k].qty * cart[k].price;
         document.getElementById('totalDisplay').innerText = total + " ₽";
     }
 
@@ -144,54 +97,42 @@
         el.classList.add('active');
         document.getElementById('order-page').classList.toggle('hidden', page !== 'order');
         document.getElementById('history-page').classList.toggle('hidden', page !== 'history');
-        document.getElementById('footer').classList.toggle('hidden', page !== 'order');
+        document.getElementById('main-footer').classList.toggle('hidden', page !== 'order');
         if (page === 'history') loadHistory();
+    }
+
+    async function loadHistory() {
+        const histDiv = document.getElementById('history-page');
+        const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
+        histDiv.innerHTML = '<p style="text-align:center">Загрузка...</p>';
+        try {
+            const resp = await fetch(`${SCRIPT_URL}?user=${user}`);
+            const data = await resp.json();
+            let html = '<b style="font-size:20px;display:block;margin-bottom:15px">Ваши заказы:</b>';
+            for (let date in data) {
+                html += `<div class="history-card">
+                    <div class="history-header"><b>${date}</b><span class="total-badge">${data[date].total} ₽</span></div>`;
+                data[date].items.forEach(i => {
+                    html += `<div style="display:flex;justify-content:space-between;font-size:14px;color:#555;margin-bottom:4px">
+                        <span>${i.name}</span><b>x${i.qty}</b></div>`;
+                });
+                html += `</div>`;
+            }
+            histDiv.innerHTML = Object.keys(data).length ? html : '<p style="text-align:center;color:#999;margin-top:50px">Заказов пока нет</p>';
+        } catch (e) { histDiv.innerHTML = '<p style="color:red;text-align:center">Ошибка связи с таблицей</p>'; }
     }
 
     async function sendOrder() {
         const date = document.getElementById('deliveryDate').value;
-        if (Object.keys(cart).length === 0) return tg.showAlert("Выберите товары!");
-
-        const payload = {
-            user: tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest",
-            date: date,
-            items: cart
-        };
-
-        try {
-            await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-            // Очищаем память после успешной отправки
-            localStorage.removeItem('cart_draft');
-            tg.showAlert("✅ Заказ успешно отправлен!");
-            tg.close();
-        } catch (e) { tg.showAlert("Ошибка сети"); }
-    }
-
-    async function loadHistory() {
-        const historyPage = document.getElementById('history-page');
-        const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
-        historyPage.innerHTML = '<p style="text-align:center; padding:20px;">Загрузка истории...</p>';
-
-        try {
-            const resp = await fetch(`${API_URL}?user=${user}`);
-            const data = await resp.json();
-            let html = '<div class="section-title">История заказов:</div>';
-            
-            for (let date in data) {
-                html += `<div class="history-card">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                        <span style="font-weight:bold; font-size:16px;">${date}</span>
-                        <span style="color:#0088cc; font-weight:bold; background:#e1f5fe; padding:4px 8px; border-radius:8px;">${data[date].total} ₽</span>
-                    </div>`;
-                data[date].items.forEach(item => {
-                    html += `<div style="display:flex; justify-content:space-between; font-size:14px; color:#666; margin-top:4px;">
-                        <span>${item.name}</span><span>x${item.qty}</span>
-                    </div>`;
-                });
-                html += `</div>`;
+        if (!Object.keys(cart).length) return tg.showAlert("Выберите товары!");
+        const payload = { user: tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest", date, items: cart };
+        tg.showConfirm("Отправить заказ?", async (ok) => {
+            if (ok) {
+                await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+                tg.showAlert("✅ Заказ отправлен!");
+                tg.close();
             }
-            historyPage.innerHTML = Object.keys(data).length ? html : '<p style="text-align:center; color:#999; margin-top:50px;">История пуста</p>';
-        } catch (e) { historyPage.innerHTML = '<p style="text-align:center; color:red;">Ошибка загрузки</p>'; }
+        });
     }
 </script>
 </body>
