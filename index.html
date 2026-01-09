@@ -21,7 +21,7 @@
         .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #f5f5f5; padding-bottom: 8px; }
         .total-badge { background: #e1f5fe; color: #0088cc; padding: 4px 12px; border-radius: 10px; font-weight: bold; }
         .footer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #ddd; padding: 15px; display: flex; justify-content: space-between; align-items: center; z-index: 1000; }
-        .submit-btn { background: #0088cc; color: #fff; border: none; padding: 12px 25px; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; }
+        .submit-btn { background: #0088cc; color: #fff; border: none; padding: 12px 25px; border-radius: 12px; font-weight: bold; font-size: 16px; }
         .hidden { display: none; }
     </style>
 </head>
@@ -52,26 +52,29 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // Ссылка подставится автоматически из твоей таблицы
-    const SCRIPT_URL = 'ТВОЯ_ССЫЛКА_EXEC'; 
+    // ВСТАВЬ СВОЮ ССЫЛКУ МЕЖДУ КАВЫЧЕК:
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz7-vSecpK0xqQin3SoR9BkOsU5lY-ZJOAzhAqhjFRLxwFl-B3WOo-NA9oYcHBhPELQ/exec';
 
     const products = [
-        ["Круассан классический", 115], ["Круассан ваниль", 125],
-        ["Круассан ваниль смородина", 125], ["Круассан шоколад", 125],
-        ["Круассан фисташка малина", 125], ["Круассан сгущёнка", 125],
+        ["Круассан классический", 115],
+        ["Круассан ваниль", 125],
+        ["Круассан ваниль смородина", 125],
+        ["Круассан шоколад", 125],
+        ["Круассан фисташка малина", 125],
+        ["Круассан сгущёнка", 125],
         ["Круассан ветчина сыр", 170]
     ];
 
     let cart = {};
 
-    // Блокировка прошлых дат
+    // Настройка календаря (блокировка прошлых дат и сегодня)
     const dateInput = document.getElementById('deliveryDate');
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-    const minDate = tomorrow.toISOString().split('T')[0];
-    dateInput.value = minDate;
-    dateInput.min = minDate;
+    const minDateStr = tomorrow.toISOString().split('T')[0];
+    dateInput.value = minDateStr;
+    dateInput.min = minDateStr;
 
-    // Отрисовка товаров с ценами
+    // Отрисовка товаров
     const list = document.getElementById('products-list');
     products.forEach(p => {
         const div = document.createElement('div');
@@ -111,7 +114,7 @@
     async function loadHistory() {
         const histDiv = document.getElementById('history-page');
         const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
-        histDiv.innerHTML = '<p style="text-align:center; color:#999;">Загрузка...</p>';
+        histDiv.innerHTML = '<p style="text-align:center; color:#999;">Загрузка истории...</p>';
         
         try {
             const resp = await fetch(`${SCRIPT_URL}?user=${encodeURIComponent(user)}`);
@@ -122,29 +125,42 @@
                 html += `<div class="history-card">
                     <div class="history-header"><b>${date}</b><span class="total-badge">${data[date].total} ₽</span></div>`;
                 data[date].items.forEach(i => {
-                    if (i.qty > 0) { // Убираем нули
-                        html += `<div style="display:flex;justify-content:space-between;font-size:14px;color:#444;margin-bottom:6px">
-                            <span>${i.name}</span><b>x${i.qty}</b></div>`;
-                    }
+                    html += `<div style="display:flex;justify-content:space-between;font-size:14px;color:#444;margin-bottom:6px">
+                        <span>${i.name}</span><b>x${i.qty}</b></div>`;
                 });
                 html += `</div>`;
             }
             histDiv.innerHTML = Object.keys(data).length ? html : '<p style="text-align:center;color:#999;margin-top:50px">Заказов пока нет</p>';
         } catch (e) {
-            histDiv.innerHTML = '<div style="text-align:center; color:red; padding:20px;">Ошибка загрузки</div>';
+            histDiv.innerHTML = '<p style="text-align:center; color:red;">Ошибка загрузки</p>';
         }
     }
 
     async function sendOrder() {
         if (!Object.keys(cart).length) return tg.showAlert("Выберите товары!");
+        
+        // Проверка дедлайна 12:00
+        const now = new Date();
+        const selectedDate = dateInput.value;
+        const tomorrowStr = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0];
+        
+        if (selectedDate === tomorrowStr && now.getHours() >= 12) {
+            return tg.showAlert("Прием заказов на завтра закрыт после 12:00!");
+        }
+
         const payload = { 
             user: tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest", 
-            date: dateInput.value, 
+            date: selectedDate, 
             items: cart 
         };
-        await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-        tg.showAlert("✅ Заказ отправлен!");
-        tg.close();
+
+        tg.showConfirm("Отправить заказ на сумму " + document.getElementById('totalDisplay').innerText + "?", async (ok) => {
+            if (ok) {
+                await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+                tg.showAlert("✅ Заказ отправлен!");
+                tg.close();
+            }
+        });
     }
 </script>
 </body>
