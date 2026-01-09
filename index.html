@@ -5,26 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: -apple-system, system-ui, sans-serif; background: #f0f2f5; margin: 0; padding-bottom: 80px; }
-        .tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
-        .tab { flex: 1; text-align: center; padding: 12px; font-weight: bold; color: #888; cursor: pointer; }
-        .tab.active { color: #0088cc; border-bottom: 3px solid #0088cc; }
-        .container { padding: 15px; }
-        .date-card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        input[type="date"] { border: 1px solid #ccc; border-radius: 8px; padding: 8px; font-size: 16px; outline: none; background: #fff; }
-        .product-card { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .product-name { font-weight: bold; font-size: 15px; }
-        .product-price { color: #888; font-size: 13px; margin-top: 4px; }
-        .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 2px; }
-        .step-btn { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #0088cc; cursor: pointer; user-select: none; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: #f0f2f5; margin: 0; padding: 0; color: #333; }
+        .tabs { display: flex; background: #fff; border-bottom: 1px solid #dfe1e5; position: sticky; top: 0; z-index: 100; }
+        .tab { flex: 1; text-align: center; padding: 12px; font-weight: 600; color: #70757a; cursor: pointer; border-bottom: 2px solid transparent; }
+        .tab.active { color: #0088cc; border-bottom-color: #0088cc; }
+        .container { padding: 12px; padding-bottom: 100px; }
+        .section-title { font-size: 18px; font-weight: bold; margin: 15px 0 10px; padding-left: 5px; }
+        .card-bg { background: #fff; border-radius: 15px; padding: 12px 16px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .product-card { display: flex; align-items: center; justify-content: space-between; }
+        .product-name { font-weight: 600; font-size: 15px; display: block; }
+        .product-price { color: #888; font-size: 13px; }
+        .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 4px; }
+        .step-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #0088cc; cursor: pointer; user-select: none; }
         .step-value { min-width: 30px; text-align: center; font-weight: bold; }
-        .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #ddd; padding: 15px; display: flex; align-items: center; justify-content: space-between; z-index: 1000; }
-        .submit-btn { background: #0088cc; color: #fff; border: none; border-radius: 10px; padding: 12px 25px; font-weight: bold; font-size: 16px; }
+        .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #ddd; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
+        .submit-btn { background: #0088cc; color: #fff; border: none; border-radius: 10px; padding: 12px 24px; font-weight: bold; font-size: 16px; }
+        .history-card { background:#fff; border-radius:15px; padding:15px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.1); }
         .hidden { display: none; }
-        .history-group { background: #fff; border-radius: 12px; margin-bottom: 15px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .history-header { background: #f8f9fa; padding: 10px 15px; font-weight: bold; color: #555; border-bottom: 1px solid #eee; }
-        .history-item { padding: 10px 15px; border-bottom: 1px solid #f9f9f9; display: flex; justify-content: space-between; font-size: 14px; }
-        .history-item:last-child { border-bottom: none; }
     </style>
 </head>
 <body>
@@ -35,19 +32,45 @@
 </div>
 
 <div id="order-page" class="container">
-    <div class="date-card">
-        <span>Дата:</span>
-        <input type="date" id="deliveryDate" onchange="loadProducts()">
+    <div class="card-bg" style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="color:#666;">Дата доставки:</span>
+        <input type="date" id="deliveryDate" style="border:1px solid #ddd; border-radius:8px; padding:8px; font-size:16px;">
     </div>
-    <div id="products-list">Загрузка...</div>
+
+    <div class="section-title">Круассаны и выпечка</div>
+    
+    <div id="catalog">
+        <div class="card-bg product-card" data-name="Круассан классический" data-price="115">
+            <div><span class="product-name">Круассан классический</span><span class="product-price">115 ₽</span></div>
+            <div class="stepper"><div class="step-btn" onclick="updateQty(this, -1)">−</div><div class="step-value">0</div><div class="step-btn" onclick="updateQty(this, 1)">+</div></div>
+        </div>
+        <div class="card-bg product-card" data-name="Круассан ваниль" data-price="125">
+            <div><span class="product-name">Круассан ваниль</span><span class="product-price">125 ₽</span></div>
+            <div class="stepper"><div class="step-btn" onclick="updateQty(this, -1)">−</div><div class="step-value">0</div><div class="step-btn" onclick="updateQty(this, 1)">+</div></div>
+        </div>
+        <div class="card-bg product-card" data-name="Круассан ваниль смородина" data-price="125">
+            <div><span class="product-name">Круассан ваниль смородина</span><span class="product-price">125 ₽</span></div>
+            <div class="stepper"><div class="step-btn" onclick="updateQty(this, -1)">−</div><div class="step-value">0</div><div class="step-btn" onclick="updateQty(this, 1)">+</div></div>
+        </div>
+        <div class="card-bg product-card" data-name="Круассан шоколад" data-price="125">
+            <div><span class="product-name">Круассан шоколад</span><span class="product-price">125 ₽</span></div>
+            <div class="stepper"><div class="step-btn" onclick="updateQty(this, -1)">−</div><div class="step-value">0</div><div class="step-btn" onclick="updateQty(this, 1)">+</div></div>
+        </div>
+        <div class="card-bg product-card" data-name="Круассан фисташка малина" data-price="125">
+            <div><span class="product-name">Круассан фисташка малина</span><span class="product-price">125 ₽</span></div>
+            <div class="stepper"><div class="step-btn" onclick="updateQty(this, -1)">−</div><div class="step-value">0</div><div class="step-btn" onclick="updateQty(this, 1)">+</div></div>
+        </div>
+        <div class="card-bg product-card" data-name="Круассан ветчина сыр" data-price="170">
+            <div><span class="product-name">Круассан ветчина сыр</span><span class="product-price">170 ₽</span></div>
+            <div class="stepper"><div class="step-btn" onclick="updateQty(this, -1)">−</div><div class="step-value">0</div><div class="step-btn" onclick="updateQty(this, 1)">+</div></div>
+        </div>
+    </div>
 </div>
 
-<div id="history-page" class="container hidden">
-    <div id="history-list">Загрузка истории...</div>
-</div>
+<div id="history-page" class="container hidden"></div>
 
 <div class="bottom-bar" id="footer">
-    <div id="totalDisplay" style="font-size: 18px; font-weight: bold;">0 ₽</div>
+    <div><div style="font-size:12px; color:#888;">Итого:</div><div style="font-size:20px; font-weight:bold;" id="totalDisplay">0 ₽</div></div>
     <button class="submit-btn" onclick="sendOrder()">ОТПРАВИТЬ</button>
 </div>
 
@@ -55,62 +78,28 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzwQHlYWw9PmK6EsZIh8psmb2tZIh7PrWQ2h_lgvDbcEjkPAuREPTHAHN2wnISmktbn/exec';
+    // ССЫЛКА НА ТВОЙ GOOGLE SCRIPT (ЗАМЕНИ ПОСЛЕ DEPLOY)
+    const API_URL = 'https://script.google.com/macros/s/AKfycbz7-vSecpK0xqQin3SoR9BkOsU5lY-ZJOAzhAqhjFRLxwFl-B3WOo-NA9oYcHBhPELQ/exec';
+
+    // Установка даты (минимум - завтра)
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    document.getElementById('deliveryDate').value = d.toISOString().split('T')[0];
+
     let cart = {};
-
-    // ОГРАНИЧЕНИЕ ДАТЫ: Только сегодня и будущее
-    const today = new Date().toISOString().split('T')[0];
-    const dateInput = document.getElementById('deliveryDate');
-    dateInput.setAttribute('min', today);
-    dateInput.value = today;
-
-    async function loadProducts() {
-        const date = dateInput.value;
-        const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
-        const list = document.getElementById('products-list');
-        list.innerHTML = '<div style="text-align:center; padding:20px;">Синхронизация...</div>';
-
-        try {
-            const resp = await fetch(`${WEB_APP_URL}?type=products&user=${user}&date=${date}`);
-            const products = await resp.json();
-            list.innerHTML = '';
-            cart = {};
-
-            products.forEach(p => {
-                const price = parseInt(p.price) || 0;
-                const qty = parseInt(p.currentQty) || 0;
-                if (qty > 0) cart[p.name] = { qty, price };
-
-                list.innerHTML += `
-                <div class="product-card" data-name="${p.name}" data-price="${price}">
-                    <div>
-                        <div class="product-name">${p.name}</div>
-                        <div class="product-price">${price} ₽</div>
-                    </div>
-                    <div class="stepper">
-                        <div class="step-btn" onclick="updateQty(this, -1)">−</div>
-                        <div class="step-value">${qty}</div>
-                        <div class="step-btn" onclick="updateQty(this, 1)">+</div>
-                    </div>
-                </div>`;
-            });
-            updateTotal();
-        } catch (e) { list.innerText = 'Ошибка загрузки данных.'; }
-    }
 
     function updateQty(btn, delta) {
         const card = btn.closest('.product-card');
         const valDisp = card.querySelector('.step-value');
         const name = card.dataset.name;
         const price = parseInt(card.dataset.price);
-        let qty = (parseInt(valDisp.innerText) || 0) + delta;
+        
+        let qty = parseInt(valDisp.innerText) + delta;
         if (qty < 0) qty = 0;
         valDisp.innerText = qty;
-        if (qty > 0) cart[name] = { qty, price }; else delete cart[name];
-        updateTotal();
-    }
 
-    function updateTotal() {
+        if (qty > 0) cart[name] = { qty, price };
+        else delete cart[name];
+        
         let total = 0;
         for (let k in cart) total += cart[k].qty * cart[k].price;
         document.getElementById('totalDisplay').innerText = total + " ₽";
@@ -126,53 +115,55 @@
     }
 
     async function sendOrder() {
-        const date = dateInput.value;
-        const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
-        const payload = { user, date, items: cart };
-        
+        const date = document.getElementById('deliveryDate').value;
+        if (Object.keys(cart).length === 0) return tg.showAlert("Выберите товары!");
+
+        // Проверка 12:00
+        const now = new Date();
+        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+        if (date === tomorrow.toISOString().split('T')[0] && now.getHours() >= 12) {
+            return tg.showAlert("Прием заказов на завтра закрыт после 12:00!");
+        }
+
+        const payload = {
+            user: tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest",
+            date: date,
+            items: cart
+        };
+
         try {
-            await fetch(WEB_APP_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-            tg.showAlert("✅ Заказ на " + date + " обновлен!");
-            loadHistory();
-        } catch (e) { tg.showAlert("Ошибка при сохранении."); }
+            await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+            tg.showAlert("✅ Заказ успешно отправлен!");
+            tg.close();
+        } catch (e) { tg.showAlert("Ошибка сети"); }
     }
 
     async function loadHistory() {
+        const historyPage = document.getElementById('history-page');
         const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
-        const list = document.getElementById('history-list');
-        list.innerHTML = 'Загрузка...';
+        historyPage.innerHTML = '<p style="text-align:center; padding:20px;">Загрузка истории...</p>';
+
         try {
-            const resp = await fetch(`${WEB_APP_URL}?type=history&user=${user}`);
+            const resp = await fetch(`${API_URL}?user=${user}`);
             const data = await resp.json();
-            if (!data.length) { list.innerHTML = 'Заказов пока нет'; return; }
-
-            // ГРУППИРОВКА ПО ДАТАМ
-            const grouped = data.reduce((acc, obj) => {
-                if (!acc[obj.date]) acc[obj.date] = [];
-                acc[obj.date].push(obj);
-                return acc;
-            }, {});
-
-            list.innerHTML = '';
-            for (let date in grouped) {
-                let itemsHtml = grouped[date].map(i => `
-                    <div class="history-item">
-                        <span>${i.item}</span>
-                        <b>x${i.qty}</b>
-                    </div>
-                `).join('');
-                
-                list.innerHTML += `
-                    <div class="history-group">
-                        <div class="history-header">${date}</div>
-                        ${itemsHtml}
-                    </div>
-                `;
+            let html = '<div class="section-title">История заказов:</div>';
+            
+            for (let date in data) {
+                html += `<div class="history-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="font-weight:bold; font-size:16px;">${date}</span>
+                        <span style="color:#0088cc; font-weight:bold; background:#e1f5fe; padding:4px 8px; border-radius:8px;">${data[date].total} ₽</span>
+                    </div>`;
+                data[date].items.forEach(item => {
+                    html += `<div style="display:flex; justify-content:space-between; font-size:14px; color:#666; margin-top:4px;">
+                        <span>${item.name}</span><span>x${item.qty}</span>
+                    </div>`;
+                });
+                html += `</div>`;
             }
-        } catch (e) { list.innerText = 'Ошибка загрузки истории.'; }
+            historyPage.innerHTML = Object.keys(data).length ? html : '<p style="text-align:center; color:#999; margin-top:50px;">История пуста</p>';
+        } catch (e) { historyPage.innerHTML = '<p style="text-align:center; color:red;">Ошибка загрузки</p>'; }
     }
-
-    loadProducts();
 </script>
 </body>
 </html>
