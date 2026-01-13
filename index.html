@@ -10,15 +10,18 @@
         .tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
         .tab { flex: 1; text-align: center; padding: 15px; font-weight: bold; color: #999; cursor: pointer; }
         .tab.active { color: var(--main); border-bottom: 3px solid var(--main); }
-        .container { padding: 15px; padding-bottom: 100px; }
+        .container { padding: 15px; padding-bottom: 110px; }
         .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .row { display: flex; align-items: center; justify-content: space-between; }
         .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 4px; }
         .btn-s { width: 36px; height: 36px; border: none; background: none; color: var(--main); font-size: 24px; cursor: pointer; }
-        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; z-index: 1000; }
         .btn-send { background: var(--main); color: #fff; border: none; padding: 12px 25px; border-radius: 12px; font-weight: bold; }
+        .btn-repeat { background: #e8f4fd; color: var(--main); border: none; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold; margin-top: 8px; width: 100%; }
         .hidden { display: none; }
         .msg { text-align: center; padding: 40px; color: #888; }
+        .locked { opacity: 0.5; pointer-events: none; position: relative; }
+        .locked::after { content: "🛑 ПОСЛЕ 12:00 НЕЛЬЗЯ"; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(0,0,0,0.7); color: #fff; padding: 5px 10px; border-radius: 5px; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -27,8 +30,11 @@
         <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
     </div>
     <div id="p1" class="container">
-        <div class="card"><label style="font-size:11px;color:#888;font-weight:bold">ДАТА ДОСТАВКИ</label><input type="date" id="dt" style="width:100%;margin-top:8px;padding:12px;border-radius:8px;border:1px solid #ddd;font-size:16px;box-sizing:border-box;"></div>
-        <div id="menu"></div>
+        <div class="card">
+            <label style="font-size:11px;color:#888;font-weight:bold">ДАТА ДОСТАВКИ</label>
+            <input type="date" id="dt" onchange="checkDateLock(); syncOrderWithDate();" style="width:100%;margin-top:8px;padding:12px;border-radius:8px;border:1px solid #ddd;font-size:16px;box-sizing:border-box;">
+        </div>
+        <div id="menu-box"></div>
     </div>
     <div id="p2" class="container hidden"></div>
     <div class="footer" id="f"><div><small style="color:#888">Сумма:</small><br><b id="tot" style="font-size:20px">0 ₽</b></div><button class="btn-send" onclick="send()">ОФОРМИТЬ</button></div>
@@ -37,35 +43,81 @@
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbwKffluDSU7hseCuu8KRnSWlZGf_ZW-kQOK5jCsR5jbvisaXeUlOMppEh-fPwqw95Kz/exec';
     const user = encodeURIComponent(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest");
-    let cart = {}, dt = document.getElementById('dt');
     
-    let tom = new Date(); tom.setDate(tom.getDate() + 1);
-    dt.value = tom.toISOString().split('T')[0]; dt.min = dt.value;
+    let cart = {}, historyData = {}, menuData = [];
+    const dtInput = document.getElementById('dt');
 
-    async function loadMenu() {
-        const box = document.getElementById('menu');
-        box.innerHTML = '<div class="msg">Синхронизация с таблицей...</div>';
+    // Настройка календаря
+    function initDates() {
+        let now = new Date();
+        let minDate = new Date();
+        // Если сегодня после 12:00, ближайшая дата - послезавтра
+        if (now.getHours() >= 12) minDate.setDate(now.getDate() + 2);
+        else minDate.setDate(now.getDate() + 1);
+        
+        dtInput.min = minDate.toISOString().split('T')[0];
+        dtInput.value = dtInput.min;
+    }
+
+    function checkDateLock() {
+        let now = new Date();
+        let selected = new Date(dtInput.value);
+        let tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        const isPast = selected < new Date(dtInput.min);
+        const isLockedTomorrow = (selected.toDateString() === tomorrow.toDateString() && now.getHours() >= 12);
+        
+        document.getElementById('menu-box').classList.toggle('locked', isPast || isLockedTomorrow);
+    }
+
+    async function loadData() {
+        initDates();
+        const box = document.getElementById('menu-box');
+        box.innerHTML = '<div class="msg">Синхронизация...</div>';
         try {
-            const r = await fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`);
-            const data = await r.json();
-            if(data.error) throw new Error(data.error);
-            box.innerHTML = '';
-            data.forEach(item => {
-                const el = document.createElement('div'); el.className = 'card row';
-                el.innerHTML = `<div><b>${item.name}</b><br><span style="color:var(--main)">${item.price} ₽</span></div>
-                <div class="stepper"><button class="btn-s" onclick="upd('${item.name}',${item.price},-1,this)">−</button>
-                <div class="qty" style="min-width:32px;text-align:center;font-weight:bold">0</div>
-                <button class="btn-s" onclick="upd('${item.name}',${item.price},1,this)">+</button></div>`;
-                box.appendChild(el);
-            });
-            if(!data.length) box.innerHTML = '<div class="msg">Прайс пуст. Добавьте товары в лист "products".</div>';
-        } catch(e) { box.innerHTML = `<div class="msg" style="color:red">Ошибка: Проверьте авторизацию Google!</div>`; }
+            const [mRes, hRes] = await Promise.all([
+                fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`),
+                fetch(`${API}?user=${user}&v=${Date.now()}`)
+            ]);
+            menuData = await mRes.json();
+            historyData = await hRes.json();
+            renderMenu();
+            syncOrderWithDate();
+        } catch(e) { box.innerHTML = `<div class="msg" style="color:red">Ошибка связи</div>`; }
+    }
+
+    function renderMenu() {
+        const box = document.getElementById('menu-box');
+        box.innerHTML = '';
+        menuData.forEach(item => {
+            const qty = cart[item.name]?.qty || 0;
+            const el = document.createElement('div'); el.className = 'card row';
+            el.innerHTML = `<div><b>${item.name}</b><br><span style="color:var(--main)">${item.price} ₽</span></div>
+            <div class="stepper"><button class="btn-s" onclick="upd('${item.name}',${item.price},-1,this)">−</button>
+            <div class="qty" id="q-${item.name}" style="min-width:32px;text-align:center;font-weight:bold">${qty}</div>
+            <button class="btn-s" onclick="upd('${item.name}',${item.price},1,this)">+</button></div>`;
+            box.appendChild(el);
+        });
+    }
+
+    function syncOrderWithDate() {
+        const existing = historyData[dtInput.value];
+        cart = {};
+        if (existing) {
+            existing.items.forEach(i => { cart[i.name] = {qty: i.qty, price: i.price}; });
+        }
+        renderMenu();
+        calcTotal();
     }
 
     function upd(n,p,d,el) {
         let v = el.parentElement.querySelector('.qty'), q = (cart[n]?.qty || 0) + d;
         if(q < 0) q = 0; v.innerText = q;
         if(q > 0) cart[n] = {qty:q, price:p}; else delete cart[n];
+        calcTotal();
+    }
+
+    function calcTotal() {
         let s = 0; for(let k in cart) s += cart[k].qty * cart[k].price;
         document.getElementById('tot').innerText = s + " ₽";
     }
@@ -76,38 +128,49 @@
         document.getElementById('p1').classList.toggle('hidden', t!='order');
         document.getElementById('p2').classList.toggle('hidden', t!='hist');
         document.getElementById('f').classList.toggle('hidden', t!='order');
-        if(t=='hist') loadHist();
+        if(t=='hist') renderHistory();
     }
 
-    async function loadHist() {
-        const box = document.getElementById('p2'); box.innerHTML = '<div class="msg">Загрузка...</div>';
-        try {
-            const r = await fetch(`${API}?user=${user}&v=${Date.now()}`);
-            const data = await r.json();
-            let html = '';
-            for(let d in data) {
-                html += `<div class="card"><div class="row" style="border-bottom:1px solid #eee;padding-bottom:8px;margin-bottom:8px"><b>${d}</b><b>${data[d].total} ₽</b></div>`;
-                data[d].items.forEach(i => { html += `<div class="row" style="font-size:14px"><span>${i.name}</span><b>x${i.qty}</b></div>`; });
-                html += `</div>`;
-            }
-            box.innerHTML = html || '<div class="msg">Заказов не найдено</div>';
-        } catch(e) { box.innerHTML = '<div class="msg">Ошибка связи</div>'; }
+    function renderHistory() {
+        const box = document.getElementById('p2');
+        let html = '';
+        for(let date in historyData) {
+            let d = historyData[date];
+            html += `<div class="card"><div class="row" style="border-bottom:1px solid #eee;padding-bottom:8px;margin-bottom:8px"><b>${d.displayDate}</b><b>${d.total} ₽</b></div>`;
+            d.items.forEach(i => { html += `<div class="row" style="font-size:13px;color:#666"><span>${i.name}</span><b>x${i.qty}</b></div>`; });
+            html += `<button class="btn-repeat" onclick="repeatOrder('${date}')">ПОВТОРИТЬ ЗАКАЗ</button></div>`;
+        }
+        box.innerHTML = html || '<div class="msg">История пуста</div>';
+    }
+
+    function repeatOrder(date) {
+        const old = historyData[date];
+        cart = {};
+        old.items.forEach(i => { cart[i.name] = {qty: i.qty, price: i.price}; });
+        tab('order');
+        renderMenu();
+        calcTotal();
+        tg.showAlert("Состав заказа скопирован. Теперь выберите дату доставки.");
     }
 
     async function send() {
-        if(!Object.keys(cart).length) return;
-        tg.showConfirm("Оформить заказ?", async (ok) => {
+        if(!Object.keys(cart).length) return tg.showAlert("Выберите товары!");
+        tg.showConfirm("Сохранить заказ на " + dtInput.value + "?", async (ok) => {
             if(ok) {
                 tg.MainButton.showProgress();
                 try {
-                    await fetch(API, {method:'POST', body:JSON.stringify({user, date:dt.value, items:cart})});
-                    tg.showAlert("Заказ принят!"); tg.close();
-                } catch(e) { tg.showAlert("Ошибка отправки"); }
+                    await fetch(API, {method:'POST', body:JSON.stringify({user, date:dtInput.value, items:cart})});
+                    tg.showAlert("✅ Заказ успешно обновлен в базе!");
+                    // Вместо закрытия — обновляем локальные данные истории
+                    const r = await fetch(`${API}?user=${user}&v=${Date.now()}`);
+                    historyData = await r.json();
+                } catch(e) { tg.showAlert("Ошибка связи"); }
                 tg.MainButton.hideProgress();
             }
         });
     }
-    loadMenu(); tg.expand();
+
+    loadData(); tg.expand();
 </script>
 </body>
 </html>
