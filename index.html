@@ -11,13 +11,13 @@
         .tab { flex: 1; text-align: center; padding: 15px; font-weight: bold; color: #999; cursor: pointer; }
         .tab.active { color: var(--main); border-bottom: 3px solid var(--main); }
         .container { padding: 15px; padding-bottom: 120px; }
-        .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
         .row { display: flex; align-items: center; justify-content: space-between; }
         .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 4px; }
-        .btn-s { width: 36px; height: 36px; border: none; background: none; color: var(--main); font-size: 24px; cursor: pointer; }
+        .btn-s { width: 34px; height: 34px; border: none; background: none; color: var(--main); font-size: 22px; cursor: pointer; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; z-index: 1000; }
-        .btn-send { background: var(--main); color: #fff; border: none; padding: 12px 25px; border-radius: 12px; font-weight: bold; }
-        .btn-rep { background: #e8f4fd; color: var(--main); border: none; padding: 10px; border-radius: 8px; font-size: 13px; font-weight: bold; margin-top: 10px; width: 100%; }
+        .btn-send { background: var(--main); color: #fff; border: none; padding: 12px 25px; border-radius: 10px; font-weight: bold; }
+        .btn-rep { background: #f0f7ff; color: var(--main); border: 1px solid #cce4ff; padding: 8px; border-radius: 8px; font-size: 12px; font-weight: bold; margin-top: 10px; width: 100%; }
         .hidden { display: none; }
         .locked { opacity: 0.4; pointer-events: none; filter: grayscale(1); }
         .l-msg { color: #d9534f; font-size: 12px; font-weight: bold; text-align: center; margin-top: 8px; display: none; }
@@ -30,20 +30,20 @@
     </div>
     <div id="p1" class="container">
         <div class="card">
-            <label style="font-size:11px;color:#888;font-weight:bold">ДАТА ДОСТАВКИ</label>
-            <input type="date" id="dt" onchange="switchDate();" style="width:100%;margin-top:8px;padding:12px;border-radius:8px;border:1px solid #ddd;font-size:16px;box-sizing:border-box;">
-            <div id="l-msg" class="l-msg">⛔️ Прием заказов на завтра закрыт после 12:00</div>
+            <label style="font-size:10px;color:#888;text-transform:uppercase;font-weight:700">Дата доставки</label>
+            <input type="date" id="dt" onchange="switchDate();" style="width:100%;margin-top:8px;padding:12px;border-radius:8px;border:1px solid #ddd;font-size:16px;box-sizing:border-box;font-family:inherit;">
+            <div id="l-msg" class="l-msg">🕒 Прием на завтра закрыт (после 12:00)</div>
         </div>
         <div id="menu"></div>
     </div>
     <div id="p2" class="container hidden"></div>
-    <div class="footer" id="f"><div><small style="color:#888">Сумма:</small><br><b id="tot" style="font-size:20px">0 ₽</b></div><button class="btn-send" onclick="send()">ОФОРМИТЬ</button></div>
+    <div class="footer" id="f"><div><small style="color:#888">Итого:</small><br><b id="tot" style="font-size:18px">0 ₽</b></div><button class="btn-send" onclick="send()">ОФОРМИТЬ</button></div>
 
 <script>
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbwKffluDSU7hseCuu8KRnSWlZGf_ZW-kQOK5jCsR5jbvisaXeUlOMppEh-fPwqw95Kz/exec';
     
-    // Чистим юзернейм
+    // Чистим юзернейм от @
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').trim();
     
     let menuData = [], historyData = {}, allOrders = {}; 
@@ -51,12 +51,11 @@
 
     async function load() {
         let now = new Date(), min = new Date();
-        // Правило 12:00
         if (now.getHours() >= 12) min.setDate(now.getDate() + 2); else min.setDate(now.getDate() + 1);
         dtIn.min = min.toISOString().split('T')[0];
         dtIn.value = dtIn.min;
 
-        document.getElementById('menu').innerHTML = '<center style="padding:20px;color:#888">Загрузка данных...</center>';
+        document.getElementById('menu').innerHTML = '<center style="padding:40px;color:#888">Загрузка меню...</center>';
         try {
             const [mR, hR] = await Promise.all([
                 fetch(`${API}?type=menu&user=${encodeURIComponent(user)}&v=${Date.now()}`),
@@ -66,20 +65,19 @@
             menuData = mData.menu || [];
             historyData = await hR.json();
             
-            // Восстанавливаем сохраненные заказы из истории в корзину
             for (let d in historyData) {
                 allOrders[d] = {};
                 historyData[d].items.forEach(i => { allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
             }
             switchDate();
-        } catch(e) { document.getElementById('menu').innerHTML = '<center style="color:red;padding:20px">Ошибка связи с сервером</center>'; }
+        } catch(e) { document.getElementById('menu').innerHTML = '<center style="color:red;padding:20px">Ошибка авторизации</center>'; }
     }
 
     function switchDate() {
         const sel = dtIn.value;
         const now = new Date(), selD = new Date(sel), tom = new Date(); tom.setDate(tom.getDate() + 1);
-        
         let isLocked = (selD.toDateString() === tom.toDateString() && now.getHours() >= 12) || (selD < new Date(dtIn.min));
+        
         document.getElementById('menu').classList.toggle('locked', isLocked);
         document.getElementById('l-msg').style.display = isLocked ? 'block' : 'none';
 
@@ -90,14 +88,14 @@
     function renderMenu() {
         const box = document.getElementById('menu'), sel = dtIn.value;
         box.innerHTML = '';
-        if(!menuData.length) { box.innerHTML = '<center style="padding:20px;color:#888">Меню пусто</center>'; return; }
+        if(!menuData.length) { box.innerHTML = '<center style="padding:40px;color:#888">Меню пусто или партнер не найден</center>'; return; }
         
         menuData.forEach(item => {
             const q = allOrders[sel][item.name]?.qty || 0;
             const div = document.createElement('div'); div.className = 'card row';
-            div.innerHTML = `<div><b>${item.name}</b><br><span style="color:var(--main)">${item.price} ₽</span></div>
+            div.innerHTML = `<div><b>${item.name}</b><br><span style="color:var(--main);font-size:14px">${item.price} ₽</span></div>
             <div class="stepper"><button class="btn-s" onclick="upd('${item.name}',${item.price},-1)">−</button>
-            <div class="qty" style="min-width:32px;text-align:center;font-weight:bold">${q}</div>
+            <div class="qty" style="min-width:30px;text-align:center;font-weight:bold">${q}</div>
             <button class="btn-s" onclick="upd('${item.name}',${item.price},1)">+</button></div>`;
             box.appendChild(div);
         });
@@ -132,11 +130,12 @@
         const dates = Object.keys(historyData).sort().reverse();
         dates.forEach(d => {
             let o = historyData[d];
-            h += `<div class="card"><div class="row" style="border-bottom:1px solid #eee;padding-bottom:8px;margin-bottom:8px"><b>${o.displayDate}</b><b>${o.total} ₽</b></div>`;
-            o.items.forEach(i => { h += `<div class="row" style="font-size:13px;color:#666"><span>${i.name}</span><b>x${i.qty}</b></div>`; });
-            h += `<button class="btn-rep" onclick="rep('${d}')">ПОВТОРИТЬ НА ДРУГУЮ ДАТУ</button></div>`;
+            if(d === "undefined") return;
+            h += `<div class="card"><div class="row" style="border-bottom:1px solid #eee;padding-bottom:8px;margin-bottom:8px"><b style="color:var(--main)">${o.displayDate}</b><b>${o.total} ₽</b></div>`;
+            o.items.forEach(i => { h += `<div class="row" style="font-size:13px;color:#666;margin-bottom:4px"><span>${i.name}</span><b>x${i.qty}</b></div>`; });
+            h += `<button class="btn-rep" onclick="rep('${d}')">ПОВТОРИТЬ НА ДАТУ В КАЛЕНДАРЕ</button></div>`;
         });
-        box.innerHTML = h || '<center style="padding:20px;color:#888">История пуста</center>';
+        box.innerHTML = h || '<center style="padding:40px;color:#888">История заказов пуста</center>';
     }
 
     function rep(d) {
@@ -145,22 +144,23 @@
         allOrders[target] = {};
         old.items.forEach(i => { allOrders[target][i.name] = {qty: i.qty, price: i.price}; });
         tab('order'); renderMenu();
-        tg.showAlert("Состав заказа скопирован. Выберите дату доставки!");
+        tg.showAlert("Заказ скопирован на " + target);
     }
 
     async function send() {
         const sel = dtIn.value;
-        if(!Object.keys(allOrders[sel]).length) return tg.showAlert("Выберите товары!");
+        if(!Object.keys(allOrders[sel]).length) return tg.showAlert("Сначала выберите товары");
         tg.showConfirm("Сохранить заказ на " + sel + "?", async (ok) => {
             if(ok) {
-                tg.MainButton.showProgress();
+                tg.MainButton.setText("СОХРАНЕНИЕ...");
+                tg.MainButton.show();
                 try {
                     await fetch(API, {method:'POST', body:JSON.stringify({user:user, date:sel, items:allOrders[sel]})});
-                    tg.showAlert("✅ Успешно сохранено!");
+                    tg.showAlert("✅ Заказ успешно записан в таблицу!");
                     const hR = await fetch(`${API}?user=${encodeURIComponent(user)}&v=${Date.now()}`);
                     historyData = await hR.json();
-                } catch(e) { tg.showAlert("Ошибка сети"); }
-                tg.MainButton.hideProgress();
+                } catch(e) { tg.showAlert("Ошибка соединения"); }
+                tg.MainButton.hide();
             }
         });
     }
