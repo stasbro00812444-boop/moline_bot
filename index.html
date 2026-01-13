@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -10,108 +10,98 @@
         .tab { flex: 1; text-align: center; padding: 15px; font-weight: bold; color: #999; cursor: pointer; }
         .tab.active { color: #0088cc; border-bottom: 3px solid #0088cc; }
         .container { padding: 15px; padding-bottom: 100px; }
-        .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .product-row { display: flex; align-items: center; justify-content: space-between; }
+        .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .row { display: flex; align-items: center; justify-content: space-between; }
         .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 4px; }
         .btn { width: 34px; height: 34px; border: none; background: none; color: #0088cc; font-size: 22px; cursor: pointer; }
-        .val { min-width: 30px; text-align: center; font-weight: bold; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
-        .send-btn { background: #0088cc; color: #fff; border: none; padding: 12px 25px; border-radius: 12px; font-weight: bold; }
+        .send { background: #0088cc; color: #fff; border: none; padding: 12px 25px; border-radius: 12px; font-weight: bold; }
         .hidden { display: none; }
+        .err { color: #d9534f; text-align: center; padding: 20px; }
     </style>
 </head>
 <body>
-
-<div class="tabs">
-    <div id="tab-1" class="tab active" onclick="showTab('order')">ЗАКАЗАТЬ</div>
-    <div id="tab-2" class="tab" onclick="showTab('hist')">ИСТОРИЯ</div>
-</div>
-
-<div id="page-order" class="container">
-    <div class="card">
-        <label style="font-size:12px; color:#888;">ДАТА ДОСТАВКИ</label>
-        <input type="date" id="date" style="width:100%; margin-top:8px; padding:10px; border-radius:8px; border:1px solid #ddd; font-size:16px;">
+    <div class="tabs"><div id="t1" class="tab active" onclick="tab('order')">ЗАКАЗАТЬ</div><div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div></div>
+    <div id="p1" class="container">
+        <div class="card"><label style="font-size:11px;color:#888;font-weight:bold">ДАТА ДОСТАВКИ</label><input type="date" id="dt" style="width:100%;margin-top:8px;padding:10px;border-radius:8px;border:1px solid #ddd;font-size:16px;box-sizing:border-box;"></div>
+        <div id="m"></div>
     </div>
-    <div id="menu"></div>
-</div>
-
-<div id="page-hist" class="container hidden"></div>
-
-<div class="footer" id="foot">
-    <div><small style="color:#888">Итого:</small><br><b id="total" style="font-size:20px">0 ₽</b></div>
-    <button class="send-btn" onclick="send()">ОФОРМИТЬ</button>
-</div>
+    <div id="p2" class="container hidden"></div>
+    <div class="footer" id="f"><div><small style="color:#888">Итого:</small><br><b id="tot" style="font-size:18px">0 ₽</b></div><button class="send" onclick="send()">ОФОРМИТЬ</button></div>
 
 <script>
     const tg = window.Telegram.WebApp;
-    // СЮДА ВСТАВЬ СВОЮ ССЫЛКУ ИЗ GOOGLE SCRIPTS
-    const API = 'ТВОЯ_ССЫЛКА_EXEC'; 
-    const user = tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest";
-    let cart = {};
-
-    const inp = document.getElementById('date');
-    const tom = new Date(); tom.setDate(tom.getDate() + 1);
-    inp.value = tom.toISOString().split('T')[0];
+    const API = 'https://script.google.com/macros/s/AKfycbwi1jvtL8e9QLnDJhmGe66b07l-ir0yAtiEjGW8s4YK6u4VzJVhrKZU5cWJzErNFeAv/exec'; 
+    const user = encodeURIComponent(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest");
+    let cart = {}, dtInput = document.getElementById('dt');
+    
+    // Даты: только будущее
+    let tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    dtInput.value = tomorrow.toISOString().split('T')[0]; 
+    dtInput.min = dtInput.value;
 
     async function loadMenu() {
-        const m = document.getElementById('menu');
-        m.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">Загрузка...</p>';
+        const mBox = document.getElementById('m');
+        mBox.innerHTML = '<p style="text-align:center;color:#999">Синхронизация...</p>';
         try {
-            const r = await fetch(`${API}?type=menu&user=${user}`);
-            const data = await r.json();
-            m.innerHTML = '';
+            let r = await fetch(`${API}?type=menu&user=${user}`);
+            let data = await r.json();
+            if(data.error) throw new Error(data.error);
+            let html = '';
             data.forEach(p => {
-                const d = document.createElement('div');
-                d.className = 'card product-row';
-                d.innerHTML = `<div><b>${p.name}</b><br><span style="color:#0088cc">${p.price} ₽</span></div>
-                    <div class="stepper"><button class="btn" onclick="upd('${p.name}', ${p.price}, -1, this)">−</button>
-                    <div class="val">0</div>
-                    <button class="btn" onclick="upd('${p.name}', ${p.price}, 1, this)">+</button></div>`;
-                m.appendChild(d);
+                html += `<div class="card row"><div><b>${p.name}</b><br><span style="color:#0088cc">${p.price} ₽</span></div>
+                <div class="stepper"><button class="btn" onclick="upd('${p.name}',${p.price},-1,this)">−</button>
+                <div class="val" style="min-width:30px;text-align:center;font-weight:bold">0</div>
+                <button class="btn" onclick="upd('${p.name}',${p.price},1,this)">+</button></div></div>`;
             });
-        } catch(e) { m.innerHTML = '<p style="color:red; text-align:center">Ошибка связи. Проверьте ссылку API.</p>'; }
+            mBox.innerHTML = html || 'Прайс пуст';
+        } catch(e) { mBox.innerHTML = `<div class="err">Ошибка: ${e.message}</div>`; }
     }
 
-    function upd(n, p, delta, el) {
-        const v = el.parentElement.querySelector('.val');
-        let q = (cart[n]?.qty || 0) + delta;
-        if (q < 0) q = 0; v.innerText = q;
-        if (q > 0) cart[n] = { qty: q, price: p }; else delete cart[n];
-        let s = 0; for (let k in cart) s += cart[k].qty * cart[k].price;
-        document.getElementById('total').innerText = s + " ₽";
+    function upd(n,p,d,el) {
+        let v = el.parentElement.querySelector('.val');
+        let q = (cart[n]?.qty || 0) + d; if (q < 0) q = 0; v.innerText = q;
+        if (q > 0) cart[n] = {qty:q, price:p}; else delete cart[n];
+        let s = 0; for(let k in cart) s += cart[k].qty * cart[k].price;
+        document.getElementById('tot').innerText = s + " ₽";
     }
 
-    function showTab(t) {
-        document.getElementById('tab-1').className = t=='order'?'tab active':'tab';
-        document.getElementById('tab-2').className = t=='hist'?'tab active':'tab';
-        document.getElementById('page-order').classList.toggle('hidden', t!='order');
-        document.getElementById('page-hist').classList.toggle('hidden', t!='hist');
-        document.getElementById('foot').classList.toggle('hidden', t!='order');
-        if (t=='hist') loadHist();
+    function tab(t) {
+        document.getElementById('t1').className = t=='order'?'tab active':'tab';
+        document.getElementById('t2').className = t=='hist'?'tab active':'tab';
+        document.getElementById('p1').classList.toggle('hidden', t!='order');
+        document.getElementById('p2').classList.toggle('hidden', t!='hist');
+        document.getElementById('f').classList.toggle('hidden', t!='order');
+        if(t=='hist') loadHistory();
     }
 
-    async function loadHist() {
-        const d = document.getElementById('page-hist');
-        d.innerHTML = '<p style="text-align:center;color:#999">Загрузка истории...</p>';
-        const r = await fetch(`${API}?user=${user}`);
-        const data = await r.json();
-        let h = '';
-        for (let date in data) {
-            h += `<div class="card"><div style="display:flex;justify-content:space-between;border-bottom:1px solid #eee;padding-bottom:10px;margin-bottom:10px">
-                <b>${date}</b><b style="color:#0088cc">${data[date].total} ₽</b></div>`;
-            data[date].items.forEach(i => { h += `<div style="display:flex;justify-content:space-between;font-size:14px"><span>${i.name}</span><b>x${i.qty}</b></div>`; });
-            h += `</div>`;
-        }
-        d.innerHTML = h || '<p style="text-align:center;margin-top:50px;color:#999">История пуста</p>';
+    async function loadHistory() {
+        const hBox = document.getElementById('p2');
+        hBox.innerHTML = '<p style="text-align:center;color:#999">Загрузка истории...</p>';
+        try {
+            let r = await fetch(`${API}?user=${user}`);
+            let data = await r.json();
+            let html = '';
+            for(let d in data) {
+                html += `<div class="card"><div class="row" style="border-bottom:1px solid #eee;padding-bottom:8px;margin-bottom:8px"><b>${d}</b><b style="color:#0088cc">${data[d].total} ₽</b></div>`;
+                data[d].items.forEach(i => { html += `<div class="row" style="font-size:14px;margin-top:2px"><span>${i.name}</span><b>x${i.qty}</b></div>`; });
+                html += `</div>`;
+            }
+            hBox.innerHTML = html || '<p style="text-align:center;color:#999;margin-top:20px">История пуста</p>';
+        } catch(e) { hBox.innerHTML = '<div class="err">Не удалось загрузить историю</div>'; }
     }
 
     async function send() {
-        if (!Object.keys(cart).length) return tg.showAlert("Выберите товары!");
+        if(!Object.keys(cart).length) return tg.showAlert("Выберите товары!");
         tg.showConfirm("Оформить заказ?", async (ok) => {
-            if (ok) {
-                await fetch(API, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ user, date: inp.value, items: cart }) });
-                tg.showAlert("✅ Заказ отправлен!");
-                tg.close();
+            if(ok) {
+                tg.MainButton.showProgress();
+                try {
+                    await fetch(API, {method:'POST', body:JSON.stringify({user, date:dtInput.value, items:cart})});
+                    tg.showAlert("✅ Заказ успешно отправлен!");
+                    tg.close();
+                } catch(e) { tg.showAlert("Ошибка при отправке"); }
+                tg.MainButton.hideProgress();
             }
         });
     }
