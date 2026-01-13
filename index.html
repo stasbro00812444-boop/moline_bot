@@ -42,7 +42,9 @@
 <script>
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbwKffluDSU7hseCuu8KRnSWlZGf_ZW-kQOK5jCsR5jbvisaXeUlOMppEh-fPwqw95Kz/exec';
-    const user = encodeURIComponent(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest");
+    
+    // ПРОВЕРКА ЮЗЕРНЕЙМА: Берем ID или Username
+    const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").trim();
     
     let menuData = [], historyData = {}, allOrders = {}; 
     const dtIn = document.getElementById('dt');
@@ -54,22 +56,25 @@
         dtIn.min = min.toISOString().split('T')[0];
         dtIn.value = dtIn.min;
 
-        document.getElementById('menu').innerHTML = '<center style="padding:20px;color:#888">Загрузка...</center>';
+        document.getElementById('menu').innerHTML = '<center style="padding:20px;color:#888">Синхронизация данных...</center>';
         try {
             const [mR, hR] = await Promise.all([
-                fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`),
-                fetch(`${API}?user=${user}&v=${Date.now()}`)
+                fetch(`${API}?type=menu&user=${encodeURIComponent(user)}&v=${Date.now()}`),
+                fetch(`${API}?user=${encodeURIComponent(user)}&v=${Date.now()}`)
             ]);
-            menuData = await mR.json();
+            const mRes = await mR.json();
+            menuData = mRes.menu;
             historyData = await hR.json();
             
-            // Предзаполняем allOrders из истории
+            // Восстановление корзины из истории для каждой даты
             for (let d in historyData) {
                 allOrders[d] = {};
-                historyData[d].items.forEach(i => { allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
+                historyData[d].items.forEach(i => { 
+                    allOrders[d][i.name] = {qty: i.qty, price: i.price}; 
+                });
             }
             switchDate();
-        } catch(e) { console.error(e); }
+        } catch(e) { document.getElementById('menu').innerHTML = '<center style="color:red;padding:20px">Ошибка авторизации</center>'; }
     }
 
     function switchDate() {
@@ -109,13 +114,13 @@
 
     function calc() {
         const sel = dtIn.value; let s = 0;
-        for (let k in allOrders[sel]) s += (allOrders[sel][k].qty * allOrders[sel][k].price);
+        for (let k in allOrders[sel]) s += (parseInt(allOrders[sel][k].qty) * parseFloat(allOrders[sel][k].price));
         document.getElementById('tot').innerText = (isNaN(s) ? 0 : s) + " ₽";
     }
 
     function tab(t) {
-        document.getElementById('t1').className = t=='order'?'tab active':'tab';
-        document.getElementById('t2').className = t=='hist'?'tab active':'tab';
+        document.getElementById('t1').className = (t=='order'?'tab active':'tab');
+        document.getElementById('t2').className = (t=='hist'?'tab active':'tab');
         document.getElementById('p1').classList.toggle('hidden', t!='order');
         document.getElementById('p2').classList.toggle('hidden', t!='hist');
         document.getElementById('f').classList.toggle('hidden', t!='order');
@@ -124,13 +129,14 @@
 
     function renderHist() {
         const box = document.getElementById('p2'); let h = '';
-        for(let d in historyData) {
+        const sortedDates = Object.keys(historyData).sort().reverse();
+        sortedDates.forEach(d => {
             let o = historyData[d];
             h += `<div class="card"><div class="row" style="border-bottom:1px solid #eee;padding-bottom:8px;margin-bottom:8px"><b>${o.displayDate}</b><b>${o.total} ₽</b></div>`;
             o.items.forEach(i => { h += `<div class="row" style="font-size:13px;color:#666"><span>${i.name}</span><b>x${i.qty}</b></div>`; });
-            h += `<button class="btn-rep" onclick="rep('${d}')">ПОВТОРИТЬ НА ДРУГУЮ ДАТУ</button></div>`;
-        }
-        box.innerHTML = h || '<center style="padding:20px;color:#888">История пуста</center>';
+            h += `<button class="btn-rep" onclick="rep('${d}')">ПОВТОРИТЬ НА ВЫБРАННУЮ ДАТУ</button></div>`;
+        });
+        box.innerHTML = h || '<center style="padding:20px;color:#888">Заказов пока нет</center>';
     }
 
     function rep(d) {
@@ -139,21 +145,22 @@
         allOrders[target] = {};
         old.items.forEach(i => { allOrders[target][i.name] = {qty: i.qty, price: i.price}; });
         tab('order'); renderMenu();
-        tg.showAlert("Заказ скопирован на выбранную дату!");
+        tg.showAlert("Заказ скопирован на " + target);
     }
 
     async function send() {
         const sel = dtIn.value;
         if(!Object.keys(allOrders[sel]).length) return tg.showAlert("Выберите товары!");
-        tg.showConfirm("Сохранить заказ на " + sel + "?", async (ok) => {
+        tg.showConfirm("Сохранить изменения на " + sel + "?", async (ok) => {
             if(ok) {
                 tg.MainButton.showProgress();
                 try {
-                    await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
-                    tg.showAlert("✅ Успешно!");
-                    const hR = await fetch(`${API}?user=${user}&v=${Date.now()}`);
+                    await fetch(API, {method:'POST', body:JSON.stringify({user:user, date:sel, items:allOrders[sel]})});
+                    tg.showAlert("✅ Данные в таблице обновлены!");
+                    // Обновляем историю в фоне
+                    const hR = await fetch(`${API}?user=${encodeURIComponent(user)}&v=${Date.now()}`);
                     historyData = await hR.json();
-                } catch(e) { tg.showAlert("Ошибка!"); }
+                } catch(e) { tg.showAlert("Ошибка сети"); }
                 tg.MainButton.hideProgress();
             }
         });
