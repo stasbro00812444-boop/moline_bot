@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -17,7 +17,7 @@
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
         .send { background: #0088cc; color: #fff; border: none; padding: 12px 25px; border-radius: 12px; font-weight: bold; }
         .hidden { display: none; }
-        .err { color: #d9534f; text-align: center; padding: 20px; }
+        .err-box { color: #d9534f; text-align: center; padding: 20px; font-size: 14px; background: #fff; border-radius: 12px; margin: 10px; }
     </style>
 </head>
 <body>
@@ -35,17 +35,20 @@
     const user = encodeURIComponent(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || "Guest");
     let cart = {}, dtInput = document.getElementById('dt');
     
-    // Даты: только будущее
-    let tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-    dtInput.value = tomorrow.toISOString().split('T')[0]; 
+    let tom = new Date(); tom.setDate(tom.getDate() + 1);
+    dtInput.value = tom.toISOString().split('T')[0]; 
     dtInput.min = dtInput.value;
 
     async function loadMenu() {
         const mBox = document.getElementById('m');
         mBox.innerHTML = '<p style="text-align:center;color:#999">Синхронизация...</p>';
         try {
-            let r = await fetch(`${API}?type=menu&user=${user}`);
-            let data = await r.json();
+            // Добавляем timestamp для обхода кэша
+            let r = await fetch(`${API}?type=menu&user=${user}&t=${Date.now()}`);
+            let text = await r.text();
+            let data;
+            try { data = JSON.parse(text); } catch(e) { throw new Error("Сервер вернул неверный формат. Проверьте развертывание."); }
+            
             if(data.error) throw new Error(data.error);
             let html = '';
             data.forEach(p => {
@@ -54,8 +57,8 @@
                 <div class="val" style="min-width:30px;text-align:center;font-weight:bold">0</div>
                 <button class="btn" onclick="upd('${p.name}',${p.price},1,this)">+</button></div></div>`;
             });
-            mBox.innerHTML = html || 'Прайс пуст';
-        } catch(e) { mBox.innerHTML = `<div class="err">Ошибка: ${e.message}</div>`; }
+            mBox.innerHTML = html || '<p style="text-align:center;color:#999">Прайс-лист пуст. Добавьте товары в таблицу.</p>';
+        } catch(e) { mBox.innerHTML = `<div class="err-box"><b>Ошибка загрузки</b><br>${e.message}</div>`; }
     }
 
     function upd(n,p,d,el) {
@@ -77,9 +80,9 @@
 
     async function loadHistory() {
         const hBox = document.getElementById('p2');
-        hBox.innerHTML = '<p style="text-align:center;color:#999">Загрузка истории...</p>';
+        hBox.innerHTML = '<p style="text-align:center;color:#999">Загрузка...</p>';
         try {
-            let r = await fetch(`${API}?user=${user}`);
+            let r = await fetch(`${API}?user=${user}&t=${Date.now()}`);
             let data = await r.json();
             let html = '';
             for(let d in data) {
@@ -88,20 +91,18 @@
                 html += `</div>`;
             }
             hBox.innerHTML = html || '<p style="text-align:center;color:#999;margin-top:20px">История пуста</p>';
-        } catch(e) { hBox.innerHTML = '<div class="err">Не удалось загрузить историю</div>'; }
+        } catch(e) { hBox.innerHTML = '<div class="err-box">Не удалось загрузить историю</div>'; }
     }
 
     async function send() {
         if(!Object.keys(cart).length) return tg.showAlert("Выберите товары!");
         tg.showConfirm("Оформить заказ?", async (ok) => {
             if(ok) {
-                tg.MainButton.showProgress();
                 try {
                     await fetch(API, {method:'POST', body:JSON.stringify({user, date:dtInput.value, items:cart})});
-                    tg.showAlert("✅ Заказ успешно отправлен!");
+                    tg.showAlert("✅ Заказ отправлен!");
                     tg.close();
                 } catch(e) { tg.showAlert("Ошибка при отправке"); }
-                tg.MainButton.hideProgress();
             }
         });
     }
