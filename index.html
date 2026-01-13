@@ -1,75 +1,140 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: sans-serif; background: #f4f6f9; padding: 15px; }
-        .card { background: #fff; border-radius: 10px; padding: 15px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .error { color: #d9534f; background: #f8d7da; padding: 10px; border-radius: 8px; font-size: 14px; line-height: 1.4; }
-        .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .btn { background: #0088cc; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; width: 100%; }
+        :root { --main: #0088cc; --bg: #f4f6f9; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 0; color: #333; }
+        .tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
+        .tab { flex: 1; text-align: center; padding: 15px; font-weight: bold; color: #999; cursor: pointer; }
+        .tab.active { color: var(--main); border-bottom: 3px solid var(--main); }
+        .container { padding: 15px; padding-bottom: 110px; }
+        .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .row { display: flex; align-items: center; justify-content: space-between; }
+        .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 4px; }
+        .btn-s { width: 34px; height: 34px; border: none; background: none; color: var(--main); font-size: 22px; cursor: pointer; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
+        .btn-send { background: var(--main); color: #fff; border: none; padding: 12px 25px; border-radius: 10px; font-weight: bold; }
         .hidden { display: none; }
+        .error { color: #d9534f; text-align: center; padding: 20px; font-size: 14px; }
     </style>
 </head>
 <body>
-    <div id="p1">
-        <div class="card"><input type="date" id="dt" style="width:100%; font-size:16px;"></div>
+    <div class="tabs">
+        <div id="t1" class="tab active" onclick="tab('order')">ЗАКАЗАТЬ</div>
+        <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
+    </div>
+    <div id="p1" class="container">
+        <div class="card"><input type="date" id="dt" onchange="switchDate();" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;font-size:16px;box-sizing:border-box;"></div>
         <div id="menu"></div>
     </div>
-    <div id="f" style="margin-top:20px;"><button class="btn" onclick="send()">ОФОРМИТЬ</button></div>
+    <div id="p2" class="container hidden"></div>
+    <div class="footer" id="f"><div><small>Сумма:</small><br><b id="tot" style="font-size:18px">0 ₽</b></div><button class="btn-send" onclick="send()">ОФОРМИТЬ</button></div>
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'ССЫЛКА_ИЗ_ГАЗ'; // Замените на вашу
+    const API = 'https://script.google.com/macros/s/AKfycbwKffluDSU7hseCuu8KRnSWlZGf_ZW-kQOK5jCsR5jbvisaXeUlOMppEh-fPwqw95Kz/exec';
+    
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').toLowerCase().trim();
+    
+    let menuData = [], historyData = {}, allOrders = {}; 
+    const dtIn = document.getElementById('dt');
 
     async function load() {
-        const dt = document.getElementById('dt');
         let min = new Date(); min.setDate(min.getDate() + 1);
-        dt.value = min.toISOString().split('T')[0];
+        dtIn.min = min.toISOString().split('T')[0];
+        dtIn.value = dtIn.min;
+        await refresh();
+    }
 
-        const box = document.getElementById('menu');
-        box.innerHTML = 'Загрузка...';
-
+    async function refresh() {
+        const menuBox = document.getElementById('menu');
         try {
-            const resp = await fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`);
-            const data = await resp.json();
-
-            if (data.error) {
-                box.innerHTML = `<div class="error"><b>Ошибка:</b><br>${data.error}</div>`;
+            const [mR, hR] = await Promise.all([
+                fetch(`${API}?type=menu&user=${encodeURIComponent(user)}&v=${Date.now()}`),
+                fetch(`${API}?user=${encodeURIComponent(user)}&v=${Date.now()}`)
+            ]);
+            const mData = await mR.json();
+            if (mData.error) {
+                menuBox.innerHTML = `<div class="error"><b>Ошибка:</b><br>${mData.error}<br><br>ID: <b>${user}</b></div>`;
                 return;
             }
+            menuData = mData.menu || [];
+            historyData = await hR.json();
+            switchDate();
+        } catch(e) { menuBox.innerHTML = '<div class="error">Ошибка связи. Проверьте развертывание.</div>'; }
+    }
 
-            if (data.menu.length === 0) {
-                box.innerHTML = '<div class="error">В листе с меню нет товаров (пустые строки).</div>';
-                return;
-            }
+    function switchDate() {
+        if (!allOrders[dtIn.value]) allOrders[dtIn.value] = {};
+        renderMenu();
+    }
 
-            box.innerHTML = '';
-            data.menu.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'card row';
-                div.innerHTML = `<div>${item.name}</div><div>${item.price} ₽</div>`;
-                box.appendChild(div);
-            });
+    function renderMenu() {
+        const box = document.getElementById('menu'), sel = dtIn.value;
+        box.innerHTML = '';
+        if(!menuData.length) { box.innerHTML = `<center style="padding:40px;color:#888">Меню пусто или партнер не найден.<br>ID: ${user}</center>`; return; }
+        
+        menuData.forEach(item => {
+            const q = allOrders[sel][item.name]?.qty || 0;
+            const div = document.createElement('div'); div.className = 'card row';
+            div.innerHTML = `<div><b>${item.name}</b><br><small>${item.price} ₽</small></div>
+            <div class="stepper"><button class="btn-s" onclick="upd('${item.name}',${item.price},-1)">−</button>
+            <div style="min-width:30px;text-align:center">${q}</div>
+            <button class="btn-s" onclick="upd('${item.name}',${item.price},1)">+</button></div>`;
+            box.appendChild(div);
+        });
+        calc();
+    }
 
-        } catch (e) {
-            box.innerHTML = '<div class="error">Не удалось связаться с таблицей. Проверьте ссылку API.</div>';
-        }
+    function upd(n,p,d) {
+        const sel = dtIn.value;
+        let q = (allOrders[sel][n]?.qty || 0) + d;
+        if (q <= 0) delete allOrders[sel][n]; else allOrders[sel][n] = {qty: q, price: p};
+        renderMenu();
+    }
+
+    function calc() {
+        const sel = dtIn.value; let s = 0;
+        for (let k in allOrders[sel]) s += (allOrders[sel][k].qty * allOrders[sel][k].price);
+        document.getElementById('tot').innerText = s + " ₽";
+    }
+
+    function tab(t) {
+        document.getElementById('t1').className = (t=='order'?'tab active':'tab');
+        document.getElementById('t2').className = (t=='hist'?'tab active':'tab');
+        document.getElementById('p1').classList.toggle('hidden', t!='order');
+        document.getElementById('p2').classList.toggle('hidden', t!='hist');
+        document.getElementById('f').classList.toggle('hidden', t!='order');
+        if(t=='hist') renderHist();
+    }
+
+    function renderHist() {
+        const box = document.getElementById('p2'); let h = '';
+        Object.keys(historyData).sort().reverse().forEach(d => {
+            let o = historyData[d];
+            h += `<div class="card"><div class="row"><b>${o.displayDate}</b><b>${o.total} ₽</b></div>`;
+            o.items.forEach(i => { h += `<div class="row" style="font-size:13px;color:#666"><span>${i.name}</span><span>x${i.qty}</span></div>`; });
+            h += `</div>`;
+        });
+        box.innerHTML = h || '<center style="padding:40px;color:#888">История пуста</center>';
     }
 
     async function send() {
-        const dt = document.getElementById('dt').value;
-        tg.showConfirm("Отправить?", async (ok) => {
+        const sel = dtIn.value;
+        if(!Object.keys(allOrders[sel]).length) return tg.showAlert("Выберите товары");
+        tg.showConfirm("Сохранить заказ на " + sel + "?", async (ok) => {
             if(ok) {
-                await fetch(API, {method:'POST', body:JSON.stringify({user, date:dt, items:{test:1}})});
-                tg.showAlert("Готово!");
+                tg.MainButton.showProgress();
+                await fetch(API, {method:'POST', body:JSON.stringify({user:user, date:sel, items:allOrders[sel]})});
+                tg.showAlert("✅ Записано в таблицу!");
+                await refresh();
+                tg.MainButton.hideProgress();
             }
         });
     }
-
     load(); tg.expand();
 </script>
 </body>
