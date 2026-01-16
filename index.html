@@ -14,11 +14,13 @@
         .cat-title { font-size: 14px; font-weight: 800; color: #0088cc; margin: 20px 0 10px 5px; text-transform: uppercase; border-left: 4px solid #0088cc; padding-left: 10px; }
         .row { display: flex; align-items: center; justify-content: space-between; }
         .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 2px; }
-        .btn-s { width: 34px; height: 34px; border: none; color: #0088cc; font-size: 22px; font-weight: bold; background: none; }
+        .btn-s { width: 34px; height: 34px; border: none; color: #0088cc; font-size: 22px; font-weight: bold; background: none; outline: none; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; box-sizing: border-box; }
         .btn-send { background: #0088cc; color: #fff; border: none; padding: 12px 25px; border-radius: 10px; font-weight: bold; font-size: 16px; width: 100%; }
         .hidden { display: none; }
-        input[type="date"] { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; margin-top: 5px; }
+        input[type="date"] { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; margin-top: 5px; outline: none; }
+        /* Тот самый серый цвет для инфо-строки */
+        #summary { font-size: 12px; color: #8e8e93; text-align: right; margin-bottom: 8px; font-weight: 500; }
     </style>
 </head>
 <body>
@@ -35,7 +37,7 @@
     </div>
     <div id="p2" class="container hidden"></div>
     <div class="footer" id="f">
-        <div id="delNote" style="color:red; font-size:11px; text-align:center; margin-bottom:5px" class="hidden">Доставка +300 ₽</div>
+        <div id="summary"></div>
         <div class="row">
             <div>Итого: <b id="tot" style="font-size:20px">0 ₽</b></div>
             <button class="btn-send" style="width:auto" onclick="send()">ОФОРМИТЬ</button>
@@ -58,8 +60,8 @@
 
     async function refresh() {
         const [m, h] = await Promise.all([
-            fetch(`${API}?type=menu&user=${user}`).then(r => r.json()),
-            fetch(`${API}?user=${user}`).then(r => r.json())
+            fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`).then(r => r.json()),
+            fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json())
         ]);
         menuData = m.menu || [];
         historyData = h || {};
@@ -73,7 +75,7 @@
             repeatItems.forEach(i => {
                 if(i.name !== "Доставка") allOrders[sel][i.name] = {qty: i.qty, price: i.price};
             });
-            repeatItems = null; // Очищаем буфер после копирования
+            repeatItems = null;
         }
         renderMenu();
     }
@@ -83,7 +85,6 @@
         box.innerHTML = '';
         let groups = {};
         menuData.forEach(i => { if(!groups[i.cat]) groups[i.cat] = []; groups[i.cat].push(i); });
-        
         for(let c in groups) {
             box.innerHTML += `<div class="cat-title">${c}</div>`;
             groups[c].forEach(item => {
@@ -112,9 +113,17 @@
     function calc() {
         const sel = document.getElementById('dt').value;
         let sub = 0;
-        if(allOrders[sel]) Object.values(allOrders[sel]).forEach(i => sub += i.qty * i.price);
+        if(allOrders[sel]) {
+            for (let k in allOrders[sel]) sub += (allOrders[sel][k].qty * allOrders[sel][k].price);
+        }
         let del = (sub > 0 && sub < 3000) ? 300 : 0;
-        document.getElementById('delNote').classList.toggle('hidden', del === 0);
+        
+        if (sub > 0) {
+            document.getElementById('summary').innerHTML = `Товары: ${sub} ₽ + Доставка: ${del} ₽`;
+        } else {
+            document.getElementById('summary').innerHTML = '';
+        }
+        
         document.getElementById('tot').innerText = (sub + del) + " ₽";
     }
 
@@ -153,17 +162,17 @@
     function startRepeat(d) {
         repeatItems = historyData[d].items;
         tab('order');
-        tg.showAlert("Выберите в календаре новую дату для этого заказа!");
+        tg.showAlert("Выберите в календаре новую дату для этого заказа.");
     }
 
     async function send() {
         const sel = document.getElementById('dt').value;
         if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("Корзина пуста");
-        tg.showConfirm(`Заказать на ${sel}?`, async (ok) => {
+        tg.showConfirm(`Оформить заказ на ${sel}?`, async (ok) => {
             if(ok) {
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
                 tg.showAlert("Готово!");
-                refresh();
+                await refresh();
                 tab('hist');
             }
         });
