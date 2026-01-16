@@ -5,25 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root { --brand-main: #f45279; --brand-light: #fff0f3; --text-dark: #222; --text-gray: #777; }
-        body { font-family: -apple-system, sans-serif; background: #fff; margin: 0; padding: 0; color: var(--text-dark); -webkit-tap-highlight-color: transparent; }
-        .tabs { display: flex; background: #fff; border-bottom: 2px solid #f5f5f5; position: sticky; top: 0; z-index: 100; }
-        .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; text-transform: uppercase; font-size: 13px; }
-        .tab.active { color: var(--brand-main); border-bottom: 3px solid var(--brand-main); }
-        .container { padding: 15px; padding-bottom: 180px; }
-        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
-        .cat-title { font-size: 13px; font-weight: 900; color: var(--brand-main); margin: 25px 0 12px 5px; text-transform: uppercase; display: flex; align-items: center; }
-        .cat-title::before { content: ''; width: 4px; height: 16px; background: var(--brand-main); margin-right: 10px; border-radius: 2px; }
-        .row { display: flex; align-items: center; justify-content: space-between; }
-        .item-info b { font-size: 16px; display: block; color: var(--text-dark); }
-        .item-info small { color: var(--text-gray); font-weight: 700; font-size: 14px; }
-        .stepper { display: flex; align-items: center; background: #fff; border-radius: 25px; padding: 4px 12px; gap: 15px; border: 2px solid var(--brand-main); }
-        .btn-s { border: none; color: var(--brand-main); font-size: 24px; font-weight: 900; background: none; outline: none; cursor: pointer; }
-        .q-val { min-width: 20px; text-align: center; font-weight: 900; font-size: 17px; }
-        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 35px; box-sizing: border-box; z-index: 100; }
-        .btn-send { background: var(--brand-main); color: #fff; border: none; padding: 18px 25px; border-radius: 14px; font-weight: 900; font-size: 16px; width: 100%; box-shadow: 0 6px 15px rgba(244, 82, 121, 0.3); text-transform: uppercase; }
+        :root { --brand: #f45279; --bg: #fff; --light: #fff0f3; --gray: #777; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; color: #222; -webkit-tap-highlight-color: transparent; }
+        .tabs { display: flex; border-bottom: 2px solid #f5f5f5; position: sticky; top: 0; background: #fff; z-index: 100; }
+        .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; text-transform: uppercase; font-size: 12px; }
+        .tab.active { color: var(--brand); border-bottom: 3px solid var(--brand); }
+        .container { padding: 15px; padding-bottom: 160px; }
+        .cat-title { font-size: 13px; font-weight: 900; color: var(--brand); margin: 25px 0 12px; text-transform: uppercase; display: flex; align-items: center; }
+        .cat-title::before { content: ''; width: 4px; height: 16px; background: var(--brand); margin-right: 10px; border-radius: 2px; }
+        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.02); }
+        .item-info b { font-size: 16px; display: block; }
+        .item-info small { color: var(--gray); font-weight: 700; }
+        .stepper { display: flex; align-items: center; background: #fff; border-radius: 25px; padding: 4px 12px; gap: 12px; border: 2px solid var(--brand); }
+        .btn-s { border: none; color: var(--brand); font-size: 22px; font-weight: 900; background: none; cursor: pointer; outline: none; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 30px; box-sizing: border-box; }
+        .btn-send { background: var(--brand); color: #fff; border: none; padding: 16px; border-radius: 14px; font-weight: 900; width: 100%; text-transform: uppercase; box-shadow: 0 5px 15px rgba(244,82,121,0.3); }
         .hidden { display: none !important; }
-        input[type="date"] { background: none; border: none; font-size: 18px; font-weight: 800; color: var(--text-dark); width: 100%; outline: none; }
+        input[type="date"] { background: var(--light); border: none; padding: 12px; border-radius: 10px; font-size: 16px; font-weight: 800; width: 100%; box-sizing: border-box; color: var(--brand); outline: none; }
     </style>
 </head>
 <body>
@@ -32,24 +30,20 @@
         <div id="t2" class="tab" onclick="tab('hist')">История</div>
     </div>
     <div id="p1" class="container">
-        <div class="card" style="background: var(--brand-light); border: none;">
-            <input type="date" id="dt" onchange="renderMenu()">
-        </div>
+        <input type="date" id="dt" onchange="renderMenu()">
         <div id="menu"></div>
     </div>
     <div id="p2" class="container hidden"></div>
     <div class="footer" id="f">
-        <div id="summary" style="font-size:11px; color:#999; text-align:right; margin-bottom:8px; font-weight:800; text-transform:uppercase;"></div>
-        <div class="row">
-            <div><span style="font-size:10px; color:#999; font-weight:900">ИТОГО</span><br><b id="tot" style="font-size:24px">0 ₽</b></div>
-            <button class="btn-send" style="width:auto; padding: 16px 40px;" onclick="send()">ОФОРМИТЬ</button>
+        <div class="row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <div><small style="color:var(--gray);font-weight:900">ИТОГО</small><br><b id="tot" style="font-size:22px">0 ₽</b></div>
+            <button class="btn-send" style="width:auto; padding: 14px 40px;" onclick="send()">ОФОРМИТЬ</button>
         </div>
     </div>
 <script>
     const tg = window.Telegram.WebApp;
-    // ЗАМЕНИ НА СВОЮ АКТУАЛЬНУЮ ССЫЛКУ
-    const API = 'https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec'; 
-    const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').toLowerCase();
+    const API = 'ТВОЙ_URL_ЗДЕСЬ';
+    const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "guest").toLowerCase();
     let menuData = [], historyData = {}, allOrders = {};
 
     async function load() {
@@ -73,19 +67,16 @@
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
         box.innerHTML = '';
         let groups = {};
-        menuData.forEach(item => {
-            if (!groups[item.cat]) groups[item.cat] = [];
-            groups[item.cat].push(item);
-        });
+        menuData.forEach(i => { if(!groups[i.cat]) groups[i.cat] = []; groups[i.cat].push(i); });
         Object.keys(groups).sort().forEach(c => {
             box.innerHTML += `<div class="cat-title">${c}</div>`;
             groups[c].forEach(item => {
-                const q = (allOrders[sel] && allOrders[sel][item.name]) ? allOrders[sel][item.name].qty : 0;
-                box.innerHTML += `<div class="card row">
+                const q = allOrders[sel]?.[item.name]?.qty || 0;
+                box.innerHTML += `<div class="card">
                     <div class="item-info"><b>${item.name}</b><small>${item.price} ₽</small></div>
                     <div class="stepper">
                         <button class="btn-s" onclick="upd('${item.name}',${item.price},-1)">−</button>
-                        <div class="q-val">${q}</div>
+                        <b style="min-width:20px;text-align:center">${q}</b>
                         <button class="btn-s" onclick="upd('${item.name}',${item.price},1)">+</button>
                     </div>
                 </div>`;
@@ -104,10 +95,8 @@
 
     function calc() {
         const sel = document.getElementById('dt').value; let sub = 0;
-        if(allOrders[sel]) { for (let k in allOrders[sel]) sub += (allOrders[sel][k].qty * allOrders[sel][k].price); }
-        let del = (sub > 0 && sub < 3000) ? 300 : 0;
-        document.getElementById('summary').innerText = sub > 0 ? `Товары: ${sub} ₽ • Доставка: ${del} ₽` : '';
-        document.getElementById('tot').innerText = (sub + del) + " ₽";
+        if(allOrders[sel]) for(let k in allOrders[sel]) sub += (allOrders[sel][k].qty * allOrders[sel][k].price);
+        document.getElementById('tot').innerText = (sub + (sub > 0 && sub < 3000 ? 300 : 0)) + " ₽";
     }
 
     function tab(t) {
@@ -121,17 +110,20 @@
 
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
-        const dates = Object.keys(historyData).sort().reverse();
-        dates.forEach(d => {
+        Object.keys(historyData).sort().reverse().forEach(d => {
             const o = historyData[d];
-            let itemsHtml = o.items.map(i => `<div class="row" style="font-size:13px; margin-bottom:5px; color:#666"><span>${i.name}</span><b>x${i.qty}</b></div>`).join('');
-            box.innerHTML += `<div class="card"><b>${d}</b><br>${itemsHtml}<br><b>Итого: ${o.total} ₽</b></div>`;
+            box.innerHTML += `<div class="card" style="flex-direction:column; align-items:flex-start">
+                <div style="width:100%; display:flex; justify-content:space-between; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:10px">
+                    <b>${d}</b><b>${o.total} ₽</b>
+                </div>
+                ${o.items.map(i => `<div style="font-size:13px; color:#666">${i.name} x${i.qty}</div>`).join('')}
+            </div>`;
         });
     }
 
     async function send() {
         const sel = document.getElementById('dt').value;
-        if(!allOrders[sel]) return tg.showAlert("Пусто");
+        if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("Пусто");
         tg.showConfirm(`Заказать на ${sel}?`, async (ok) => {
             if(ok) {
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
