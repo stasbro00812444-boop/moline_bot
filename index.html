@@ -10,6 +10,8 @@
         .tabs { display: flex; border-bottom: 2px solid #f5f5f5; position: sticky; top: 0; background: #fff; z-index: 100; }
         .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; text-transform: uppercase; font-size: 12px; }
         .tab.active { color: var(--brand); border-bottom: 3px solid var(--brand); }
+        .manager-bar { background: var(--brand); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; color: #fff; position: sticky; top: 51px; z-index: 90; }
+        .btn-mgr { background: #fff; color: var(--brand); border: none; padding: 8px 15px; border-radius: 10px; font-weight: 900; font-size: 11px; text-transform: uppercase; }
         .container { padding: 15px; padding-bottom: 160px; }
         .cat-title { font-size: 13px; font-weight: 900; color: var(--brand); margin: 25px 0 12px; text-transform: uppercase; display: flex; align-items: center; }
         .cat-title::before { content: ''; width: 4px; height: 16px; background: var(--brand); margin-right: 10px; border-radius: 2px; }
@@ -21,7 +23,8 @@
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 30px; box-sizing: border-box; }
         .btn-send { background: var(--brand); color: #fff; border: none; padding: 16px; border-radius: 14px; font-weight: 900; width: 100%; text-transform: uppercase; box-shadow: 0 5px 15px rgba(244,82,121,0.3); }
         .hidden { display: none !important; }
-        input[type="date"] { background: var(--light); border: none; padding: 12px; border-radius: 10px; font-size: 16px; font-weight: 800; width: 100%; box-sizing: border-box; color: var(--brand); outline: none; }
+        input[type="date"] { background: var(--light); border: none; padding: 12px; border-radius: 10px; font-size: 16px; font-weight: 800; width: 100%; color: var(--brand); outline: none; margin-bottom: 15px; }
+        .btn-repeat { background: var(--light); color: var(--brand); border: none; padding: 10px; border-radius: 10px; font-weight: 800; font-size: 11px; width: 100%; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -29,29 +32,33 @@
         <div id="t1" class="tab active" onclick="tab('order')">Заказать</div>
         <div id="t2" class="tab" onclick="tab('hist')">История</div>
     </div>
+    <div id="mgr" class="manager-bar hidden">
+        <div style="font-size: 12px; font-weight: 700;">Нужно изменить заказ?</div>
+        <button class="btn-mgr" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button>
+    </div>
     <div id="p1" class="container">
-        <input type="date" id="dt" onchange="renderMenu()">
+        <input type="date" id="dt" onchange="onDateChanged()">
         <div id="menu"></div>
     </div>
     <div id="p2" class="container hidden"></div>
     <div class="footer" id="f">
-        <div class="row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
             <div><small style="color:var(--gray);font-weight:900">ИТОГО</small><br><b id="tot" style="font-size:22px">0 ₽</b></div>
             <button class="btn-send" style="width:auto; padding: 14px 40px;" onclick="send()">ОФОРМИТЬ</button>
         </div>
     </div>
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'ТВОЙ_URL_ЗДЕСЬ';
+    // ПОМЕНЯЙ ССЫЛКУ НИЖЕ
+    const API = 'ТВОЙ_URL_ЗДЕСЬ'; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "guest").toLowerCase();
-    let menuData = [], historyData = {}, allOrders = {};
+    let menuData = [], historyData = {}, allOrders = {}, repeatItems = null;
 
     async function load() {
         let t = new Date(); t.setDate(t.getDate() + 1);
         document.getElementById('dt').value = t.toISOString().split('T')[0];
         document.getElementById('dt').min = t.toISOString().split('T')[0];
-        tg.expand();
-        await refresh();
+        tg.expand(); await refresh();
     }
 
     async function refresh() {
@@ -65,8 +72,7 @@
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
-        box.innerHTML = '';
-        let groups = {};
+        box.innerHTML = ''; let groups = {};
         menuData.forEach(i => { if(!groups[i.cat]) groups[i.cat] = []; groups[i.cat].push(i); });
         Object.keys(groups).sort().forEach(c => {
             box.innerHTML += `<div class="cat-title">${c}</div>`;
@@ -90,7 +96,7 @@
         if(!allOrders[sel]) allOrders[sel] = {};
         let q = (allOrders[sel][n]?.qty || 0) + d;
         if(q <= 0) delete allOrders[sel][n]; else allOrders[sel][n] = {qty:q, price:p};
-        renderMenu(); if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        renderMenu(); tg.HapticFeedback?.impactOccurred('light');
     }
 
     function calc() {
@@ -103,6 +109,7 @@
         document.getElementById('p1').classList.toggle('hidden', t !== 'order');
         document.getElementById('p2').classList.toggle('hidden', t !== 'hist');
         document.getElementById('f').classList.toggle('hidden', t !== 'order');
+        document.getElementById('mgr').classList.toggle('hidden', t !== 'hist');
         document.getElementById('t1').classList.toggle('active', t === 'order');
         document.getElementById('t2').classList.toggle('active', t === 'hist');
         if(t === 'hist') renderHist();
@@ -110,24 +117,45 @@
 
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
-        Object.keys(historyData).sort().reverse().forEach(d => {
+        const keys = Object.keys(historyData).sort().reverse();
+        if(keys.length === 0) box.innerHTML = '<div style="text-align:center;padding:40px;color:#ccc">История пуста</div>';
+        keys.forEach(d => {
             const o = historyData[d];
             box.innerHTML += `<div class="card" style="flex-direction:column; align-items:flex-start">
-                <div style="width:100%; display:flex; justify-content:space-between; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:10px">
-                    <b>${d}</b><b>${o.total} ₽</b>
+                <div style="width:100%; display:flex; justify-content:space-between; border-bottom:1px solid #f5f5f5; padding-bottom:8px; margin-bottom:8px">
+                    <b>${d}</b> <div style="display:flex; gap:15px"><span onclick="editOrder('${d}')" style="cursor:pointer">✎</span><b>${o.total} ₽</b></div>
                 </div>
                 ${o.items.map(i => `<div style="font-size:13px; color:#666">${i.name} x${i.qty}</div>`).join('')}
+                <button class="btn-repeat" onclick="startRepeat('${d}')">ПОВТОРИТЬ ЗАКАЗ</button>
             </div>`;
         });
     }
 
+    function editOrder(d) {
+        allOrders[d] = {};
+        historyData[d].items.forEach(i => { if(i.name !== "Доставка") allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
+        document.getElementById('dt').value = d; tab('order'); renderMenu();
+    }
+
+    function startRepeat(d) { repeatItems = historyData[d].items; tab('order'); tg.showAlert("Выберите новую дату для повтора заказа");}
+
+    function onDateChanged() {
+        const sel = document.getElementById('dt').value;
+        if (repeatItems) {
+            allOrders[sel] = {};
+            repeatItems.forEach(i => { if(i.name !== "Доставка") allOrders[sel][i.name] = {qty: i.qty, price: i.price}; });
+            repeatItems = null;
+        }
+        renderMenu();
+    }
+
     async function send() {
         const sel = document.getElementById('dt').value;
-        if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("Пусто");
+        if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("Выберите товары");
         tg.showConfirm(`Заказать на ${sel}?`, async (ok) => {
             if(ok) {
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
-                tg.showAlert("Готово!"); await refresh(); tab('hist');
+                tg.showAlert("Заказ отправлен!"); await refresh(); tab('hist');
             }
         });
     }
