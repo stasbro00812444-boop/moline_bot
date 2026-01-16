@@ -13,11 +13,11 @@
         .container { padding: 15px; padding-bottom: 180px; }
         .cat-title { font-size: 13px; font-weight: 900; color: var(--brand); margin: 25px 0 12px; text-transform: uppercase; display: flex; align-items: center; }
         .cat-title::before { content: ''; width: 4px; height: 16px; background: var(--brand); margin-right: 10px; border-radius: 2px; }
-        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; }
+        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.02); }
         .item-info b { font-size: 15px; display: block; }
         .item-info small { color: var(--gray); font-weight: 700; }
         .stepper { display: flex; align-items: center; background: #fff; border-radius: 25px; padding: 4px 12px; gap: 12px; border: 2px solid var(--brand); }
-        .btn-s { border: none; color: var(--brand); font-size: 22px; font-weight: 900; background: none; outline: none; }
+        .btn-s { border: none; color: var(--brand); font-size: 22px; font-weight: 900; background: none; outline: none; cursor: pointer; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 30px; box-sizing: border-box; z-index: 100;}
         .btn-send { background: var(--brand); color: #fff; border: none; padding: 16px; border-radius: 14px; font-weight: 900; width: 100%; text-transform: uppercase; }
         .hidden { display: none !important; }
@@ -56,20 +56,25 @@
             const h = await fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json());
             menuData = m.menu || []; historyData = h || {};
             renderMenu();
-        } catch(e) { document.getElementById('menu').innerText = "Ошибка загрузки"; }
+        } catch(e) { document.getElementById('menu').innerText = "Ошибка загрузки данных"; }
     }
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
-        box.innerHTML = ''; if(!menuData.length) { box.innerHTML = "Меню пусто. Проверьте данные в таблице."; return; }
+        box.innerHTML = ''; 
+        if(!menuData.length) { box.innerHTML = "Меню пусто. Проверьте названия листов: выпечка, десерты, сэндвичи."; return; }
+        
         let groups = {};
         menuData.forEach(i => { if(!groups[i.cat]) groups[i.cat] = []; groups[i.cat].push(i); });
-        Object.keys(groups).sort().forEach(c => {
-            box.innerHTML += `<div class="cat-title">${c}</div>`;
-            groups[c].forEach(item => {
-                const q = allOrders[sel]?.[item.name]?.qty || 0;
-                box.innerHTML += `<div class="card"><div class="item-info"><b>${item.name}</b><small>${item.price} ₽</small></div><div class="stepper"><button class="btn-s" onclick="upd('${item.name}',${item.price},-1)">−</button><b style="min-width:20px;text-align:center">${q}</b><button class="btn-s" onclick="upd('${item.name}',${item.price},1)">+</button></div></div>`;
-            });
+        
+        ['ВЫПЕЧКА', 'ДЕСЕРТЫ', 'СЭНДВИЧИ'].forEach(c => {
+            if(groups[c]) {
+                box.innerHTML += `<div class="cat-title">${c}</div>`;
+                groups[c].forEach(item => {
+                    const q = allOrders[sel]?.[item.name]?.qty || 0;
+                    box.innerHTML += `<div class="card"><div class="item-info"><b>${item.name}</b><small>${item.price} ₽</small></div><div class="stepper"><button class="btn-s" onclick="upd('${item.name}',${item.price},-1)">−</button><b style="min-width:20px;text-align:center">${q}</b><button class="btn-s" onclick="upd('${item.name}',${item.price},1)">+</button></div></div>`;
+                });
+            }
         });
         calc();
     }
