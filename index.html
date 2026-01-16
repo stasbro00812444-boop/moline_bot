@@ -6,78 +6,42 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
-            /* Тот самый глубокий контрастный розовый с твоего референса */
-            --brand-main: #9c4a63; 
-            --brand-light: #fdf2f5;
-            --brand-soft: #d67b9a;
-            --text-dark: #2c2c2c;
-            --text-gray: #666666;
-            --card-bg: #ffffff;
+            /* Тот самый малиновый цвет с твоего скрина */
+            --brand-main: #f45279; 
+            --brand-light: #fff0f3;
+            --text-dark: #222222;
+            --text-gray: #777777;
         }
 
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
-            background: #fcfcfc; 
-            margin: 0; 
-            padding: 0; 
-            color: var(--text-dark); 
-            -webkit-tap-highlight-color: transparent; 
-        }
+        body { font-family: -apple-system, sans-serif; background: #fff; margin: 0; padding: 0; color: var(--text-dark); -webkit-tap-highlight-color: transparent; }
         
-        .tabs { display: flex; background: #fff; border-bottom: 2px solid var(--brand-light); position: sticky; top: 0; z-index: 100; }
-        .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; text-transform: uppercase; font-size: 13px; letter-spacing: 0.5px; }
-        .tab.active { color: var(--brand-main); border-bottom: 4px solid var(--brand-main); }
+        .tabs { display: flex; background: #fff; border-bottom: 2px solid #f5f5f5; position: sticky; top: 0; z-index: 100; }
+        .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; text-transform: uppercase; font-size: 13px; }
+        .tab.active { color: var(--brand-main); border-bottom: 3px solid var(--brand-main); }
         
         .container { padding: 15px; padding-bottom: 180px; }
-        .card { background: var(--card-bg); border-radius: 16px; padding: 15px; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.04); border: 1px solid #f2f2f2; }
+        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
         
-        .cat-title { 
-            font-size: 13px; font-weight: 900; color: var(--brand-main); 
-            margin: 25px 0 12px 5px; text-transform: uppercase; letter-spacing: 1.2px;
-            display: flex; align-items: center;
-        }
-        .cat-title::before { content: ''; width: 5px; height: 18px; background: var(--brand-main); margin-right: 10px; border-radius: 3px; }
+        .cat-title { font-size: 13px; font-weight: 900; color: var(--brand-main); margin: 25px 0 12px 5px; text-transform: uppercase; display: flex; align-items: center; }
+        .cat-title::before { content: ''; width: 4px; height: 16px; background: var(--brand-main); margin-right: 10px; border-radius: 2px; }
         
         .row { display: flex; align-items: center; justify-content: space-between; }
-        .item-info b { font-size: 16px; display: block; margin-bottom: 3px; color: var(--text-dark); }
-        .item-info small { color: var(--text-gray); font-weight: 800; font-size: 14px; }
+        .item-info b { font-size: 16px; display: block; color: var(--text-dark); }
+        .item-info small { color: var(--text-gray); font-weight: 700; font-size: 14px; }
         
-        /* Степпер с четким контрастом */
-        .stepper { 
-            display: flex; align-items: center; background: #fff; 
-            border-radius: 25px; padding: 4px 12px; gap: 14px; 
-            border: 2px solid var(--brand-main); 
-        }
-        .btn-s { border: none; color: var(--brand-main); font-size: 24px; font-weight: 900; background: none; outline: none; cursor: pointer; padding: 0; }
-        .q-val { min-width: 20px; text-align: center; font-weight: 900; color: var(--text-dark); font-size: 17px; }
+        /* Контрастный степпер */
+        .stepper { display: flex; align-items: center; background: #fff; border-radius: 25px; padding: 4px 12px; gap: 15px; border: 2px solid var(--brand-main); }
+        .btn-s { border: none; color: var(--brand-main); font-size: 24px; font-weight: 900; background: none; outline: none; cursor: pointer; }
+        .q-val { min-width: 20px; text-align: center; font-weight: 900; font-size: 17px; }
         
-        /* Контрастный футер */
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 35px; box-sizing: border-box; z-index: 100; }
-        .btn-send { 
-            background: var(--brand-main); color: #fff; border: none; 
-            padding: 18px 32px; border-radius: 16px; font-weight: 900; 
-            font-size: 16px; width: 100%; box-shadow: 0 6px 15px rgba(156, 74, 99, 0.3); 
-            text-transform: uppercase;
-        }
+        .btn-send { background: var(--brand-main); color: #fff; border: none; padding: 18px 25px; border-radius: 14px; font-weight: 900; font-size: 16px; width: 100%; box-shadow: 0 6px 15px rgba(244, 82, 121, 0.3); text-transform: uppercase; }
         
-        .hidden { display: none !important; }
-        
-        /* Темная плашка менеджера для макс. контраста */
-        .manager-sticky {
-            position: sticky; top: 51px; z-index: 90; background: var(--brand-main); 
-            padding: 12px 18px; display: flex; align-items: center; justify-content: space-between;
-            color: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
-        .btn-manager-small { 
-            background: #fff; color: var(--brand-main); border: none; 
-            padding: 10px 16px; border-radius: 12px; font-size: 12px; 
-            font-weight: 900; text-transform: uppercase;
-        }
+        .manager-sticky { position: sticky; top: 51px; z-index: 90; background: var(--brand-main); padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; color: #fff; }
+        .btn-manager-small { background: #fff; color: var(--brand-main); border: none; padding: 10px 16px; border-radius: 12px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
 
-        #tot { color: var(--text-dark); font-size: 24px; font-weight: 900; }
-        #summary { color: var(--text-gray); font-size: 12px; margin-bottom: 6px; font-weight: 800; text-align: right; }
-        
-        input[type="date"] { background: none; border: none; font-size: 18px; font-weight: 800; color: var(--text-dark); outline: none; width: 100%; }
+        .hidden { display: none !important; }
+        input[type="date"] { background: none; border: none; font-size: 18px; font-weight: 800; color: var(--text-dark); width: 100%; outline: none; }
     </style>
 </head>
 <body>
@@ -92,20 +56,19 @@
     </div>
 
     <div id="p1" class="container">
-        <div class="card" style="background: var(--brand-light); border: none; margin-bottom: 20px;">
-            <div style="color:var(--brand-main); font-weight:900; text-transform:uppercase; font-size:10px; margin-bottom:5px">Дата доставки</div>
+        <div class="card" style="background: var(--brand-light); border: none;">
+            <div style="color:var(--brand-main); font-weight:900; font-size:10px; margin-bottom:5px; text-transform:uppercase">Дата доставки</div>
             <input type="date" id="dt" onchange="onDateChanged()">
         </div>
         <div id="menu"></div>
     </div>
-
     <div id="p2" class="container hidden"></div>
 
     <div class="footer" id="f">
-        <div id="summary"></div>
+        <div id="summary" style="font-size:11px; color:#999; text-align:right; margin-bottom:8px; font-weight:800; text-transform:uppercase;"></div>
         <div class="row">
-            <div><span style="font-size:11px; color:var(--text-gray); font-weight:800">ИТОГО К ОПЛАТЕ</span><br><b id="tot">0 ₽</b></div>
-            <button class="btn-send" style="width:auto" onclick="send()">ОФОРМИТЬ</button>
+            <div><span style="font-size:10px; color:#999; font-weight:900">ИТОГО</span><br><b id="tot" style="font-size:24px">0 ₽</b></div>
+            <button class="btn-send" style="width:auto; padding: 16px 40px;" onclick="send()">ОФОРМИТЬ</button>
         </div>
     </div>
 
@@ -138,15 +101,12 @@
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
         box.innerHTML = '';
-        if (menuData.length === 0) return;
-        
         let groups = {};
         menuData.forEach(item => {
             let cat = item.cat || "ДРУГОЕ";
             if (!groups[cat]) groups[cat] = [];
             groups[cat].push(item);
         });
-
         Object.keys(groups).sort().forEach(catName => {
             box.innerHTML += `<div class="cat-title">${catName}</div>`;
             groups[catName].forEach(item => {
@@ -178,7 +138,7 @@
         let sub = 0;
         if(allOrders[sel]) { for (let k in allOrders[sel]) sub += (allOrders[sel][k].qty * allOrders[sel][k].price); }
         let del = (sub > 0 && sub < 3000) ? 300 : 0;
-        document.getElementById('summary').innerHTML = sub > 0 ? `Товары: ${sub} ₽ • Доставка: ${del} ₽` : '';
+        document.getElementById('summary').innerText = sub > 0 ? `Товары: ${sub} ₽ • Доставка: ${del} ₽` : '';
         document.getElementById('tot').innerText = (sub + del) + " ₽";
     }
 
@@ -196,20 +156,19 @@
         const box = document.getElementById('p2'); box.innerHTML = '';
         const dates = Object.keys(historyData).sort().reverse();
         if (dates.length === 0) box.innerHTML = '<div style="text-align:center;padding:40px;color:#bbb;">История пока пуста</div>';
-        
         dates.forEach(d => {
             const o = historyData[d];
-            let itemsHtml = o.items.map(i => `<div class="row" style="font-size:13px; margin-bottom:5px; color:var(--text-gray)"><span>${i.name}</span><b style="color:var(--text-dark)">x${i.qty}</b></div>`).join('');
+            let itemsHtml = o.items.map(i => `<div class="row" style="font-size:13px; margin-bottom:5px; color:#666"><span>${i.name}</span><b>x${i.qty}</b></div>`).join('');
             box.innerHTML += `<div class="card">
                 <div class="row" style="border-bottom:1px solid #f5f5f5; margin-bottom:12px; padding-bottom:10px">
-                    <b style="font-size:17px">${d}</b> 
+                    <b>${d}</b> 
                     <div class="row">
                         <span onclick="editOrder('${d}')" style="margin-right:15px; font-size:20px; cursor:pointer; color:var(--brand-main)">✎</span>
-                        <b style="font-size:17px">${o.total} ₽</b>
+                        <b>${o.total} ₽</b>
                     </div>
                 </div>
                 ${itemsHtml}
-                <button class="btn-send" style="background:var(--brand-light); color:var(--brand-main); font-size:11px; margin-top:12px; width:100%; box-shadow:none; padding:12px" onclick="startRepeat('${d}')">ПОВТОРИТЬ НА НОВУЮ ДАТУ</button>
+                <button class="btn-send" style="background:var(--brand-light); color:var(--brand-main); font-size:11px; margin-top:10px; width:100%; box-shadow:none; padding:12px" onclick="startRepeat('${d}')">ПОВТОРИТЬ НА НОВУЮ ДАТУ</button>
             </div>`;
         });
     }
