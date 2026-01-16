@@ -15,28 +15,34 @@
         .row { display: flex; align-items: center; justify-content: space-between; }
         .stepper { display: flex; align-items: center; background: #f1f3f4; border-radius: 20px; padding: 2px; }
         .btn-s { width: 34px; height: 34px; border: none; color: #0088cc; font-size: 22px; font-weight: bold; background: none; outline: none; }
-        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; box-sizing: border-box; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #ddd; padding: 15px; box-sizing: border-box; z-index: 100; }
         .btn-send { background: #0088cc; color: #fff; border: none; padding: 12px 25px; border-radius: 10px; font-weight: bold; font-size: 16px; width: 100%; }
-        .hidden { display: none; }
+        .hidden { display: none !important; }
         input[type="date"] { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; margin-top: 5px; outline: none; }
         #summary { font-size: 12px; color: #8e8e93; text-align: right; margin-bottom: 8px; font-weight: 500; }
         
-        /* Кнопка менеджера */
-        .btn-manager { 
-            background: #fff; 
-            color: #0088cc; 
-            border: 1px solid #0088cc; 
-            padding: 14px; 
-            border-radius: 12px; 
-            font-weight: bold; 
-            width: 100%; 
-            margin-top: 25px;
+        /* Плавающая шапка для связи */
+        .manager-sticky {
+            position: sticky;
+            top: 50px; /* Сразу под табами */
+            z-index: 90;
+            background: #eef7ff;
+            border-bottom: 1px solid #0088cc33;
+            padding: 12px 15px;
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: space-between;
             gap: 10px;
-            cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,136,204,0.1);
+        }
+        .btn-manager-small {
+            background: #0088cc;
+            color: #fff;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: bold;
+            white-space: nowrap;
         }
     </style>
 </head>
@@ -45,6 +51,16 @@
         <div id="t1" class="tab active" onclick="tab('order')">ЗАКАЗАТЬ</div>
         <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
     </div>
+
+    <div id="manager-bar" class="manager-sticky hidden">
+        <div style="font-size: 12px; color: #444; line-height: 1.2;">
+            Нужно изменить заказ <br><b>после 12:00?</b>
+        </div>
+        <button class="btn-manager-small" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">
+            ЧАТ С МЕНЕДЖЕРОМ
+        </button>
+    </div>
+
     <div id="p1" class="container">
         <div class="card">
             <small style="color:#888; font-weight:bold">ДАТА ДОСТАВКИ</small>
@@ -52,7 +68,9 @@
         </div>
         <div id="menu"></div>
     </div>
+
     <div id="p2" class="container hidden"></div>
+
     <div class="footer" id="f">
         <div id="summary"></div>
         <div class="row">
@@ -86,22 +104,10 @@
         } catch(e) { console.error(e); }
     }
 
-    function onDateChanged() {
-        const sel = document.getElementById('dt').value;
-        if (repeatItems) {
-            allOrders[sel] = {};
-            repeatItems.forEach(i => {
-                if(i.name !== "Доставка") allOrders[sel][i.name] = {qty: i.qty, price: i.price};
-            });
-            repeatItems = null;
-        }
-        renderMenu();
-    }
-
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
         box.innerHTML = '';
-        if (menuData.length === 0) { box.innerHTML = '<div style="text-align:center;padding:20px;color:#888">Загрузка товаров...</div>'; return; }
+        if (menuData.length === 0) { box.innerHTML = '<div style="text-align:center;padding:20px;color:#888">Загрузка...</div>'; return; }
         
         let groups = {};
         menuData.forEach(i => { 
@@ -150,6 +156,9 @@
         document.getElementById('p1').classList.toggle('hidden', t !== 'order');
         document.getElementById('p2').classList.toggle('hidden', t !== 'hist');
         document.getElementById('f').classList.toggle('hidden', t !== 'order');
+        // Показываем/скрываем плашку менеджера
+        document.getElementById('manager-bar').classList.toggle('hidden', t !== 'hist');
+        
         document.getElementById('t1').classList.toggle('active', t === 'order');
         document.getElementById('t2').classList.toggle('active', t === 'hist');
         if(t === 'hist') renderHist();
@@ -158,6 +167,7 @@
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
         const dates = Object.keys(historyData).sort().reverse();
+        if (dates.length === 0) box.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">История пуста</div>';
         
         dates.forEach(d => {
             const o = historyData[d];
@@ -170,16 +180,17 @@
                 <button class="btn-send" style="background:#f1f3f4; color:#0088cc; font-size:12px; margin-top:10px; width:100%" onclick="startRepeat('${d}')">ПОВТОРИТЬ НА НОВУЮ ДАТУ</button>
             </div>`;
         });
+        box.innerHTML += '<div style="height:40px"></div>';
+    }
 
-        box.innerHTML += `
-            <button class="btn-manager" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">
-                <span style="font-size:20px">✉️</span> СВЯЗАТЬСЯ С МЕНЕДЖЕРОМ
-            </button>
-            <div style="padding: 15px; text-align: center; color: #8e8e93; font-size: 11px;">
-                Если вы не успели отредактировать заказ до 12:00,<br>пожалуйста, напишите нам в чат.
-            </div>
-            <div style="height: 40px;"></div>
-        `;
+    function onDateChanged() {
+        const sel = document.getElementById('dt').value;
+        if (repeatItems) {
+            allOrders[sel] = {};
+            repeatItems.forEach(i => { if(i.name !== "Доставка") allOrders[sel][i.name] = {qty: i.qty, price: i.price}; });
+            repeatItems = null;
+        }
+        renderMenu();
     }
 
     function editOrder(d) {
@@ -193,7 +204,7 @@
     function startRepeat(d) {
         repeatItems = historyData[d].items;
         tab('order');
-        tg.showAlert("Выберите новую дату для повтора заказа.");
+        tg.showAlert("Выберите дату для повтора заказа.");
     }
 
     async function send() {
@@ -202,7 +213,7 @@
         tg.showConfirm(`Оформить на ${sel}?`, async (ok) => {
             if(ok) {
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
-                tg.showAlert("Заказ отправлен!");
+                tg.showAlert("Готово!");
                 await refresh();
                 tab('hist');
             }
