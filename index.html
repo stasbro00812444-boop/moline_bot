@@ -19,7 +19,6 @@
         .btn-send { background: #0088cc; color: #fff; border: none; padding: 12px 25px; border-radius: 10px; font-weight: bold; font-size: 16px; width: 100%; }
         .hidden { display: none; }
         input[type="date"] { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; margin-top: 5px; outline: none; }
-        /* Тот самый серый цвет для инфо-строки */
         #summary { font-size: 12px; color: #8e8e93; text-align: right; margin-bottom: 8px; font-weight: 500; }
     </style>
 </head>
@@ -46,7 +45,7 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec'; 
+    const API = 'ТВОЙ_URL_СКРИПТА'; // НЕ ЗАБУДЬ ВСТАВИТЬ СВОЙ URL
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').toLowerCase();
     
     let menuData = [], historyData = {}, allOrders = {}, repeatItems = null;
@@ -59,13 +58,13 @@
     }
 
     async function refresh() {
-        const [m, h] = await Promise.all([
-            fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`).then(r => r.json()),
-            fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json())
-        ]);
-        menuData = m.menu || [];
-        historyData = h || {};
-        renderMenu();
+        try {
+            const m = await fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`).then(r => r.json());
+            const h = await fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json());
+            menuData = m.menu || [];
+            historyData = h || {};
+            renderMenu();
+        } catch(e) { console.error(e); }
     }
 
     function onDateChanged() {
@@ -84,11 +83,16 @@
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
         box.innerHTML = '';
         let groups = {};
-        menuData.forEach(i => { if(!groups[i.cat]) groups[i.cat] = []; groups[i.cat].push(i); });
+        menuData.forEach(i => { 
+            let c = i.cat;
+            if(!groups[c]) groups[c] = []; 
+            groups[c].push(i); 
+        });
+        
         for(let c in groups) {
             box.innerHTML += `<div class="cat-title">${c}</div>`;
             groups[c].forEach(item => {
-                const q = allOrders[sel]?.[item.name]?.qty || 0;
+                const q = (allOrders[sel] && allOrders[sel][item.name]) ? allOrders[sel][item.name].qty : 0;
                 box.innerHTML += `<div class="card row">
                     <div><b>${item.name}</b><br><small>${item.price} ₽</small></div>
                     <div class="stepper">
@@ -117,13 +121,7 @@
             for (let k in allOrders[sel]) sub += (allOrders[sel][k].qty * allOrders[sel][k].price);
         }
         let del = (sub > 0 && sub < 3000) ? 300 : 0;
-        
-        if (sub > 0) {
-            document.getElementById('summary').innerHTML = `Товары: ${sub} ₽ + Доставка: ${del} ₽`;
-        } else {
-            document.getElementById('summary').innerHTML = '';
-        }
-        
+        document.getElementById('summary').innerHTML = sub > 0 ? `Товары: ${sub} ₽ + Доставка: ${del} ₽` : '';
         document.getElementById('tot').innerText = (sub + del) + " ₽";
     }
 
@@ -162,16 +160,16 @@
     function startRepeat(d) {
         repeatItems = historyData[d].items;
         tab('order');
-        tg.showAlert("Выберите в календаре новую дату для этого заказа.");
+        tg.showAlert("Выберите дату для повтора заказа.");
     }
 
     async function send() {
         const sel = document.getElementById('dt').value;
         if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("Корзина пуста");
-        tg.showConfirm(`Оформить заказ на ${sel}?`, async (ok) => {
+        tg.showConfirm(`Оформить на ${sel}?`, async (ok) => {
             if(ok) {
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
-                tg.showAlert("Готово!");
+                tg.showAlert("Заказ отправлен!");
                 await refresh();
                 tab('hist');
             }
