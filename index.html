@@ -5,108 +5,156 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root { --brand: #f45279; }
-        body { font-family: -apple-system, sans-serif; margin: 0; padding: 15px; background: #fff; }
-        .tabs { display: flex; border-bottom: 1px solid #eee; margin-bottom: 15px; }
-        .tab { flex: 1; text-align: center; padding: 12px; color: #999; font-weight: bold; cursor: pointer; }
-        .tab.active { color: var(--brand); border-bottom: 2px solid var(--brand); }
-        .card { border: 1px solid #f0f0f0; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
-        .cat { font-size: 11px; font-weight: 800; color: var(--brand); text-transform: uppercase; margin: 15px 0 5px; }
-        .stepper { display: flex; align-items: center; gap: 10px; border: 1.5px solid var(--brand); border-radius: 20px; padding: 2px 10px; }
-        .btn-s { border: none; background: none; color: var(--brand); font-size: 20px; font-weight: bold; }
-        .footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 15px 20px 30px; background: #fff; border-top: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-        .btn-main { background: var(--brand); color: #fff; border: none; padding: 12px 25px; border-radius: 10px; font-weight: bold; }
+        :root { --brand: #f45279; --bg: #fff0f3; --gray: #999; }
+        body { font-family: -apple-system, sans-serif; margin: 0; background: #fff; color: #222; overflow-x: hidden; }
+        .tabs { display: flex; position: sticky; top: 0; background: #fff; z-index: 100; border-bottom: 1px solid #eee; }
+        .tab { flex: 1; text-align: center; padding: 15px; font-weight: 800; color: #ccc; font-size: 12px; cursor: pointer; transition: 0.2s; }
+        .tab.active { color: var(--brand); border-bottom: 3px solid var(--brand); }
+        .container { padding: 15px; padding-bottom: 140px; }
+        .cat-label { font-size: 11px; font-weight: 900; color: var(--brand); text-transform: uppercase; margin: 20px 0 10px 5px; display: flex; align-items: center; }
+        .cat-label::before { content:''; width:4px; height:12px; background:var(--brand); margin-right:8px; border-radius:2px; }
+        .card { background: #fff; border: 1px solid #f0f0f0; border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+        .stepper { display: flex; align-items: center; gap: 12px; border: 2.5px solid var(--brand); border-radius: 25px; padding: 3px 12px; }
+        .btn-step { border: none; background: none; color: var(--brand); font-size: 20px; font-weight: 900; cursor: pointer; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 30px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; z-index: 200; }
+        .btn-main { background: var(--brand); color: #fff; border: none; padding: 14px 28px; border-radius: 14px; font-weight: 800; font-size: 14px; box-shadow: 0 4px 15px rgba(244, 82, 121, 0.3); }
+        .support-btn { position: fixed; bottom: 110px; right: 20px; background: #0088cc; color: #fff; width: 50px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; text-decoration: none; box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 150; }
+        .edit-btn { color: var(--brand); background: var(--bg); border: none; padding: 5px 10px; border-radius: 8px; font-size: 12px; font-weight: bold; }
         .hidden { display: none !important; }
+        input[type="date"] { width: 100%; border: 2px solid #f8f8f8; padding: 12px; border-radius: 12px; font-family: inherit; font-size: 16px; font-weight: 700; outline: none; background: #fafafa; margin-bottom: 10px; }
     </style>
 </head>
 <body>
     <div class="tabs">
-        <div id="t1" class="tab active" onclick="nav('p1')">ЗАКАЗ</div>
-        <div id="t2" class="tab" onclick="nav('p2')">ИСТОРИЯ</div>
+        <div id="t_order" class="tab active" onclick="showPage('order')">ЗАКАЗ</div>
+        <div id="t_hist" class="tab" onclick="showPage('hist')">ИСТОРИЯ</div>
     </div>
-    <div id="p1">
-        <input type="date" id="dt" style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #eee; border-radius:8px;" onchange="render()">
-        <div id="list">Загрузка...</div>
+
+    <div id="page_order" class="container">
+        <div style="font-size:10px; font-weight:900; color:var(--gray); margin: 0 0 5px 5px;">ДАТА ПОСТАВКИ</div>
+        <input type="date" id="orderDate" onchange="renderMenu()">
+        <div id="menuBox">Загрузка...</div>
     </div>
-    <div id="p2" class="hidden"></div>
-    <div class="footer" id="foot">
-        <b id="tot">0 ₽</b>
-        <button class="btn-main" onclick="send()">ОФОРМИТЬ</button>
+
+    <div id="page_hist" class="container hidden"></div>
+
+    <a href="https://t.me/your_manager" class="support-btn">💬</a>
+
+    <div class="footer" id="mainFoot">
+        <div><small style="color:var(--gray); font-weight:800; font-size:10px;">ИТОГО С ДОСТАВКОЙ</small><br><b id="totalVal" style="font-size:20px;">0 ₽</b></div>
+        <button class="btn-main" onclick="sendToSheet()">ОФОРМИТЬ</button>
     </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec';
     const user = String(tg.initDataUnsafe.user?.username || "guest").toLowerCase();
-    let menu = [], basket = {}, history = {};
+    
+    let db = { menu: [], history: {}, cart: {} };
 
-    async function init() {
-        let tom = new Date(); tom.setDate(tom.getDate() + 1);
-        document.getElementById('dt').value = tom.toISOString().split('T')[0];
+    async function load() {
         try {
-            const m = await fetch(`${API}?type=menu&v=${Date.now()}`).then(r => r.json());
-            const h = await fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json());
-            menu = m.menu || []; history = h || {};
-            render();
-        } catch(e) { document.getElementById('list').innerText = "Ошибка API"; }
+            const [m, h] = await Promise.all([
+                fetch(`${API}?type=menu&v=${Date.now()}`).then(r => r.json()),
+                fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json())
+            ]);
+            db.menu = m.menu || [];
+            db.history = h || {};
+            renderMenu();
+        } catch(e) { document.getElementById('menuBox').innerText = "Ошибка загрузки данных"; }
     }
 
-    function render() {
-        const box = document.getElementById('list'), d = document.getElementById('dt').value;
+    function renderMenu() {
+        const box = document.getElementById('menuBox'), d = document.getElementById('orderDate').value;
         box.innerHTML = '';
         let groups = {};
-        menu.forEach(i => { if(!groups[i.cat]) groups[i.cat] = []; groups[i.cat].push(i); });
-        for(let c in groups) {
-            box.innerHTML += `<div class="cat">${c}</div>`;
-            groups[c].forEach(i => {
-                const q = (basket[d] && basket[d][i.name]) ? basket[d][i.name].qty : 0;
+        db.menu.forEach(i => { if(!groups[i.cat]) groups[i.cat] = []; groups[i.cat].push(i); });
+        
+        for(let cat in groups) {
+            box.innerHTML += `<div class="cat-label">${cat}</div>`;
+            groups[cat].forEach(i => {
+                const q = (db.cart[d] && db.cart[d][i.name]) ? db.cart[d][i.name].qty : 0;
                 box.innerHTML += `<div class="card">
-                    <div><b>${i.name}</b><br><small>${i.price} ₽</small></div>
+                    <div style="max-width:60%"><b>${i.name}</b><br><small style="color:var(--gray)">${i.price} ₽</small></div>
                     <div class="stepper">
-                        <button class="btn-s" onclick="upd('${i.name}',${i.price},-1)">-</button>
-                        <span style="font-weight:bold">${q}</span>
-                        <button class="btn-s" onclick="upd('${i.name}',${i.price},1)">+</button>
+                        <button class="btn-step" onclick="changeQty('${i.name}',${i.price},-1)">-</button>
+                        <span style="font-weight:900; min-width:20px; text-align:center">${q}</span>
+                        <button class="btn-step" onclick="changeQty('${i.name}',${i.price},1)">+</button>
                     </div>
                 </div>`;
             });
         }
-        calc();
+        updateTotal();
     }
 
-    function upd(n, p, v) {
-        const d = document.getElementById('dt').value;
-        if(!basket[d]) basket[d] = {};
-        let q = (basket[d][n]?.qty || 0) + v;
-        if(q <= 0) delete basket[d][n]; else basket[d][n] = {qty:q, price:p};
-        render();
+    function changeQty(name, price, val) {
+        const d = document.getElementById('orderDate').value;
+        if(!db.cart[d]) db.cart[d] = {};
+        let q = (db.cart[d][name]?.qty || 0) + val;
+        if(q <= 0) delete db.cart[d][name];
+        else db.cart[d][name] = { qty: q, price: price };
+        renderMenu();
     }
 
-    function calc() {
-        const d = document.getElementById('dt').value; let s = 0;
-        if(basket[d]) for(let k in basket[d]) s += basket[d][k].qty * basket[d][k].price;
-        const del = (s > 0 && s < 3000) ? 300 : 0;
-        document.getElementById('tot').innerText = (s + del) + " ₽";
+    function updateTotal() {
+        const d = document.getElementById('orderDate').value;
+        let sum = 0;
+        if(db.cart[d]) for(let k in db.cart[d]) sum += db.cart[d][k].qty * db.cart[d][k].price;
+        const del = (sum > 0 && sum < 3000) ? 300 : 0;
+        document.getElementById('totalVal').innerText = (sum + del) + " ₽";
     }
 
-    function nav(p) {
-        document.getElementById('p1').classList.toggle('hidden', p !== 'p1');
-        document.getElementById('p2').classList.toggle('hidden', p !== 'p2');
-        document.getElementById('foot').classList.toggle('hidden', p !== 'p1');
-        document.getElementById('t1').classList.toggle('active', p === 'p1');
-        document.getElementById('t2').classList.toggle('active', p === 'p2');
-        if(p === 'p2') {
-            const hDiv = document.getElementById('p2'); hDiv.innerHTML = '';
-            for(let d in history) hDiv.innerHTML += `<div class="card"><b>${d}</b> <span>${history[d].total} ₽</span></div>`;
-        }
+    function showPage(p) {
+        document.getElementById('page_order').classList.toggle('hidden', p !== 'order');
+        document.getElementById('page_hist').classList.toggle('hidden', p !== 'hist');
+        document.getElementById('mainFoot').classList.toggle('hidden', p !== 'order');
+        document.getElementById('t_order').classList.toggle('active', p === 'order');
+        document.getElementById('t_hist').classList.toggle('active', p === 'hist');
+        if(p === 'hist') renderHist();
     }
 
-    async function send() {
-        const d = document.getElementById('dt').value;
-        if(!basket[d] || Object.keys(basket[d]).length === 0) return;
-        await fetch(API, {method:'POST', body:JSON.stringify({user, date:d, items:basket[d]})});
-        tg.showAlert("Готово!"); location.reload();
+    function renderHist() {
+        const box = document.getElementById('page_hist'); box.innerHTML = '';
+        const dates = Object.keys(db.history).sort().reverse();
+        if(!dates.length) box.innerHTML = '<center style="margin-top:40px; color:#ccc">У вас еще нет заказов</center>';
+        dates.forEach(d => {
+            box.innerHTML += `<div class="card">
+                <div><b>${d}</b><br><small>${db.history[d].total} ₽</small></div>
+                <button class="edit-btn" onclick="editOrder('${d}')">✏️ Редактировать</button>
+            </div>`;
+        });
     }
-    init(); tg.expand();
+
+    function editOrder(date) {
+        // Переносим данные из истории в корзину для редактирования
+        db.cart[date] = {};
+        db.history[date].items.forEach(i => {
+            if(i.name !== "Доставка") db.cart[date][i.name] = { qty: i.qty, price: i.price };
+        });
+        document.getElementById('orderDate').value = date;
+        showPage('order');
+        renderMenu();
+    }
+
+    async function sendToSheet() {
+        const d = document.getElementById('orderDate').value;
+        if(!db.cart[d] || Object.keys(db.cart[d]).length === 0) return;
+        tg.MainButton.showProgress();
+        try {
+            await fetch(API, { method: 'POST', body: JSON.stringify({ user, date: d, items: db.cart[d] }) });
+            tg.showAlert("Заказ отправлен!");
+            load(); // Перезагружаем историю
+            showPage('hist');
+        } catch(e) { tg.showAlert("Ошибка!"); }
+        tg.MainButton.hideProgress();
+    }
+
+    // Старт
+    let nextDay = new Date(); nextDay.setDate(nextDay.getDate() + 1);
+    document.getElementById('orderDate').value = nextDay.toISOString().split('T')[0];
+    document.getElementById('orderDate').min = nextDay.toISOString().split('T')[0];
+    tg.expand();
+    load();
 </script>
 </body>
 </html>
