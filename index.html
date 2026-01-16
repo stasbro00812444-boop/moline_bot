@@ -6,145 +6,107 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --brand: #f45279; }
-        body { font-family: -apple-system, sans-serif; margin: 0; padding: 15px; background: #fff; color: #222; }
-        .tab-bar { display: flex; border-bottom: 1px solid #eee; margin-bottom: 15px; }
+        body { font-family: -apple-system, sans-serif; margin: 0; padding: 15px; background: #fff; }
+        .tabs { display: flex; border-bottom: 1px solid #eee; margin-bottom: 15px; }
         .tab { flex: 1; text-align: center; padding: 12px; color: #999; font-weight: bold; cursor: pointer; }
         .tab.active { color: var(--brand); border-bottom: 2px solid var(--brand); }
-        .card { border: 1px solid #f0f0f0; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
-        .cat-head { font-size: 11px; font-weight: 800; color: var(--brand); text-transform: uppercase; margin: 15px 0 8px 5px; }
-        .stepper { display: flex; align-items: center; gap: 12px; border: 1.5px solid var(--brand); border-radius: 20px; padding: 2px 10px; }
-        .btn-s { border: none; background: none; color: var(--brand); font-size: 20px; font-weight: bold; padding: 0 5px; }
+        .card { border: 1px solid #f0f0f0; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .cat { font-size: 11px; font-weight: 800; color: var(--brand); text-transform: uppercase; margin: 15px 0 5px; }
+        .stepper { display: flex; align-items: center; gap: 10px; border: 1.5px solid var(--brand); border-radius: 20px; padding: 2px 10px; }
+        .btn-s { border: none; background: none; color: var(--brand); font-size: 20px; font-weight: bold; }
         .footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 15px 20px 30px; background: #fff; border-top: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
         .btn-main { background: var(--brand); color: #fff; border: none; padding: 12px 25px; border-radius: 10px; font-weight: bold; }
         .hidden { display: none !important; }
-        input[type="date"] { width: 100%; border: 1px solid #eee; padding: 10px; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; font-family: inherit; }
     </style>
 </head>
 <body>
-    <div class="tab-bar">
+    <div class="tabs">
         <div id="t1" class="tab active" onclick="nav('p1')">ЗАКАЗ</div>
         <div id="t2" class="tab" onclick="nav('p2')">ИСТОРИЯ</div>
     </div>
-
     <div id="p1">
-        <input type="date" id="orderDate" onchange="render()">
-        <div id="menuList">Загрузка меню...</div>
+        <input type="date" id="dt" style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #eee; border-radius:8px;" onchange="render()">
+        <div id="list">Загрузка...</div>
     </div>
-
     <div id="p2" class="hidden"></div>
-
     <div class="footer" id="foot">
-        <div><small style="color:#999">ИТОГО</small><br><b id="totalPrice" style="font-size:18px">0 ₽</b></div>
-        <button class="btn-main" onclick="sendOrder()">ОФОРМИТЬ</button>
+        <b id="tot">0 ₽</b>
+        <button class="btn-main" onclick="send()">ОФОРМИТЬ</button>
     </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec';
     const user = String(tg.initDataUnsafe.user?.username || "guest").toLowerCase();
-    
-    let menuData = [], currentBasket = {}, historyData = {};
+    let menu = [], basket = {}, history = {};
 
     async function init() {
-        // Установка даты (завтра)
-        let tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-        document.getElementById('orderDate').value = tomorrow.toISOString().split('T')[0];
-        
+        let tom = new Date(); tom.setDate(tom.getDate() + 1);
+        document.getElementById('dt').value = tom.toISOString().split('T')[0];
         try {
-            const [mRes, hRes] = await Promise.all([
-                fetch(`${API}?type=menu&v=${Date.now()}`).then(r => r.json()),
-                fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json())
-            ]);
-            menuData = mRes.menu || [];
-            historyData = hRes || {};
+            const m = await fetch(`${API}?type=menu&v=${Date.now()}`).then(r => r.json());
+            const h = await fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json());
+            menu = m.menu || []; history = h || {};
             render();
-        } catch(e) {
-            document.getElementById('menuList').innerHTML = '<p style="color:red; text-align:center">Ошибка подключения к API</p>';
-        }
+        } catch(e) { document.getElementById('list').innerText = "Ошибка API"; }
     }
 
     function render() {
-        const container = document.getElementById('menuList');
-        const date = document.getElementById('orderDate').value;
-        container.innerHTML = '';
-        
+        const box = document.getElementById('list'), d = document.getElementById('dt').value;
+        box.innerHTML = '';
         let groups = {};
-        menuData.forEach(item => {
-            if (!groups[item.cat]) groups[item.cat] = [];
-            groups[item.cat].push(item);
-        });
-
-        for (let cat in groups) {
-            container.innerHTML += `<div class="cat-head">${cat}</div>`;
-            groups[cat].forEach(item => {
-                const count = (currentBasket[date] && currentBasket[date][item.name]) ? currentBasket[date][item.name].qty : 0;
-                container.innerHTML += `
-                    <div class="card">
-                        <div><b>${item.name}</b><br><small style="color:#666">${item.price} ₽</small></div>
-                        <div class="stepper">
-                            <button class="btn-s" onclick="changeQty('${item.name}',${item.price},-1)">-</button>
-                            <span style="font-weight:bold; min-width:15px; text-align:center">${count}</span>
-                            <button class="btn-s" onclick="changeQty('${item.name}',${item.price},1)">+</button>
-                        </div>
-                    </div>`;
+        menu.forEach(i => { if(!groups[i.cat]) groups[i.cat] = []; groups[i.cat].push(i); });
+        for(let c in groups) {
+            box.innerHTML += `<div class="cat">${c}</div>`;
+            groups[c].forEach(i => {
+                const q = (basket[d] && basket[d][i.name]) ? basket[d][i.name].qty : 0;
+                box.innerHTML += `<div class="card">
+                    <div><b>${i.name}</b><br><small>${i.price} ₽</small></div>
+                    <div class="stepper">
+                        <button class="btn-s" onclick="upd('${i.name}',${i.price},-1)">-</button>
+                        <span style="font-weight:bold">${q}</span>
+                        <button class="btn-s" onclick="upd('${i.name}',${i.price},1)">+</button>
+                    </div>
+                </div>`;
             });
         }
-        updateTotal();
+        calc();
     }
 
-    function changeQty(name, price, delta) {
-        const date = document.getElementById('orderDate').value;
-        if (!currentBasket[date]) currentBasket[date] = {};
-        
-        let q = (currentBasket[date][name]?.qty || 0) + delta;
-        if (q <= 0) delete currentBasket[date][name];
-        else currentBasket[date][name] = { qty: q, price: price };
-        
+    function upd(n, p, v) {
+        const d = document.getElementById('dt').value;
+        if(!basket[d]) basket[d] = {};
+        let q = (basket[d][n]?.qty || 0) + v;
+        if(q <= 0) delete basket[d][n]; else basket[d][n] = {qty:q, price:p};
         render();
     }
 
-    function updateTotal() {
-        const date = document.getElementById('orderDate').value;
-        let sum = 0;
-        if (currentBasket[date]) {
-            for (let n in currentBasket[date]) sum += currentBasket[date][n].qty * currentBasket[date][n].price;
-        }
-        const delivery = (sum > 0 && sum < 3000) ? 300 : 0;
-        document.getElementById('totalPrice').innerText = (sum + delivery) + " ₽";
+    function calc() {
+        const d = document.getElementById('dt').value; let s = 0;
+        if(basket[d]) for(let k in basket[d]) s += basket[d][k].qty * basket[d][k].price;
+        const del = (s > 0 && s < 3000) ? 300 : 0;
+        document.getElementById('tot').innerText = (s + del) + " ₽";
     }
 
-    function nav(page) {
-        document.getElementById('p1').classList.toggle('hidden', page !== 'p1');
-        document.getElementById('p2').classList.toggle('hidden', page !== 'p2');
-        document.getElementById('foot').classList.toggle('hidden', page !== 'p1');
-        document.getElementById('t1').classList.toggle('active', page === 'p1');
-        document.getElementById('t2').classList.toggle('active', page === 'p2');
-        if (page === 'p2') renderHistory();
-    }
-
-    function renderHistory() {
-        const hDiv = document.getElementById('p2');
-        hDiv.innerHTML = '';
-        for (let d in historyData) {
-            hDiv.innerHTML += `<div class="card"><b>${d}</b> <span>${historyData[d].total} ₽</span></div>`;
+    function nav(p) {
+        document.getElementById('p1').classList.toggle('hidden', p !== 'p1');
+        document.getElementById('p2').classList.toggle('hidden', p !== 'p2');
+        document.getElementById('foot').classList.toggle('hidden', p !== 'p1');
+        document.getElementById('t1').classList.toggle('active', p === 'p1');
+        document.getElementById('t2').classList.toggle('active', p === 'p2');
+        if(p === 'p2') {
+            const hDiv = document.getElementById('p2'); hDiv.innerHTML = '';
+            for(let d in history) hDiv.innerHTML += `<div class="card"><b>${d}</b> <span>${history[d].total} ₽</span></div>`;
         }
     }
 
-    async function sendOrder() {
-        const date = document.getElementById('orderDate').value;
-        if (!currentBasket[date] || Object.keys(currentBasket[date]).length === 0) return;
-        
-        tg.MainButton.showProgress();
-        await fetch(API, {
-            method: 'POST',
-            body: JSON.stringify({ user: user, date: date, items: currentBasket[date] })
-        });
-        tg.showAlert("Заказ отправлен!");
-        location.reload(); 
+    async function send() {
+        const d = document.getElementById('dt').value;
+        if(!basket[d] || Object.keys(basket[d]).length === 0) return;
+        await fetch(API, {method:'POST', body:JSON.stringify({user, date:d, items:basket[d]})});
+        tg.showAlert("Готово!"); location.reload();
     }
-
-    init();
-    tg.expand();
+    init(); tg.expand();
 </script>
 </body>
 </html>
