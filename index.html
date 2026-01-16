@@ -12,19 +12,18 @@
         .tab.active { color: var(--brand); border-bottom: 3px solid var(--brand); }
         .manager-bar { background: var(--brand); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; color: #fff; position: sticky; top: 51px; z-index: 90; }
         .btn-mgr { background: #fff; color: var(--brand); border: none; padding: 8px 15px; border-radius: 10px; font-weight: 900; font-size: 11px; text-transform: uppercase; }
-        .container { padding: 15px; padding-bottom: 160px; }
+        .container { padding: 15px; padding-bottom: 180px; }
         .cat-title { font-size: 13px; font-weight: 900; color: var(--brand); margin: 25px 0 12px; text-transform: uppercase; display: flex; align-items: center; }
         .cat-title::before { content: ''; width: 4px; height: 16px; background: var(--brand); margin-right: 10px; border-radius: 2px; }
-        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.02); }
+        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; }
         .item-info b { font-size: 16px; display: block; }
         .item-info small { color: var(--gray); font-weight: 700; }
         .stepper { display: flex; align-items: center; background: #fff; border-radius: 25px; padding: 4px 12px; gap: 12px; border: 2px solid var(--brand); }
-        .btn-s { border: none; color: var(--brand); font-size: 22px; font-weight: 900; background: none; cursor: pointer; outline: none; }
-        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 30px; box-sizing: border-box; }
-        .btn-send { background: var(--brand); color: #fff; border: none; padding: 16px; border-radius: 14px; font-weight: 900; width: 100%; text-transform: uppercase; box-shadow: 0 5px 15px rgba(244,82,121,0.3); }
+        .btn-s { border: none; color: var(--brand); font-size: 22px; font-weight: 900; background: none; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 30px; box-sizing: border-box; z-index: 100;}
+        .btn-send { background: var(--brand); color: #fff; border: none; padding: 16px; border-radius: 14px; font-weight: 900; width: 100%; text-transform: uppercase; }
         .hidden { display: none !important; }
         input[type="date"] { background: var(--light); border: none; padding: 12px; border-radius: 10px; font-size: 16px; font-weight: 800; width: 100%; color: var(--brand); outline: none; margin-bottom: 15px; }
-        .btn-repeat { background: var(--light); color: var(--brand); border: none; padding: 10px; border-radius: 10px; font-weight: 800; font-size: 11px; width: 100%; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -37,8 +36,8 @@
         <button class="btn-mgr" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button>
     </div>
     <div id="p1" class="container">
-        <input type="date" id="dt" onchange="onDateChanged()">
-        <div id="menu"></div>
+        <input type="date" id="dt" onchange="renderMenu()">
+        <div id="menu">Загрузка...</div>
     </div>
     <div id="p2" class="container hidden"></div>
     <div class="footer" id="f">
@@ -49,10 +48,9 @@
     </div>
 <script>
     const tg = window.Telegram.WebApp;
-    // ПОМЕНЯЙ ССЫЛКУ НИЖЕ
     const API = 'ТВОЙ_URL_ЗДЕСЬ'; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "guest").toLowerCase();
-    let menuData = [], historyData = {}, allOrders = {}, repeatItems = null;
+    let menuData = [], historyData = {}, allOrders = {};
 
     async function load() {
         let t = new Date(); t.setDate(t.getDate() + 1);
@@ -67,25 +65,19 @@
             const h = await fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json());
             menuData = m.menu || []; historyData = h || {};
             renderMenu();
-        } catch(e) { console.error(e); }
+        } catch(e) { document.getElementById('menu').innerText = "Ошибка загрузки"; }
     }
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
-        box.innerHTML = ''; let groups = {};
+        box.innerHTML = ''; 
+        let groups = {};
         menuData.forEach(i => { if(!groups[i.cat]) groups[i.cat] = []; groups[i.cat].push(i); });
         Object.keys(groups).sort().forEach(c => {
             box.innerHTML += `<div class="cat-title">${c}</div>`;
             groups[c].forEach(item => {
                 const q = allOrders[sel]?.[item.name]?.qty || 0;
-                box.innerHTML += `<div class="card">
-                    <div class="item-info"><b>${item.name}</b><small>${item.price} ₽</small></div>
-                    <div class="stepper">
-                        <button class="btn-s" onclick="upd('${item.name}',${item.price},-1)">−</button>
-                        <b style="min-width:20px;text-align:center">${q}</b>
-                        <button class="btn-s" onclick="upd('${item.name}',${item.price},1)">+</button>
-                    </div>
-                </div>`;
+                box.innerHTML += `<div class="card"><div class="item-info"><b>${item.name}</b><small>${item.price} ₽</small></div><div class="stepper"><button class="btn-s" onclick="upd('${item.name}',${item.price},-1)">−</button><b style="min-width:20px;text-align:center">${q}</b><button class="btn-s" onclick="upd('${item.name}',${item.price},1)">+</button></div></div>`;
             });
         });
         calc();
@@ -118,44 +110,19 @@
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
         const keys = Object.keys(historyData).sort().reverse();
-        if(keys.length === 0) box.innerHTML = '<div style="text-align:center;padding:40px;color:#ccc">История пуста</div>';
         keys.forEach(d => {
             const o = historyData[d];
-            box.innerHTML += `<div class="card" style="flex-direction:column; align-items:flex-start">
-                <div style="width:100%; display:flex; justify-content:space-between; border-bottom:1px solid #f5f5f5; padding-bottom:8px; margin-bottom:8px">
-                    <b>${d}</b> <div style="display:flex; gap:15px"><span onclick="editOrder('${d}')" style="cursor:pointer">✎</span><b>${o.total} ₽</b></div>
-                </div>
-                ${o.items.map(i => `<div style="font-size:13px; color:#666">${i.name} x${i.qty}</div>`).join('')}
-                <button class="btn-repeat" onclick="startRepeat('${d}')">ПОВТОРИТЬ ЗАКАЗ</button>
-            </div>`;
+            box.innerHTML += `<div class="card" style="flex-direction:column; align-items:flex-start"><div style="width:100%; display:flex; justify-content:space-between; border-bottom:1px solid #f5f5f5; padding-bottom:8px; margin-bottom:8px"><b>${d}</b><b>${o.total} ₽</b></div>${o.items.map(i => `<div style="font-size:13px; color:#666">${i.name} x${i.qty}</div>`).join('')}</div>`;
         });
-    }
-
-    function editOrder(d) {
-        allOrders[d] = {};
-        historyData[d].items.forEach(i => { if(i.name !== "Доставка") allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
-        document.getElementById('dt').value = d; tab('order'); renderMenu();
-    }
-
-    function startRepeat(d) { repeatItems = historyData[d].items; tab('order'); tg.showAlert("Выберите новую дату для повтора заказа");}
-
-    function onDateChanged() {
-        const sel = document.getElementById('dt').value;
-        if (repeatItems) {
-            allOrders[sel] = {};
-            repeatItems.forEach(i => { if(i.name !== "Доставка") allOrders[sel][i.name] = {qty: i.qty, price: i.price}; });
-            repeatItems = null;
-        }
-        renderMenu();
     }
 
     async function send() {
         const sel = document.getElementById('dt').value;
-        if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("Выберите товары");
+        if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return;
         tg.showConfirm(`Заказать на ${sel}?`, async (ok) => {
             if(ok) {
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
-                tg.showAlert("Заказ отправлен!"); await refresh(); tab('hist');
+                tg.showAlert("Готово!"); await refresh(); tab('hist');
             }
         });
     }
