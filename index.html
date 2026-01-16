@@ -29,7 +29,7 @@
     </div>
     <div id="p1" class="container">
         <div class="card">
-            <small style="color:#888; font-weight:bold">ВЫБЕРИТЕ ДАТУ ДОСТАВКИ</small>
+            <small style="color:#888; font-weight:bold">ДАТА ДОСТАВКИ</small>
             <input type="date" id="dt" onchange="onDateChanged()">
         </div>
         <div id="menu"></div>
@@ -45,7 +45,8 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'ТВОЙ_URL_СКРИПТА'; // НЕ ЗАБУДЬ ВСТАВИТЬ СВОЙ URL
+    // Твоя рабочая ссылка
+    const API = 'https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec'; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').toLowerCase();
     
     let menuData = [], historyData = {}, allOrders = {}, repeatItems = null;
@@ -64,7 +65,7 @@
             menuData = m.menu || [];
             historyData = h || {};
             renderMenu();
-        } catch(e) { console.error(e); }
+        } catch(e) { console.error("Ошибка загрузки:", e); }
     }
 
     function onDateChanged() {
@@ -82,9 +83,11 @@
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
         box.innerHTML = '';
+        if (menuData.length === 0) { box.innerHTML = '<div style="text-align:center;padding:20px;color:#888">Загрузка товаров...</div>'; return; }
+        
         let groups = {};
         menuData.forEach(i => { 
-            let c = i.cat;
+            let c = i.cat || "Другое";
             if(!groups[c]) groups[c] = []; 
             groups[c].push(i); 
         });
@@ -160,7 +163,7 @@
     function startRepeat(d) {
         repeatItems = historyData[d].items;
         tab('order');
-        tg.showAlert("Выберите дату для повтора заказа.");
+        tg.showAlert("Выберите новую дату в календаре.");
     }
 
     async function send() {
@@ -169,7 +172,7 @@
         tg.showConfirm(`Оформить на ${sel}?`, async (ok) => {
             if(ok) {
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
-                tg.showAlert("Заказ отправлен!");
+                tg.showAlert("Готово!");
                 await refresh();
                 tab('hist');
             }
