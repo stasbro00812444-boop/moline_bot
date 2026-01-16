@@ -60,7 +60,7 @@
 
     function getMinDate() {
         let now = new Date();
-        // Если сегодня > 12:00, то завтра (index 1) блокируем, ставим послезавтра (index 2)
+        // Ближайшая доступная дата: если > 12:00 сегодня, то +2 дня (послезавтра). Если < 12:00, то +1 день (завтра).
         let offset = now.getHours() >= 12 ? 2 : 1;
         let d = new Date(); d.setDate(d.getDate() + offset);
         return d.toISOString().split('T')[0];
@@ -138,15 +138,20 @@
         const box = document.getElementById('p2'); box.innerHTML = '';
         const dates = Object.keys(historyData).sort().reverse();
         if (dates.length === 0) box.innerHTML = '<div style="text-align:center;padding:40px;color:#bbb;">История пуста</div>';
+        
+        const minDate = getMinDate(); // Порог блокировки
+
         dates.forEach(d => {
             const o = historyData[d];
-            const isLate = d <= getMinDate() && new Date().getHours() >= 12;
+            // Редактируем, если дата заказа >= минимально допустимой для новых заказов
+            const canEdit = d >= minDate;
+            
             let itemsHtml = o.items.map(i => `<div class="row" style="font-size:13px; margin-bottom:5px; color:#666"><span>${i.name}</span><b>x${i.qty}</b></div>`).join('');
             box.innerHTML += `<div class="card">
                 <div class="row" style="border-bottom:1px solid #f5f5f5; margin-bottom:12px; padding-bottom:10px">
                     <b>${d}</b> 
                     <div class="row">
-                        ${!isLate ? `<span onclick="editOrder('${d}')" style="margin-right:15px; font-size:20px; cursor:pointer; color:var(--brand-main)">✎</span>` : ''}
+                        ${canEdit ? `<span onclick="editOrder('${d}')" style="margin-right:15px; font-size:20px; cursor:pointer; color:var(--brand-main)">✎</span>` : ''}
                         <b>${o.total} ₽</b>
                     </div>
                 </div>
@@ -160,7 +165,7 @@
         const sel = document.getElementById('dt').value;
         const min = getMinDate();
         if (sel < min) {
-            tg.showAlert("Заказы на завтра принимаются до 12:00 сегодняшнего дня, либо свяжитесь с менеджером.");
+            tg.showAlert("Эта дата недоступна для изменений.");
             document.getElementById('dt').value = min;
             return;
         }
@@ -173,7 +178,7 @@
     }
 
     function editOrder(d) {
-        if (d < getMinDate()) return tg.showAlert("Этот заказ уже нельзя редактировать.");
+        if (d < getMinDate()) return tg.showAlert("Слишком поздно для правок.");
         document.getElementById('dt').value = d; allOrders[d] = {};
         historyData[d].items.forEach(i => { if(i.name !== "Доставка") allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
         tab('order'); renderMenu();
@@ -183,7 +188,7 @@
 
     async function send() {
         const sel = document.getElementById('dt').value;
-        if (sel < getMinDate()) return tg.showAlert("На выбранную дату заказ невозможен.");
+        if (sel < getMinDate()) return tg.showAlert("Заказ на эту дату заблокирован.");
         if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("Корзина пуста");
         tg.showConfirm(`Оформить на ${sel}?`, async (ok) => {
             if(ok) {
