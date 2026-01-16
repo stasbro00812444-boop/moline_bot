@@ -46,6 +46,7 @@
 
 <script>
     const tg = window.Telegram.WebApp;
+    // СЮДА ВСТАВЛЯЕМ ТВОЮ ССЫЛКУ
     const API = 'https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec'; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").toLowerCase();
     let menuData = [], historyData = {}, allOrders = {};
@@ -56,9 +57,17 @@
                 fetch(`${API}?type=menu&v=${Date.now()}`).then(r => r.json()),
                 fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json())
             ]);
+            
+            if (m.error) {
+                document.getElementById('menu').innerText = "Ошибка сервера: " + m.error;
+                return;
+            }
+
             menuData = m.menu || []; historyData = h || {};
             renderMenu();
-        } catch(e) { document.getElementById('menu').innerText = "Ошибка загрузки данных."; }
+        } catch(e) { 
+            document.getElementById('menu').innerText = "Не удалось подключиться к API."; 
+        }
     }
 
     function renderMenu() {
