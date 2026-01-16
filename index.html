@@ -5,12 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root {
-            --brand-main: #f45279; 
-            --brand-light: #fff0f3;
-            --text-dark: #222;
-            --text-gray: #777;
-        }
+        :root { --brand-main: #f45279; --brand-light: #fff0f3; --text-dark: #222; --text-gray: #777; }
         body { font-family: -apple-system, sans-serif; background: #fff; margin: 0; padding: 0; color: var(--text-dark); -webkit-tap-highlight-color: transparent; }
         .tabs { display: flex; background: #fff; border-bottom: 2px solid #f5f5f5; position: sticky; top: 0; z-index: 100; }
         .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; text-transform: uppercase; font-size: 13px; }
@@ -27,8 +22,6 @@
         .q-val { min-width: 20px; text-align: center; font-weight: 900; font-size: 17px; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 35px; box-sizing: border-box; z-index: 100; }
         .btn-send { background: var(--brand-main); color: #fff; border: none; padding: 18px 25px; border-radius: 14px; font-weight: 900; font-size: 16px; width: 100%; box-shadow: 0 6px 15px rgba(244, 82, 121, 0.3); text-transform: uppercase; }
-        .manager-sticky { position: sticky; top: 51px; z-index: 90; background: var(--brand-main); padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; color: #fff; }
-        .btn-manager-small { background: #fff; color: var(--brand-main); border: none; padding: 10px 16px; border-radius: 12px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
         .hidden { display: none !important; }
         input[type="date"] { background: none; border: none; font-size: 18px; font-weight: 800; color: var(--text-dark); width: 100%; outline: none; }
     </style>
@@ -38,14 +31,9 @@
         <div id="t1" class="tab active" onclick="tab('order')">Заказать</div>
         <div id="t2" class="tab" onclick="tab('hist')">История</div>
     </div>
-    <div id="manager-bar" class="manager-sticky hidden">
-        <div style="font-size: 12px; line-height: 1.3;">Нужно изменить заказ <br><b>после 12:00?</b></div>
-        <button class="btn-manager-small" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button>
-    </div>
     <div id="p1" class="container">
         <div class="card" style="background: var(--brand-light); border: none;">
-            <div style="color:var(--brand-main); font-weight:900; font-size:10px; margin-bottom:5px; text-transform:uppercase">Дата доставки</div>
-            <input type="date" id="dt" onchange="onDateChanged()">
+            <input type="date" id="dt" onchange="renderMenu()">
         </div>
         <div id="menu"></div>
     </div>
@@ -59,9 +47,10 @@
     </div>
 <script>
     const tg = window.Telegram.WebApp;
+    // ЗАМЕНИ НА СВОЮ АКТУАЛЬНУЮ ССЫЛКУ
     const API = 'https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec'; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').toLowerCase();
-    let menuData = [], historyData = {}, allOrders = {}, repeatItems = null;
+    let menuData = [], historyData = {}, allOrders = {};
 
     async function load() {
         let t = new Date(); t.setDate(t.getDate() + 1);
@@ -70,26 +59,25 @@
         tg.expand();
         await refresh();
     }
+
     async function refresh() {
         try {
-            const m = await fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`).then(r => r.json());
+            const m = await fetch(`${API}?type=menu&v=${Date.now()}`).then(r => r.json());
             const h = await fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json());
-            menuData = m.menu || []; historyData = h || {}; renderMenu();
+            menuData = m.menu || []; historyData = h || {};
+            renderMenu();
         } catch(e) { console.error(e); }
     }
+
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
         box.innerHTML = '';
-        if (menuData.length === 0) return;
-
         let groups = {};
         menuData.forEach(item => {
-            let c = (item.cat && item.cat.trim() !== "") ? item.cat.toUpperCase() : "БЕЗ КАТЕГОРИИ";
-            if (!groups[c]) groups[c] = [];
-            groups[c].push(item);
+            if (!groups[item.cat]) groups[item.cat] = [];
+            groups[item.cat].push(item);
         });
-
-        Object.keys(groups).sort((a,b) => a==="ВЫПЕЧКА"?-1:b==="ВЫПЕЧКА"?1:a.localeCompare(b)).forEach(c => {
+        Object.keys(groups).sort().forEach(c => {
             box.innerHTML += `<div class="cat-title">${c}</div>`;
             groups[c].forEach(item => {
                 const q = (allOrders[sel] && allOrders[sel][item.name]) ? allOrders[sel][item.name].qty : 0;
@@ -105,6 +93,7 @@
         });
         calc();
     }
+
     function upd(n, p, d) {
         const sel = document.getElementById('dt').value;
         if(!allOrders[sel]) allOrders[sel] = {};
@@ -112,6 +101,7 @@
         if(q <= 0) delete allOrders[sel][n]; else allOrders[sel][n] = {qty:q, price:p};
         renderMenu(); if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
     }
+
     function calc() {
         const sel = document.getElementById('dt').value; let sub = 0;
         if(allOrders[sel]) { for (let k in allOrders[sel]) sub += (allOrders[sel][k].qty * allOrders[sel][k].price); }
@@ -119,55 +109,33 @@
         document.getElementById('summary').innerText = sub > 0 ? `Товары: ${sub} ₽ • Доставка: ${del} ₽` : '';
         document.getElementById('tot').innerText = (sub + del) + " ₽";
     }
+
     function tab(t) {
         document.getElementById('p1').classList.toggle('hidden', t !== 'order');
         document.getElementById('p2').classList.toggle('hidden', t !== 'hist');
         document.getElementById('f').classList.toggle('hidden', t !== 'order');
-        document.getElementById('manager-bar').classList.toggle('hidden', t !== 'hist');
         document.getElementById('t1').classList.toggle('active', t === 'order');
         document.getElementById('t2').classList.toggle('active', t === 'hist');
         if(t === 'hist') renderHist();
     }
+
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
         const dates = Object.keys(historyData).sort().reverse();
-        if (dates.length === 0) box.innerHTML = '<div style="text-align:center;padding:40px;color:#bbb;">История пуста</div>';
         dates.forEach(d => {
             const o = historyData[d];
             let itemsHtml = o.items.map(i => `<div class="row" style="font-size:13px; margin-bottom:5px; color:#666"><span>${i.name}</span><b>x${i.qty}</b></div>`).join('');
-            box.innerHTML += `<div class="card">
-                <div class="row" style="border-bottom:1px solid #f5f5f5; margin-bottom:12px; padding-bottom:10px">
-                    <b>${d}</b> 
-                    <div class="row"><span onclick="editOrder('${d}')" style="margin-right:15px; font-size:20px; cursor:pointer; color:var(--brand-main)">✎</span><b>${o.total} ₽</b></div>
-                </div>
-                ${itemsHtml}
-                <button class="btn-send" style="background:var(--brand-light); color:var(--brand-main); font-size:11px; margin-top:10px; width:100%; box-shadow:none; padding:12px" onclick="startRepeat('${d}')">ПОВТОРИТЬ НА НОВУЮ ДАТУ</button>
-            </div>`;
+            box.innerHTML += `<div class="card"><b>${d}</b><br>${itemsHtml}<br><b>Итого: ${o.total} ₽</b></div>`;
         });
     }
-    function onDateChanged() {
-        const sel = document.getElementById('dt').value;
-        if (repeatItems) {
-            allOrders[sel] = {};
-            repeatItems.forEach(i => { if(i.name !== "Доставка") allOrders[sel][i.name] = {qty: i.qty, price: i.price}; });
-            repeatItems = null;
-        }
-        renderMenu();
-    }
-    function editOrder(d) {
-        document.getElementById('dt').value = d; allOrders[d] = {};
-        historyData[d].items.forEach(i => { if(i.name !== "Доставка") allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
-        tab('order'); renderMenu();
-    }
-    function startRepeat(d) { repeatItems = historyData[d].items; tab('order'); }
+
     async function send() {
         const sel = document.getElementById('dt').value;
-        if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("Корзина пуста");
-        tg.showConfirm(`Оформить на ${sel}?`, async (ok) => {
+        if(!allOrders[sel]) return tg.showAlert("Пусто");
+        tg.showConfirm(`Заказать на ${sel}?`, async (ok) => {
             if(ok) {
-                if(tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
-                tg.showAlert("Заказ принят!"); await refresh(); tab('hist');
+                tg.showAlert("Готово!"); await refresh(); tab('hist');
             }
         });
     }
