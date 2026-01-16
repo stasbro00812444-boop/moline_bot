@@ -15,11 +15,11 @@
         .container { padding: 15px; padding-bottom: 180px; }
         .cat-title { font-size: 13px; font-weight: 900; color: var(--brand); margin: 25px 0 12px; text-transform: uppercase; display: flex; align-items: center; }
         .cat-title::before { content: ''; width: 4px; height: 16px; background: var(--brand); margin-right: 10px; border-radius: 2px; }
-        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; }
+        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.02); }
         .item-info b { font-size: 16px; display: block; }
         .item-info small { color: var(--gray); font-weight: 700; }
         .stepper { display: flex; align-items: center; background: #fff; border-radius: 25px; padding: 4px 12px; gap: 12px; border: 2px solid var(--brand); }
-        .btn-s { border: none; color: var(--brand); font-size: 22px; font-weight: 900; background: none; }
+        .btn-s { border: none; color: var(--brand); font-size: 22px; font-weight: 900; background: none; cursor: pointer; outline: none; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 30px; box-sizing: border-box; z-index: 100;}
         .btn-send { background: var(--brand); color: #fff; border: none; padding: 16px; border-radius: 14px; font-weight: 900; width: 100%; text-transform: uppercase; }
         .hidden { display: none !important; }
@@ -37,7 +37,7 @@
     </div>
     <div id="p1" class="container">
         <input type="date" id="dt" onchange="renderMenu()">
-        <div id="menu">Загрузка...</div>
+        <div id="menu">Загрузка меню...</div>
     </div>
     <div id="p2" class="container hidden"></div>
     <div class="footer" id="f">
@@ -48,7 +48,7 @@
     </div>
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'ТВОЙ_URL_ЗДЕСЬ'; 
+    const API = 'https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec'; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "guest").toLowerCase();
     let menuData = [], historyData = {}, allOrders = {};
 
@@ -70,7 +70,7 @@
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
-        box.innerHTML = ''; 
+        box.innerHTML = ''; if(!menuData.length) { box.innerHTML = "Меню пусто"; return; }
         let groups = {};
         menuData.forEach(i => { if(!groups[i.cat]) groups[i.cat] = []; groups[i.cat].push(i); });
         Object.keys(groups).sort().forEach(c => {
