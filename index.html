@@ -6,22 +6,18 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --brand: #f45279; --bg: #fff; --light: #fff0f3; --gray: #777; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; color: #222; -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; color: #222; }
         .tabs { display: flex; border-bottom: 2px solid #f5f5f5; position: sticky; top: 0; background: #fff; z-index: 100; }
-        .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; text-transform: uppercase; font-size: 12px; }
+        .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; text-transform: uppercase; font-size: 11px; }
         .tab.active { color: var(--brand); border-bottom: 3px solid var(--brand); }
-        .container { padding: 15px; padding-bottom: 180px; }
-        .cat-title { font-size: 13px; font-weight: 900; color: var(--brand); margin: 25px 0 12px; text-transform: uppercase; display: flex; align-items: center; }
-        .cat-title::before { content: ''; width: 4px; height: 16px; background: var(--brand); margin-right: 10px; border-radius: 2px; }
-        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.02); }
-        .item-info b { font-size: 15px; display: block; }
-        .item-info small { color: var(--gray); font-weight: 700; }
-        .stepper { display: flex; align-items: center; background: #fff; border-radius: 25px; padding: 4px 12px; gap: 12px; border: 2px solid var(--brand); }
-        .btn-s { border: none; color: var(--brand); font-size: 22px; font-weight: 900; background: none; outline: none; cursor: pointer; }
-        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 30px; box-sizing: border-box; z-index: 100;}
+        .container { padding: 15px; padding-bottom: 160px; }
+        .cat-title { font-size: 14px; font-weight: 900; color: var(--brand); margin: 25px 0 12px; text-transform: uppercase; border-left: 4px solid var(--brand); padding-left: 10px; }
+        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; }
+        .stepper { display: flex; align-items: center; background: var(--light); border-radius: 20px; padding: 4px 12px; gap: 15px; }
+        .btn-s { border: none; color: var(--brand); font-size: 20px; font-weight: 900; background: none; outline: none; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 30px; box-sizing: border-box; }
         .btn-send { background: var(--brand); color: #fff; border: none; padding: 16px; border-radius: 14px; font-weight: 900; width: 100%; text-transform: uppercase; }
-        .hidden { display: none !important; }
-        input[type="date"] { background: var(--light); border: none; padding: 12px; border-radius: 10px; font-size: 16px; font-weight: 800; width: 100%; color: var(--brand); outline: none; margin-bottom: 15px; }
+        input[type="date"] { background: var(--light); border: none; padding: 12px; border-radius: 10px; font-size: 16px; font-weight: 800; width: 100%; color: var(--brand); outline: none; margin-bottom: 15px; box-sizing: border-box; }
     </style>
 </head>
 <body>
@@ -33,48 +29,41 @@
     <div id="p2" class="container hidden"></div>
     <div class="footer" id="f">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div><small style="color:var(--gray);font-weight:900">ИТОГО</small><br><b id="tot" style="font-size:20px">0 ₽</b></div>
+            <div><small style="color:var(--gray)">ИТОГО</small><br><b id="tot" style="font-size:20px">0 ₽</b></div>
             <button class="btn-send" style="width:auto; padding: 14px 40px;" onclick="send()">ОФОРМИТЬ</button>
         </div>
     </div>
+
 <script>
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec'; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "guest").toLowerCase();
     let menuData = [], historyData = {}, allOrders = {};
 
-    async function load() {
-        let t = new Date(); t.setDate(t.getDate() + 1);
-        document.getElementById('dt').value = t.toISOString().split('T')[0];
-        document.getElementById('dt').min = t.toISOString().split('T')[0];
-        tg.expand(); await refresh();
-    }
-
     async function refresh() {
         try {
             const m = await fetch(`${API}?type=menu&v=${Date.now()}`).then(r => r.json());
             const h = await fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json());
-            menuData = m.menu || []; historyData = h || {};
+            menuData = m.menu || [];
+            historyData = h || {};
             renderMenu();
-        } catch(e) { document.getElementById('menu').innerText = "Ошибка загрузки данных"; }
+        } catch(e) { document.getElementById('menu').innerText = "Ошибка загрузки"; }
     }
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
         box.innerHTML = ''; 
-        if(!menuData.length) { box.innerHTML = "Меню пусто. Проверьте названия листов: выпечка, десерты, сэндвичи."; return; }
+        if(!menuData.length) { box.innerHTML = "Меню не загружено. Проверьте первые 3 листа таблицы."; return; }
         
         let groups = {};
         menuData.forEach(i => { if(!groups[i.cat]) groups[i.cat] = []; groups[i.cat].push(i); });
         
-        ['ВЫПЕЧКА', 'ДЕСЕРТЫ', 'СЭНДВИЧИ'].forEach(c => {
-            if(groups[c]) {
-                box.innerHTML += `<div class="cat-title">${c}</div>`;
-                groups[c].forEach(item => {
-                    const q = allOrders[sel]?.[item.name]?.qty || 0;
-                    box.innerHTML += `<div class="card"><div class="item-info"><b>${item.name}</b><small>${item.price} ₽</small></div><div class="stepper"><button class="btn-s" onclick="upd('${item.name}',${item.price},-1)">−</button><b style="min-width:20px;text-align:center">${q}</b><button class="btn-s" onclick="upd('${item.name}',${item.price},1)">+</button></div></div>`;
-                });
-            }
+        Object.keys(groups).forEach(c => {
+            box.innerHTML += `<div class="cat-title">${c}</div>`;
+            groups[c].forEach(item => {
+                const q = allOrders[sel]?.[item.name]?.qty || 0;
+                box.innerHTML += `<div class="card"><div><b>${item.name}</b><br><small>${item.price} ₽</small></div><div class="stepper"><button class="btn-s" onclick="upd('${item.name}',${item.price},-1)">−</button><b style="min-width:20px;text-align:center">${q}</b><button class="btn-s" onclick="upd('${item.name}',${item.price},1)">+</button></div></div>`;
+            });
         });
         calc();
     }
@@ -84,7 +73,8 @@
         if(!allOrders[sel]) allOrders[sel] = {};
         let q = (allOrders[sel][n]?.qty || 0) + d;
         if(q <= 0) delete allOrders[sel][n]; else allOrders[sel][n] = {qty:q, price:p};
-        renderMenu(); tg.HapticFeedback?.impactOccurred('light');
+        renderMenu();
+        tg.HapticFeedback?.impactOccurred('light');
     }
 
     function calc() {
@@ -104,10 +94,9 @@
 
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
-        const keys = Object.keys(historyData).sort().reverse();
-        keys.forEach(d => {
+        Object.keys(historyData).sort().reverse().forEach(d => {
             const o = historyData[d];
-            box.innerHTML += `<div class="card" style="flex-direction:column; align-items:flex-start"><div style="width:100%; display:flex; justify-content:space-between; border-bottom:1px solid #f5f5f5; padding-bottom:8px; margin-bottom:8px"><b>${d}</b><b>${o.total} ₽</b></div>${o.items.map(i => `<div style="font-size:13px; color:#666">${i.name} x${i.qty}</div>`).join('')}</div>`;
+            box.innerHTML += `<div class="card" style="flex-direction:column; align-items:flex-start"><b>${d} — ${o.total} ₽</b><div style="font-size:12px; margin-top:5px">${o.items.map(i => i.name + ' x' + i.qty).join(', ')}</div></div>`;
         });
     }
 
@@ -121,7 +110,12 @@
             }
         });
     }
-    load();
+
+    let t = new Date(); t.setDate(t.getDate() + 1);
+    document.getElementById('dt').value = t.toISOString().split('T')[0];
+    document.getElementById('dt').min = t.toISOString().split('T')[0];
+    tg.expand();
+    refresh();
 </script>
 </body>
 </html>
