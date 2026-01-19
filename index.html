@@ -10,35 +10,51 @@
         .tabs { display: flex; background: #fff; border-bottom: 2px solid #f5f5f5; position: sticky; top: 0; z-index: 100; }
         .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; text-transform: uppercase; font-size: 13px; }
         .tab.active { color: var(--brand-main); border-bottom: 3px solid var(--brand-main); }
-        .container { padding: 15px; padding-bottom: 180px; }
+        .container { padding: 15px; padding-bottom: 220px; }
         .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
         .cat-title { font-size: 13px; font-weight: 900; color: var(--brand-main); margin: 25px 0 12px 5px; text-transform: uppercase; display: flex; align-items: center; }
         .cat-title::before { content: ''; width: 4px; height: 16px; background: var(--brand-main); margin-right: 10px; border-radius: 2px; }
         .row { display: flex; align-items: center; justify-content: space-between; }
-        .item-info b { font-size: 16px; display: block; color: var(--text-dark); }
-        .item-info small { color: var(--text-gray); font-weight: 700; font-size: 14px; }
-        .stepper { display: flex; align-items: center; background: #fff; border-radius: 25px; padding: 4px 12px; gap: 15px; border: 2px solid var(--brand-main); }
-        .btn-s { border: none; color: var(--brand-main); font-size: 24px; font-weight: 900; background: none; outline: none; cursor: pointer; }
-        .q-val { min-width: 20px; text-align: center; font-weight: 900; font-size: 17px; }
+        .stepper { display: flex; align-items: center; background: #fff; border-radius: 25px; padding: 4px 12px; border: 2px solid var(--brand-main); gap: 12px; }
+        .btn-s { border: none; color: var(--brand-main); font-size: 22px; font-weight: 900; background: none; cursor: pointer; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 35px; box-sizing: border-box; z-index: 100; }
-        .btn-send { background: var(--brand-main); color: #fff; border: none; padding: 18px 25px; border-radius: 14px; font-weight: 900; font-size: 16px; width: 100%; box-shadow: 0 6px 15px rgba(244, 82, 121, 0.3); text-transform: uppercase; }
+        .btn-send { background: var(--brand-main); color: #fff; border: none; padding: 18px 25px; border-radius: 14px; font-weight: 900; width: 100%; }
+        
+        /* Плавающая кнопка менеджера */
+        .fab { 
+            position: fixed; bottom: 30px; right: 20px; 
+            background: #222; color: #fff; padding: 12px 20px; 
+            border-radius: 30px; text-decoration: none; font-size: 12px; 
+            font-weight: 700; box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            z-index: 1000; display: flex; align-items: center; gap: 8px;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn { from { transform: translateY(100px); } to { transform: translateY(0); } }
+
         .hidden { display: none !important; }
-        input[type="date"] { background: none; border: none; font-size: 18px; font-weight: 800; color: var(--text-dark); width: 100%; outline: none; }
+        input[type="date"] { background: none; border: none; font-size: 18px; font-weight: 800; width: 100%; outline: none; }
     </style>
 </head>
 <body>
     <div class="tabs">
-        <div id="t1" class="tab active" onclick="tab('order')">Заказать</div>
+        <div id="t1" class="tab active" onclick="tab('order')">Заказ</div>
         <div id="t2" class="tab" onclick="tab('hist')">История</div>
     </div>
+
     <div id="p1" class="container">
         <div class="card" style="background: var(--brand-light); border: none;">
             <div style="color:var(--brand-main); font-weight:900; font-size:10px; margin-bottom:5px; text-transform:uppercase">Дата доставки</div>
-            <input type="date" id="dt" onchange="onDateChanged()">
+            <input type="date" id="dt" onchange="renderMenu()">
         </div>
         <div id="menu"></div>
     </div>
+
     <div id="p2" class="container hidden"></div>
+
+    <a id="fab" href="https://t.me/molinebymonk" class="fab hidden">
+        <span>После 12:00 правки через нас 💬</span>
+    </a>
+
     <div class="footer" id="f">
         <div id="summary" style="font-size:11px; color:#999; text-align:right; margin-bottom:8px; font-weight:800; text-transform:uppercase;"></div>
         <div class="row">
@@ -49,16 +65,15 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    // Твоя новая ссылка
     const API = 'https://script.google.com/macros/s/AKfycbw1nHXLeHyLOym4FGtR1iECcZsiFCR6qQ4mtGjcMaeL9CTmfA8qmUMYzWCgB0UX1wOD/exec'; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').toLowerCase();
     let menuData = [], historyData = {}, allOrders = {};
 
-    function getMinDate() {
-        let now = new Date();
-        let offset = now.getHours() >= 12 ? 2 : 1;
-        let d = new Date(); d.setDate(d.getDate() + offset);
-        return d.toISOString().split('T')[0];
+    function getNowInfo() {
+        const now = new Date();
+        const dateStr = now.toISOString().split('T')[0];
+        const isBeforeNoon = now.getHours() < 12;
+        return { dateStr, isBeforeNoon };
     }
 
     async function refresh() {
@@ -72,29 +87,21 @@
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
-        box.innerHTML = ''; if (menuData.length === 0) return;
-
+        box.innerHTML = '';
         let groups = {};
         menuData.forEach(item => {
-            let cat = item.cat || "ПРОЧЕЕ";
-            if (!groups[cat]) groups[cat] = [];
-            groups[cat].push(item);
+            if (!groups[item.cat]) groups[item.cat] = [];
+            groups[item.cat].push(item);
         });
-
-        Object.keys(groups).sort((a, b) => {
-            let aL = a.toLowerCase(), bL = b.toLowerCase();
-            if (aL.includes("выпечка")) return -1;
-            if (bL.includes("выпечка")) return 1;
-            return aL.localeCompare(bL);
-        }).forEach(c => {
+        Object.keys(groups).sort().forEach(c => {
             box.innerHTML += `<div class="cat-title">${c}</div>`;
             groups[c].forEach(item => {
                 const q = (allOrders[sel] && allOrders[sel][item.name]) ? allOrders[sel][item.name].qty : 0;
                 box.innerHTML += `<div class="card row">
-                    <div class="item-info"><b>${item.name}</b><small>${item.price} ₽</small></div>
+                    <div style="flex:1"><b>${item.name}</b><small style="color:#777">${item.price} ₽</small></div>
                     <div class="stepper">
                         <button class="btn-s" onclick="upd('${item.name}',${item.price},-1)">−</button>
-                        <div class="q-val">${q}</div>
+                        <b style="min-width:20px;text-align:center">${q}</b>
                         <button class="btn-s" onclick="upd('${item.name}',${item.price},1)">+</button>
                     </div>
                 </div>`;
@@ -124,6 +131,7 @@
         document.getElementById('p1').classList.toggle('hidden', t !== 'order');
         document.getElementById('p2').classList.toggle('hidden', t !== 'hist');
         document.getElementById('f').classList.toggle('hidden', t !== 'order');
+        document.getElementById('fab').classList.toggle('hidden', t !== 'hist');
         document.getElementById('t1').classList.toggle('active', t === 'order');
         document.getElementById('t2').classList.toggle('active', t === 'hist');
         if(t === 'hist') renderHist();
@@ -132,17 +140,19 @@
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
         const dates = Object.keys(historyData).sort().reverse();
-        if (dates.length === 0) { box.innerHTML = '<div style="text-align:center;padding:40px;color:#bbb;">История пуста</div>'; return; }
-        const minDate = getMinDate();
+        const { dateStr, isBeforeNoon } = getNowInfo();
+
         dates.forEach(d => {
             const o = historyData[d];
-            const canEdit = d >= minDate;
-            let itemsHtml = o.items.map(i => `<div class="row" style="font-size:13px; margin-bottom:5px; color:#666"><span>${i.name}</span><b>x${i.qty}</b></div>`).join('');
+            // Логика: можно редактировать, если дата в будущем ИЛИ если это сегодня до 12:00
+            const canEdit = (d > dateStr) || (d === dateStr && isBeforeNoon);
+            
+            let itemsHtml = o.items.map(i => `<div class="row" style="font-size:13px;color:#666;margin-top:4px"><span>${i.name}</span><b>x${i.qty}</b></div>`).join('');
             box.innerHTML += `<div class="card">
-                <div class="row" style="border-bottom:1px solid #f5f5f5; margin-bottom:12px; padding-bottom:10px">
-                    <b>${d}</b> 
+                <div class="row" style="border-bottom:1px solid #f5f5f5;padding-bottom:8px;margin-bottom:8px">
+                    <b>${d} ${d === dateStr ? '(Сегодня)' : ''}</b>
                     <div class="row">
-                        ${canEdit ? `<span onclick="editOrder('${d}')" style="margin-right:15px; font-size:20px; cursor:pointer; color:var(--brand-main)">✎</span>` : ''}
+                        ${canEdit ? `<span onclick="editOrder('${d}')" style="margin-right:15px;color:var(--brand-main);font-weight:900">ИЗМЕНИТЬ</span>` : ''}
                         <b>${o.total} ₽</b>
                     </div>
                 </div>
@@ -151,37 +161,31 @@
         });
     }
 
-    function onDateChanged() {
-        const sel = document.getElementById('dt').value;
-        const min = getMinDate();
-        if (sel < min) {
-            tg.showAlert("Дата заблокирована");
-            document.getElementById('dt').value = min;
-        }
-        renderMenu();
-    }
-
     function editOrder(d) {
-        document.getElementById('dt').value = d; 
+        document.getElementById('dt').value = d;
         allOrders[d] = {};
-        historyData[d].items.forEach(i => { if(i.name !== "Доставка") allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
-        tab('order'); renderMenu();
+        historyData[d].items.forEach(i => { if(i.name !== "Доставка") allOrders[d][i.name] = {qty:i.qty, price:i.price}; });
+        tab('order');
     }
 
     async function send() {
         const sel = document.getElementById('dt').value;
-        if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("Корзина пуста");
+        if(!allOrders[sel]) return tg.showAlert("Корзина пуста");
         tg.showConfirm(`Заказать на ${sel}?`, async (ok) => {
             if(ok) {
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
-                tg.showAlert("Готово!"); refresh(); tab('hist');
+                tg.showAlert("Заказ обновлен!"); refresh(); tab('hist');
             }
         });
     }
 
-    const min = getMinDate();
-    document.getElementById('dt').value = min;
-    document.getElementById('dt').min = min;
+    // Инициализация дат
+    const { dateStr, isBeforeNoon } = getNowInfo();
+    // По умолчанию ставим сегодня, если до 12:00, иначе завтра
+    const defaultDate = isBeforeNoon ? dateStr : new Date(new Date().getTime() + 86400000).toISOString().split('T')[0];
+    document.getElementById('dt').value = defaultDate;
+    document.getElementById('dt').min = dateStr;
+
     tg.expand();
     refresh();
 </script>
