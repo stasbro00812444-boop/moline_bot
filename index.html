@@ -49,7 +49,8 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec'; 
+    // Твоя новая ссылка
+    const API = 'https://script.google.com/macros/s/AKfycbw1nHXLeHyLOym4FGtR1iECcZsiFCR6qQ4mtGjcMaeL9CTmfA8qmUMYzWCgB0UX1wOD/exec'; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').toLowerCase();
     let menuData = [], historyData = {}, allOrders = {};
 
@@ -66,7 +67,7 @@
             const h = await fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json());
             menuData = m.menu || []; historyData = h || {}; 
             renderMenu();
-        } catch(e) { console.error("Refresh fail:", e); }
+        } catch(e) { console.error(e); }
     }
 
     function renderMenu() {
@@ -80,7 +81,6 @@
             groups[cat].push(item);
         });
 
-        // Сортировка категорий (Выпечка — всегда первая)
         Object.keys(groups).sort((a, b) => {
             let aL = a.toLowerCase(), bL = b.toLowerCase();
             if (aL.includes("выпечка")) return -1;
