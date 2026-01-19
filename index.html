@@ -59,6 +59,7 @@
     </div>
 <script>
     const tg = window.Telegram.WebApp;
+    // ТВОЯ НОВАЯ ССЫЛКА API
     const API = 'https://script.google.com/macros/s/AKfycbw1nHXLeHyLOym4FGtR1iECcZsiFCR6qQ4mtGjcMaeL9CTmfA8qmUMYzWCgB0UX1wOD/exec'; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').toLowerCase();
     let menuData = [], historyData = {}, allOrders = {}, repeatItems = null;
@@ -192,8 +193,14 @@
         tg.showConfirm(`Оформить на ${sel}?`, async (ok) => {
             if(ok) {
                 if(tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-                await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
-                tg.showAlert("Заказ принят!"); await refresh(); tab('hist');
+                try {
+                    await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
+                    tg.showAlert("Заказ принят!"); 
+                    await refresh(); 
+                    tab('hist');
+                } catch(e) {
+                    tg.showAlert("Ошибка при отправке: " + e.message);
+                }
             }
         });
     }
