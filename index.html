@@ -49,9 +49,10 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec'; 
+    // ОБЯЗАТЕЛЬНО ЗАМЕНИ НА НОВУЮ ССЫЛКУ ПОСЛЕ ДЕПЛОЯ
+    const API = https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').toLowerCase();
-    let menuData = [], historyData = {}, allOrders = {}, repeatItems = null;
+    let menuData = [], historyData = {}, allOrders = {};
 
     function getMinDate() {
         let now = new Date();
@@ -60,35 +61,29 @@
         return d.toISOString().split('T')[0];
     }
 
-    async function load() {
-        const min = getMinDate();
-        document.getElementById('dt').value = min;
-        document.getElementById('dt').min = min;
-        tg.expand();
-        await refresh();
-    }
-
     async function refresh() {
         try {
             const m = await fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`).then(r => r.json());
             const h = await fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json());
-            menuData = m.menu || []; historyData = h || {}; renderMenu();
+            menuData = m.menu || []; historyData = h || {}; 
+            renderMenu();
         } catch(e) { console.error(e); }
     }
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
-        box.innerHTML = ''; if (menuData.length === 0) return;
+        box.innerHTML = ''; 
+        if (!menuData || menuData.length === 0) return;
 
         let groups = {};
         menuData.forEach(item => {
-            // Группируем ровно по тому, что написано в таблице (колонка B)
-            let catName = item.cat; 
+            // Устраняем undefined навсегда
+            let catName = (item.cat && String(item.cat) !== "undefined" && String(item.cat).trim() !== "") ? item.cat : "БЕЗ КАТЕГОРИИ";
             if (!groups[catName]) groups[catName] = [];
             groups[catName].push(item);
         });
 
-        // Сортировка категорий: Выпечка всегда первая, остальные по алфавиту
+        // Сортировка категорий
         Object.keys(groups).sort((a, b) => {
             let aL = a.toLowerCase(), bL = b.toLowerCase();
             if (aL.includes("выпечка")) return -1;
@@ -140,7 +135,7 @@
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
         const dates = Object.keys(historyData).sort().reverse();
-        if (dates.length === 0) box.innerHTML = '<div style="text-align:center;padding:40px;color:#bbb;">История пуста</div>';
+        if (dates.length === 0) { box.innerHTML = '<div style="text-align:center;padding:40px;color:#bbb;">История пуста</div>'; return; }
         const minDate = getMinDate();
         dates.forEach(d => {
             const o = historyData[d];
@@ -155,7 +150,6 @@
                     </div>
                 </div>
                 ${itemsHtml}
-                <button class="btn-send" style="background:var(--brand-light); color:var(--brand-main); font-size:11px; margin-top:10px; width:100%; box-shadow:none; padding:12px" onclick="startRepeat('${d}')">ПОВТОРИТЬ НА НОВУЮ ДАТУ</button>
             </div>`;
         });
     }
@@ -164,34 +158,35 @@
         const sel = document.getElementById('dt').value;
         const min = getMinDate();
         if (sel < min) {
-            tg.showAlert("Эта дата недоступна.");
+            tg.showAlert("Дата заблокирована");
             document.getElementById('dt').value = min;
-            return;
         }
         renderMenu();
     }
 
     function editOrder(d) {
-        if (d < getMinDate()) return tg.showAlert("Редактирование невозможно.");
-        document.getElementById('dt').value = d; allOrders[d] = {};
+        document.getElementById('dt').value = d; 
+        allOrders[d] = {};
         historyData[d].items.forEach(i => { if(i.name !== "Доставка") allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
         tab('order'); renderMenu();
     }
 
-    function startRepeat(d) { repeatItems = historyData[d].items; tab('order'); onDateChanged(); }
-
     async function send() {
         const sel = document.getElementById('dt').value;
-        if (sel < getMinDate()) return tg.showAlert("Заказ на эту дату заблокирован.");
         if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("Корзина пуста");
-        tg.showConfirm(`Оформить на ${sel}?`, async (ok) => {
+        tg.showConfirm(`Заказать на ${sel}?`, async (ok) => {
             if(ok) {
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
-                tg.showAlert("Заказ принят!"); await refresh(); tab('hist');
+                tg.showAlert("Готово!"); refresh(); tab('hist');
             }
         });
     }
-    load();
+
+    const min = getMinDate();
+    document.getElementById('dt').value = min;
+    document.getElementById('dt').min = min;
+    tg.expand();
+    refresh();
 </script>
 </body>
 </html>
