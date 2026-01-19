@@ -59,8 +59,8 @@
     </div>
 <script>
     const tg = window.Telegram.WebApp;
-    // ТВОЯ НОВАЯ ССЫЛКА API
-    const API = 'https://script.google.com/macros/s/AKfycbw1nHXLeHyLOym4FGtR1iECcZsiFCR6qQ4mtGjcMaeL9CTmfA8qmUMYzWCgB0UX1wOD/exec'; 
+    // НОВЫЙ URL API
+    const API = 'https://script.google.com/macros/s/AKfycbzIlWV9ilt4BlX12Gzi6sICQ9WSUqwMuOzL0neuu0ToDytE99yw_lIjJwCiS2JkeEtr/exec'; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').toLowerCase();
     let menuData = [], historyData = {}, allOrders = {}, repeatItems = null;
 
@@ -199,7 +199,7 @@
                     await refresh(); 
                     tab('hist');
                 } catch(e) {
-                    tg.showAlert("Ошибка при отправке: " + e.message);
+                    tg.showAlert("Ошибка: " + e.message);
                 }
             }
         });
