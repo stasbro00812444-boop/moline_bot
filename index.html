@@ -22,8 +22,6 @@
         .q-val { min-width: 20px; text-align: center; font-weight: 900; font-size: 17px; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 35px; box-sizing: border-box; z-index: 100; }
         .btn-send { background: var(--brand-main); color: #fff; border: none; padding: 18px 25px; border-radius: 14px; font-weight: 900; font-size: 16px; width: 100%; box-shadow: 0 6px 15px rgba(244, 82, 121, 0.3); text-transform: uppercase; }
-        .manager-sticky { position: sticky; top: 51px; z-index: 90; background: var(--brand-main); padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; color: #fff; }
-        .btn-manager-small { background: #fff; color: var(--brand-main); border: none; padding: 10px 16px; border-radius: 12px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
         .hidden { display: none !important; }
         input[type="date"] { background: none; border: none; font-size: 18px; font-weight: 800; color: var(--text-dark); width: 100%; outline: none; }
     </style>
@@ -32,10 +30,6 @@
     <div class="tabs">
         <div id="t1" class="tab active" onclick="tab('order')">Заказать</div>
         <div id="t2" class="tab" onclick="tab('hist')">История</div>
-    </div>
-    <div id="manager-bar" class="manager-sticky hidden">
-        <div style="font-size: 12px; line-height: 1.3;">Нужно изменить заказ <br><b>после 12:00?</b></div>
-        <button class="btn-manager-small" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button>
     </div>
     <div id="p1" class="container">
         <div class="card" style="background: var(--brand-light); border: none;">
@@ -52,6 +46,7 @@
             <button class="btn-send" style="width:auto; padding: 16px 40px;" onclick="send()">ОФОРМИТЬ</button>
         </div>
     </div>
+
 <script>
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec'; 
@@ -60,7 +55,6 @@
 
     function getMinDate() {
         let now = new Date();
-        // Ближайшая доступная дата: если > 12:00 сегодня, то +2 дня (послезавтра). Если < 12:00, то +1 день (завтра).
         let offset = now.getHours() >= 12 ? 2 : 1;
         let d = new Date(); d.setDate(d.getDate() + offset);
         return d.toISOString().split('T')[0];
@@ -85,13 +79,22 @@
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
         box.innerHTML = ''; if (menuData.length === 0) return;
+
         let groups = {};
         menuData.forEach(item => {
-            let c = (item.cat && item.cat.trim() !== "") ? item.cat.toUpperCase() : "БЕЗ КАТЕГОРИИ";
-            if (!groups[c]) groups[c] = [];
-            groups[c].push(item);
+            // Группируем ровно по тому, что написано в таблице (колонка B)
+            let catName = item.cat; 
+            if (!groups[catName]) groups[catName] = [];
+            groups[catName].push(item);
         });
-        Object.keys(groups).sort((a,b) => a==="ВЫПЕЧКА"?-1:b==="ВЫПЕЧКА"?1:a.localeCompare(b)).forEach(c => {
+
+        // Сортировка категорий: Выпечка всегда первая, остальные по алфавиту
+        Object.keys(groups).sort((a, b) => {
+            let aL = a.toLowerCase(), bL = b.toLowerCase();
+            if (aL.includes("выпечка")) return -1;
+            if (bL.includes("выпечка")) return 1;
+            return aL.localeCompare(bL);
+        }).forEach(c => {
             box.innerHTML += `<div class="cat-title">${c}</div>`;
             groups[c].forEach(item => {
                 const q = (allOrders[sel] && allOrders[sel][item.name]) ? allOrders[sel][item.name].qty : 0;
@@ -113,7 +116,8 @@
         if(!allOrders[sel]) allOrders[sel] = {};
         let q = (allOrders[sel][n]?.qty || 0) + d;
         if(q <= 0) delete allOrders[sel][n]; else allOrders[sel][n] = {qty:q, price:p};
-        renderMenu(); if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        renderMenu();
+        if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
     }
 
     function calc() {
@@ -128,7 +132,6 @@
         document.getElementById('p1').classList.toggle('hidden', t !== 'order');
         document.getElementById('p2').classList.toggle('hidden', t !== 'hist');
         document.getElementById('f').classList.toggle('hidden', t !== 'order');
-        document.getElementById('manager-bar').classList.toggle('hidden', t !== 'hist');
         document.getElementById('t1').classList.toggle('active', t === 'order');
         document.getElementById('t2').classList.toggle('active', t === 'hist');
         if(t === 'hist') renderHist();
@@ -138,14 +141,10 @@
         const box = document.getElementById('p2'); box.innerHTML = '';
         const dates = Object.keys(historyData).sort().reverse();
         if (dates.length === 0) box.innerHTML = '<div style="text-align:center;padding:40px;color:#bbb;">История пуста</div>';
-        
-        const minDate = getMinDate(); // Порог блокировки
-
+        const minDate = getMinDate();
         dates.forEach(d => {
             const o = historyData[d];
-            // Редактируем, если дата заказа >= минимально допустимой для новых заказов
             const canEdit = d >= minDate;
-            
             let itemsHtml = o.items.map(i => `<div class="row" style="font-size:13px; margin-bottom:5px; color:#666"><span>${i.name}</span><b>x${i.qty}</b></div>`).join('');
             box.innerHTML += `<div class="card">
                 <div class="row" style="border-bottom:1px solid #f5f5f5; margin-bottom:12px; padding-bottom:10px">
@@ -165,20 +164,15 @@
         const sel = document.getElementById('dt').value;
         const min = getMinDate();
         if (sel < min) {
-            tg.showAlert("Эта дата недоступна для изменений.");
+            tg.showAlert("Эта дата недоступна.");
             document.getElementById('dt').value = min;
             return;
-        }
-        if (repeatItems) {
-            allOrders[sel] = {};
-            repeatItems.forEach(i => { if(i.name !== "Доставка") allOrders[sel][i.name] = {qty: i.qty, price: i.price}; });
-            repeatItems = null;
         }
         renderMenu();
     }
 
     function editOrder(d) {
-        if (d < getMinDate()) return tg.showAlert("Слишком поздно для правок.");
+        if (d < getMinDate()) return tg.showAlert("Редактирование невозможно.");
         document.getElementById('dt').value = d; allOrders[d] = {};
         historyData[d].items.forEach(i => { if(i.name !== "Доставка") allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
         tab('order'); renderMenu();
@@ -192,7 +186,6 @@
         if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("Корзина пуста");
         tg.showConfirm(`Оформить на ${sel}?`, async (ok) => {
             if(ok) {
-                if(tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
                 tg.showAlert("Заказ принят!"); await refresh(); tab('hist');
             }
