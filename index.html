@@ -49,8 +49,7 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    // ОБЯЗАТЕЛЬНО ЗАМЕНИ НА НОВУЮ ССЫЛКУ ПОСЛЕ ДЕПЛОЯ
-    const API = https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec; 
+    const API = 'https://script.google.com/macros/s/AKfycbypuRB0YaY2FRc_XYtWAFhThUkNeWllPua_IB7zHWwKZZTt0sLaJnErTz7j9Nj4NpsI/exec'; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').toLowerCase();
     let menuData = [], historyData = {}, allOrders = {};
 
@@ -72,18 +71,15 @@
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
-        box.innerHTML = ''; 
-        if (!menuData || menuData.length === 0) return;
+        box.innerHTML = ''; if (menuData.length === 0) return;
 
         let groups = {};
         menuData.forEach(item => {
-            // Устраняем undefined навсегда
-            let catName = (item.cat && String(item.cat) !== "undefined" && String(item.cat).trim() !== "") ? item.cat : "БЕЗ КАТЕГОРИИ";
-            if (!groups[catName]) groups[catName] = [];
-            groups[catName].push(item);
+            let c = (item.cat && item.cat !== "undefined") ? item.cat : "БЕЗ КАТЕГОРИИ";
+            if (!groups[c]) groups[c] = [];
+            groups[c].push(item);
         });
 
-        // Сортировка категорий
         Object.keys(groups).sort((a, b) => {
             let aL = a.toLowerCase(), bL = b.toLowerCase();
             if (aL.includes("выпечка")) return -1;
