@@ -5,53 +5,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root { --brand-main: #f45279; --brand-light: #fff0f3; --text-dark: #222; --text-gray: #777; }
+        :root {
+            --brand-main: #f45279; 
+            --brand-light: #fff0f3;
+            --text-dark: #222;
+            --text-gray: #777;
+        }
         body { font-family: -apple-system, sans-serif; background: #fff; margin: 0; padding: 0; color: var(--text-dark); -webkit-tap-highlight-color: transparent; }
         .tabs { display: flex; background: #fff; border-bottom: 2px solid #f5f5f5; position: sticky; top: 0; z-index: 100; }
         .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; text-transform: uppercase; font-size: 13px; }
         .tab.active { color: var(--brand-main); border-bottom: 3px solid var(--brand-main); }
-        .container { padding: 15px; padding-bottom: 220px; }
-        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; box-shadow: 0 4px 10px rgba(0,0,0,0.03); cursor: pointer; }
+        .container { padding: 15px; padding-bottom: 180px; }
+        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #f0f0f0; box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
         .cat-title { font-size: 13px; font-weight: 900; color: var(--brand-main); margin: 25px 0 12px 5px; text-transform: uppercase; display: flex; align-items: center; }
         .cat-title::before { content: ''; width: 4px; height: 16px; background: var(--brand-main); margin-right: 10px; border-radius: 2px; }
         .row { display: flex; align-items: center; justify-content: space-between; }
-        .stepper { display: flex; align-items: center; background: #fff; border-radius: 25px; padding: 4px 12px; border: 2px solid var(--brand-main); gap: 12px; }
-        .btn-s { border: none; color: var(--brand-main); font-size: 22px; font-weight: 900; background: none; cursor: pointer; outline: none; }
+        .item-info b { font-size: 16px; display: block; color: var(--text-dark); }
+        .item-info small { color: var(--text-gray); font-weight: 700; font-size: 14px; }
+        .stepper { display: flex; align-items: center; background: #fff; border-radius: 25px; padding: 4px 12px; gap: 15px; border: 2px solid var(--brand-main); }
+        .btn-s { border: none; color: var(--brand-main); font-size: 24px; font-weight: 900; background: none; outline: none; cursor: pointer; }
+        .q-val { min-width: 20px; text-align: center; font-weight: 900; font-size: 17px; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 15px 20px 35px; box-sizing: border-box; z-index: 100; }
-        .btn-send { background: var(--brand-main); color: #fff; border: none; padding: 18px 25px; border-radius: 14px; font-weight: 900; width: 100%; text-transform: uppercase; }
-        
-        .fab { 
-            position: fixed; bottom: 120px; right: 20px; 
-            background: #222; color: #fff; padding: 12px 20px; 
-            border-radius: 30px; text-decoration: none; font-size: 11px; 
-            font-weight: 700; box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-            z-index: 1000; animation: slideIn 0.3s ease;
-        }
-        @keyframes slideIn { from { transform: translateY(100px); } to { transform: translateY(0); } }
-
+        .btn-send { background: var(--brand-main); color: #fff; border: none; padding: 18px 25px; border-radius: 14px; font-weight: 900; font-size: 16px; width: 100%; box-shadow: 0 6px 15px rgba(244, 82, 121, 0.3); text-transform: uppercase; }
+        .manager-sticky { position: sticky; top: 51px; z-index: 90; background: var(--brand-main); padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; color: #fff; }
+        .btn-manager-small { background: #fff; color: var(--brand-main); border: none; padding: 10px 16px; border-radius: 12px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
         .hidden { display: none !important; }
-        input[type="date"] { background: none; border: none; font-size: 18px; font-weight: 800; width: 100%; outline: none; color: var(--text-dark); }
-        .btn-repeat { font-size: 11px; font-weight: 800; color: var(--brand-main); border: 1px solid var(--brand-main); padding: 4px 8px; border-radius: 8px; text-transform: uppercase; }
+        input[type="date"] { background: none; border: none; font-size: 18px; font-weight: 800; color: var(--text-dark); width: 100%; outline: none; }
     </style>
 </head>
 <body>
     <div class="tabs">
-        <div id="t1" class="tab active" onclick="tab('order')">Заказ</div>
+        <div id="t1" class="tab active" onclick="tab('order')">Заказать</div>
         <div id="t2" class="tab" onclick="tab('hist')">История</div>
     </div>
-
+    <div id="manager-bar" class="manager-sticky hidden">
+        <div style="font-size: 12px; line-height: 1.3;">Нужно изменить заказ <br><b>после 12:00?</b></div>
+        <button class="btn-manager-small" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button>
+    </div>
     <div id="p1" class="container">
-        <div class="card" style="background: var(--brand-light); border: none; cursor: default;">
+        <div class="card" style="background: var(--brand-light); border: none;">
             <div style="color:var(--brand-main); font-weight:900; font-size:10px; margin-bottom:5px; text-transform:uppercase">Дата доставки</div>
-            <input type="date" id="dt" onchange="renderMenu()">
+            <input type="date" id="dt" onchange="onDateChanged()">
         </div>
         <div id="menu"></div>
     </div>
-
     <div id="p2" class="container hidden"></div>
-
-    <a id="fab" href="https://t.me/molinebymonk" class="fab hidden">Правки после 12:00 через нас 💬</a>
-
     <div class="footer" id="f">
         <div id="summary" style="font-size:11px; color:#999; text-align:right; margin-bottom:8px; font-weight:800; text-transform:uppercase;"></div>
         <div class="row">
@@ -59,46 +57,59 @@
             <button class="btn-send" style="width:auto; padding: 16px 40px;" onclick="send()">ОФОРМИТЬ</button>
         </div>
     </div>
-
 <script>
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbw1nHXLeHyLOym4FGtR1iECcZsiFCR6qQ4mtGjcMaeL9CTmfA8qmUMYzWCgB0UX1wOD/exec'; 
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').toLowerCase();
-    let menuData = [], historyData = {}, allOrders = {};
+    let menuData = [], historyData = {}, allOrders = {}, repeatItems = null;
 
     function getNowInfo() {
         const now = new Date();
-        const dateStr = now.toISOString().split('T')[0];
+        const todayStr = now.toISOString().split('T')[0];
         const isBeforeNoon = now.getHours() < 12;
-        return { dateStr, isBeforeNoon };
+        return { todayStr, isBeforeNoon };
+    }
+
+    async function load() {
+        const { todayStr, isBeforeNoon } = getNowInfo();
+        let defDate = todayStr;
+        if (!isBeforeNoon) {
+            let tom = new Date(); tom.setDate(tom.getDate() + 1);
+            defDate = tom.toISOString().split('T')[0];
+        }
+        document.getElementById('dt').value = defDate;
+        document.getElementById('dt').min = todayStr;
+        tg.expand();
+        await refresh();
     }
 
     async function refresh() {
         try {
             const m = await fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`).then(r => r.json());
             const h = await fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json());
-            menuData = m.menu || []; historyData = h || {}; 
-            renderMenu();
+            menuData = m.menu || []; historyData = h || {}; renderMenu();
         } catch(e) { console.error(e); }
     }
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
         box.innerHTML = '';
+        if (menuData.length === 0) return;
         let groups = {};
         menuData.forEach(item => {
-            if (!groups[item.cat]) groups[item.cat] = [];
-            groups[item.cat].push(item);
+            let c = (item.cat && item.cat.trim() !== "") ? item.cat.toUpperCase() : "БЕЗ КАТЕГОРИИ";
+            if (!groups[c]) groups[c] = [];
+            groups[c].push(item);
         });
-        Object.keys(groups).sort().forEach(c => {
+        Object.keys(groups).sort((a,b) => a==="ВЫПЕЧКА"?-1:b==="ВЫПЕЧКА"?1:a.localeCompare(b)).forEach(c => {
             box.innerHTML += `<div class="cat-title">${c}</div>`;
             groups[c].forEach(item => {
                 const q = (allOrders[sel] && allOrders[sel][item.name]) ? allOrders[sel][item.name].qty : 0;
-                box.innerHTML += `<div class="card row" style="cursor:default">
-                    <div style="flex:1"><b>${item.name}</b><small style="color:#777">${item.price} ₽</small></div>
+                box.innerHTML += `<div class="card row">
+                    <div class="item-info"><b>${item.name}</b><small>${item.price} ₽</small></div>
                     <div class="stepper">
                         <button class="btn-s" onclick="upd('${item.name}',${item.price},-1)">−</button>
-                        <b style="min-width:20px;text-align:center">${q}</b>
+                        <div class="q-val">${q}</div>
                         <button class="btn-s" onclick="upd('${item.name}',${item.price},1)">+</button>
                     </div>
                 </div>`;
@@ -112,8 +123,7 @@
         if(!allOrders[sel]) allOrders[sel] = {};
         let q = (allOrders[sel][n]?.qty || 0) + d;
         if(q <= 0) delete allOrders[sel][n]; else allOrders[sel][n] = {qty:q, price:p};
-        renderMenu();
-        if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        renderMenu(); if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
     }
 
     function calc() {
@@ -128,7 +138,7 @@
         document.getElementById('p1').classList.toggle('hidden', t !== 'order');
         document.getElementById('p2').classList.toggle('hidden', t !== 'hist');
         document.getElementById('f').classList.toggle('hidden', t !== 'order');
-        document.getElementById('fab').classList.toggle('hidden', t !== 'hist');
+        document.getElementById('manager-bar').classList.toggle('hidden', t !== 'hist');
         document.getElementById('t1').classList.toggle('active', t === 'order');
         document.getElementById('t2').classList.toggle('active', t === 'hist');
         if(t === 'hist') renderHist();
@@ -137,61 +147,57 @@
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
         const dates = Object.keys(historyData).sort().reverse();
-        const { dateStr, isBeforeNoon } = getNowInfo();
+        const { todayStr, isBeforeNoon } = getNowInfo();
 
+        if (dates.length === 0) box.innerHTML = '<div style="text-align:center;padding:40px;color:#bbb;">История пуста</div>';
         dates.forEach(d => {
             const o = historyData[d];
-            const canEdit = (d > dateStr) || (d === dateStr && isBeforeNoon);
-            
-            let itemsHtml = o.items.map(i => `<div class="row" style="font-size:12px;color:#777;margin-top:4px"><span>${i.name}</span><b>x${i.qty}</b></div>`).join('');
-            box.innerHTML += `<div class="card" onclick="repeatOrder('${d}')">
-                <div class="row" style="border-bottom:1px solid #f5f5f5;padding-bottom:8px;margin-bottom:8px">
-                    <b>${d} ${d === dateStr ? '(Сегодня)' : ''}</b>
+            const canEdit = (d > todayStr) || (d === todayStr && isBeforeNoon);
+            let itemsHtml = o.items.map(i => `<div class="row" style="font-size:13px; margin-bottom:5px; color:#666"><span>${i.name}</span><b>x${i.qty}</b></div>`).join('');
+            box.innerHTML += `<div class="card">
+                <div class="row" style="border-bottom:1px solid #f5f5f5; margin-bottom:12px; padding-bottom:10px">
+                    <b>${d} ${d === todayStr ? '(СЕГОДНЯ)' : ''}</b> 
                     <div class="row">
-                        <span class="btn-repeat">${canEdit ? 'ИЗМЕНИТЬ' : 'ПОВТОРИТЬ'}</span>
-                        <b style="margin-left:10px">${o.total} ₽</b>
+                        ${canEdit ? `<span onclick="editOrder('${d}')" style="margin-right:15px; font-size:20px; cursor:pointer; color:var(--brand-main)">✎</span>` : ''}
+                        <b>${o.total} ₽</b>
                     </div>
                 </div>
                 ${itemsHtml}
+                <button class="btn-send" style="background:var(--brand-light); color:var(--brand-main); font-size:11px; margin-top:10px; width:100%; box-shadow:none; padding:12px" onclick="startRepeat('${d}')">ПОВТОРИТЬ НА НОВУЮ ДАТУ</button>
             </div>`;
         });
     }
 
-    function repeatOrder(d) {
+    function onDateChanged() {
         const sel = document.getElementById('dt').value;
-        const o = historyData[d];
-        if(!o) return;
-        
-        allOrders[sel] = {};
-        o.items.forEach(i => {
-            if(i.name !== "Доставка") {
-                allOrders[sel][i.name] = {qty: i.qty, price: i.price};
-            }
-        });
-        
-        tg.HapticFeedback.notificationOccurred('success');
-        tab('order');
-        tg.showAlert(`Заказ от ${d} скопирован в корзину на ${sel}`);
+        if (repeatItems) {
+            allOrders[sel] = {};
+            repeatItems.forEach(i => { if(i.name !== "Доставка") allOrders[sel][i.name] = {qty: i.qty, price: i.price}; });
+            repeatItems = null;
+        }
+        renderMenu();
     }
+
+    function editOrder(d) {
+        document.getElementById('dt').value = d; allOrders[d] = {};
+        historyData[d].items.forEach(i => { if(i.name !== "Доставка") allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
+        tab('order'); renderMenu();
+    }
+
+    function startRepeat(d) { repeatItems = historyData[d].items; tab('order'); }
 
     async function send() {
         const sel = document.getElementById('dt').value;
         if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("Корзина пуста");
-        tg.showConfirm(`Заказать на ${sel}?`, async (ok) => {
+        tg.showConfirm(`Оформить на ${sel}?`, async (ok) => {
             if(ok) {
+                if(tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
-                tg.showAlert("Готово!"); refresh(); tab('hist');
+                tg.showAlert("Заказ принят!"); await refresh(); tab('hist');
             }
         });
     }
-
-    const { dateStr, isBeforeNoon } = getNowInfo();
-    const defaultDate = isBeforeNoon ? dateStr : new Date(new Date().getTime() + 86400000).toISOString().split('T')[0];
-    document.getElementById('dt').value = defaultDate;
-    document.getElementById('dt').min = dateStr;
-
-    tg.expand();
-    refresh();
+    load();
 </script>
 </body>
 </html>
