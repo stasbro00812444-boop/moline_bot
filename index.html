@@ -34,7 +34,7 @@
         <div id="t2" class="tab" onclick="tab('hist')">История</div>
     </div>
     <div id="manager-bar" class="manager-sticky hidden">
-        <div style="font-size: 12px; line-height: 1.3;">Нужно изменить заказ <br><b>после 12:00?</b></div>
+        <div style="font-size: 12px; line-height: 1.3;">Нужно изменить заказ <br><b>на завтра после 12:00?</b></div>
         <button class="btn-manager-small" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button>
     </div>
     <div id="p1" class="container">
@@ -58,26 +58,26 @@
     const user = String(tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").replace('@','').toLowerCase();
     let menuData = [], historyData = {}, allOrders = {}, repeatItems = null;
 
-    function getNowInfo() {
+    function getDates() {
         const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
         const isBeforeNoon = now.getHours() < 12;
-        return { todayStr, isBeforeNoon };
+        
+        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+        
+        const dayAfterTom = new Date(); dayAfterTom.setDate(dayAfterTom.getDate() + 2);
+        const dayAfterTomStr = dayAfterTom.toISOString().split('T')[0];
+
+        return { isBeforeNoon, tomorrowStr, dayAfterTomStr };
     }
 
     async function load() {
-        const { todayStr, isBeforeNoon } = getNowInfo();
-        let defDate = todayStr;
-        let minDate = todayStr;
-
-        // Если после 12, то минимальная дата - завтра
-        if (!isBeforeNoon) {
-            let tom = new Date(); tom.setDate(tom.getDate() + 1);
-            defDate = tom.toISOString().split('T')[0];
-            minDate = defDate;
-        }
-
-        document.getElementById('dt').value = defDate;
+        const { isBeforeNoon, tomorrowStr, dayAfterTomStr } = getDates();
+        
+        // Если до 12:00 — можно на завтра. Если после 12:00 — только на послезавтра.
+        let minDate = isBeforeNoon ? tomorrowStr : dayAfterTomStr;
+        
+        document.getElementById('dt').value = minDate;
         document.getElementById('dt').min = minDate;
         tg.expand();
         await refresh();
@@ -147,36 +147,35 @@
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
         const dates = Object.keys(historyData).sort().reverse();
-        const { todayStr, isBeforeNoon } = getNowInfo();
+        const { isBeforeNoon, tomorrowStr } = getDates();
 
         if (dates.length === 0) box.innerHTML = '<div style="text-align:center;padding:40px;color:#bbb;">История пуста</div>';
         dates.forEach(d => {
             const o = historyData[d];
-            const canEdit = (d > todayStr) || (d === todayStr && isBeforeNoon);
+            // Редактировать можно, если дата доставки позже завтра ИЛИ если дата доставки = завтра, но сейчас еще нет 12:00.
+            const canEdit = (d > tomorrowStr) || (d === tomorrowStr && isBeforeNoon);
             let itemsHtml = o.items.map(i => `<div class="row" style="font-size:13px; margin-bottom:5px; color:#666"><span>${i.name}</span><b>x${i.qty}</b></div>`).join('');
             box.innerHTML += `<div class="card">
                 <div class="row" style="border-bottom:1px solid #f5f5f5; margin-bottom:12px; padding-bottom:10px">
-                    <b>${d} ${d === todayStr ? '(СЕГОДНЯ)' : ''}</b> 
+                    <b>${d}</b> 
                     <div class="row">
                         ${canEdit ? `<span onclick="editOrder('${d}')" style="margin-right:15px; font-size:20px; cursor:pointer; color:var(--brand-main)">✎</span>` : ''}
                         <b>${o.total} ₽</b>
                     </div>
                 </div>
                 ${itemsHtml}
-                <button class="btn-send" style="background:var(--brand-light); color:var(--brand-main); font-size:11px; margin-top:10px; width:100%; box-shadow:none; padding:12px" onclick="startRepeat('${d}')">ПОВТОРИТЬ НА НОВУЮ ДАТУ</button>
+                <button class="btn-send" style="background:var(--brand-light); color:var(--brand-main); font-size:11px; margin-top:10px; width:100%; box-shadow:none; padding:12px" onclick="startRepeat('${d}')">ПОВТОРИТЬ НА ДРУГУЮ ДАТУ</button>
             </div>`;
         });
     }
 
     function onDateChanged() {
         const sel = document.getElementById('dt').value;
-        const { todayStr, isBeforeNoon } = getNowInfo();
+        const { isBeforeNoon, tomorrowStr } = getDates();
         
-        // Доп. защита на фронте: если руками ввели сегодня после 12
-        if (sel === todayStr && !isBeforeNoon) {
-            tg.showAlert("После 12:00 заказы на сегодня не принимаются.");
-            load(); // Сбросить дату
-            return;
+        if (sel === tomorrowStr && !isBeforeNoon) {
+            tg.showAlert("Прием заказов на завтра окончен (после 12:00).");
+            load(); return;
         }
 
         if (repeatItems) {
@@ -197,10 +196,10 @@
 
     async function send() {
         const sel = document.getElementById('dt').value;
-        const { todayStr, isBeforeNoon } = getNowInfo();
+        const { isBeforeNoon, tomorrowStr } = getDates();
 
-        if (sel === todayStr && !isBeforeNoon) {
-            return tg.showAlert("Заказы на сегодня принимаются только до 12:00.");
+        if (sel === tomorrowStr && !isBeforeNoon) {
+            return tg.showAlert("Заказы на завтра принимаются только до 12:00.");
         }
 
         if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("Корзина пуста");
@@ -208,7 +207,6 @@
         tg.showConfirm(`Оформить на ${sel}?`, async (ok) => {
             if(ok) {
                 document.getElementById('send-btn').disabled = true;
-                if(tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
                 try {
                     const res = await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
                     const text = await res.text();
