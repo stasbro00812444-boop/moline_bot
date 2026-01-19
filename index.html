@@ -66,7 +66,7 @@
             const h = await fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json());
             menuData = m.menu || []; historyData = h || {}; 
             renderMenu();
-        } catch(e) { console.error(e); }
+        } catch(e) { console.error("Refresh fail:", e); }
     }
 
     function renderMenu() {
@@ -75,11 +75,12 @@
 
         let groups = {};
         menuData.forEach(item => {
-            let c = (item.cat && item.cat !== "undefined") ? item.cat : "БЕЗ КАТЕГОРИИ";
-            if (!groups[c]) groups[c] = [];
-            groups[c].push(item);
+            let cat = item.cat || "ПРОЧЕЕ";
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(item);
         });
 
+        // Сортировка категорий (Выпечка — всегда первая)
         Object.keys(groups).sort((a, b) => {
             let aL = a.toLowerCase(), bL = b.toLowerCase();
             if (aL.includes("выпечка")) return -1;
