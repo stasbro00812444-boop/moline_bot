@@ -5,26 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root { --brand-main: #f377c6; --brand-bg: #f0e4f1; --text-dark: #222; }
-        body { font-family: -apple-system, sans-serif; background: var(--brand-bg); margin: 0; padding: 0; color: var(--text-dark); -webkit-tap-highlight-color: transparent; }
+        :root { --main: #f377c6; --bg: #f8f0f8; --text: #2c2c2c; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 0; color: var(--text); -webkit-tap-highlight-color: transparent; }
         .tabs { display: flex; background: #fff; border-bottom: 2px solid #ddd; position: sticky; top: 0; z-index: 100; }
         .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; font-size: 13px; }
-        .tab.active { color: var(--brand-main); border-bottom: 3px solid var(--brand-main); }
-        .manager-sticky { position: sticky; top: 51px; z-index: 90; background: var(--brand-main); padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; color: #fff; }
-        .btn-manager-small { background: #fff; color: var(--brand-main); border: none; padding: 10px 16px; border-radius: 12px; font-size: 11px; font-weight: 900; text-transform: uppercase; cursor: pointer; }
-        .container { padding: 15px; padding-bottom: 180px; }
-        .card { background: #fff; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #eee; box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
-        .cat-title { font-size: 13px; font-weight: 900; color: var(--brand-main); margin: 25px 0 10px 5px; text-transform: uppercase; border-left: 3px solid var(--brand-main); padding-left: 8px; }
+        .tab.active { color: var(--main); border-bottom: 3px solid var(--main); }
+        .manager-bar { background: var(--main); color: #fff; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; }
+        .btn-m { background: #fff; color: var(--main); border: none; padding: 8px 12px; border-radius: 10px; font-weight: 800; font-size: 11px; }
+        .container { padding: 15px; padding-bottom: 160px; }
+        .card { background: #fff; border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
         .row { display: flex; align-items: center; justify-content: space-between; }
-        .stepper { display: flex; align-items: center; background: #fff; border-radius: 20px; padding: 4px 10px; border: 2.5px solid var(--brand-main); }
-        .btn-s { border: none; color: var(--brand-main); font-size: 24px; font-weight: 900; background: none; width: 30px; cursor: pointer; }
-        .q-val { min-width: 35px; text-align: center; font-weight: 900; font-size: 17px; cursor: pointer; }
-        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; padding: 15px 20px 30px; box-sizing: border-box; border-top: 1px solid #eee; z-index: 1000; }
-        .btn-send { background: var(--brand-main); color: #fff; border: none; padding: 16px; border-radius: 14px; font-weight: 900; width: 100%; font-size: 16px; }
+        .cat-title { font-size: 12px; font-weight: 900; color: var(--main); margin: 20px 0 10px 5px; text-transform: uppercase; }
+        .stepper { display: flex; align-items: center; background: #fdf7fc; border-radius: 12px; padding: 4px; border: 1.5px solid #f377c644; }
+        .btn-s { border: none; color: var(--main); font-size: 22px; font-weight: 800; background: none; width: 34px; cursor: pointer; }
+        .q-val { min-width: 30px; text-align: center; font-weight: 800; font-size: 16px; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; }
+        .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; font-size: 16px; }
+        .btn-repeat { background: #f0f0f0; border: none; padding: 6px 12px; border-radius: 8px; font-weight: 700; color: #666; font-size: 11px; }
         .hidden { display: none !important; }
-        input[type="date"] { background: #fff; border: 1px solid #ddd; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 800; font-size: 16px; outline: none; }
-        .loader { text-align: center; padding: 50px; font-weight: 800; color: var(--brand-main); }
-        #debug-tag { font-size: 9px; text-align: center; color: var(--brand-main); opacity: 0.6; margin-top: 5px; text-transform: uppercase; }
+        input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; outline: none; }
     </style>
 </head>
 <body>
@@ -32,82 +31,71 @@
         <div id="t1" class="tab active" onclick="tab('order')">ЗАКАЗАТЬ</div>
         <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
     </div>
-    <div id="manager-bar" class="manager-sticky hidden">
-        <div style="font-size: 12px; font-weight: 700;">Нужно изменить заказ <br><b>после 12:00?</b></div>
-        <button class="btn-manager-small" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button>
+    <div id="m-bar" class="manager-bar hidden">
+        <span>Нужно изменить заказ после 12:00?</span>
+        <button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button>
     </div>
     <div id="p1" class="container">
         <div class="card">
-            <div style="font-size: 10px; font-weight: 800; color: #999;">ВЫБЕРИТЕ ДАТУ ДОСТАВКИ</div>
-            <input type="date" id="dt" onchange="onDateChanged()">
-            <div id="debug-tag"></div>
+            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div>
+            <input type="date" id="dt" onchange="renderMenu()">
         </div>
-        <div id="menu"><div class="loader">ЗАГРУЗКА...</div></div>
+        <div id="menu"></div>
     </div>
     <div id="p2" class="container hidden"></div>
     <div class="footer" id="f">
-        <div id="summary" style="font-size: 11px; color: #999; margin-bottom: 8px; font-weight: 800; text-align: right;"></div>
+        <div id="summary" style="font-size: 11px; color: #999; margin-bottom: 5px; text-align: right; font-weight: 700;"></div>
         <div class="row">
-            <div><span style="font-size:10px; color:#999; font-weight:900">ИТОГО</span><br><b id="tot" style="font-size:24px">0 ₽</b></div>
-            <button class="btn-send" style="width: auto; padding: 16px 40px;" onclick="send()">ОФОРМИТЬ</button>
+            <div><span style="font-size:10px; color:#999; font-weight:800">ИТОГО</span><br><b id="tot" style="font-size:22px">0 ₽</b></div>
+            <button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button>
         </div>
     </div>
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbzHhmV9IOYNG16gS-djnQmtCZzat8-40V17AB-NTR_y6f8iWJ7N3SbqgwQi6fLzstYK/exec';
+    const API = 'https://script.google.com/macros/s/AKfycbxbd1Y-sStrnjZOD0U9uX7PHi7mrtvhU6ClILoyIvCwUckTg9qHk2yuVtgZDZmulb0m/exec';
     const user = (tg.initDataUnsafe?.user?.username || "guest").toLowerCase();
     let menuData = [], historyData = {}, allOrders = {};
 
-    function isLocked(dateStr) {
-        const now = new Date();
-        const selDate = new Date(dateStr);
-        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-        
-        // Если выбранная дата — это завтра или сегодня/прошлое
-        const isTomorrow = selDate.toDateString() === tomorrow.toDateString();
-        const isTodayOrPast = selDate <= new Date().setHours(0,0,0,0);
-        
-        if (isTodayOrPast) return true;
-        if (isTomorrow && now.getHours() >= 12) return true; // Дедлайн 12:00
+    function getLock(dStr) {
+        const now = new Date(), sel = new Date(dStr);
+        const today = new Date(); today.setHours(0,0,0,0);
+        const tom = new Date(); tom.setDate(tom.getDate() + 1); tom.setHours(0,0,0,0);
+        if (sel <= today) return true; // Сегодня и прошлое - блок
+        if (sel.getTime() === tom.getTime() && now.getHours() >= 12) return true; // Завтра после 12 - блок
         return false;
     }
 
     async function load() {
-        const box = document.getElementById('menu');
         try {
             let t = new Date(); t.setDate(t.getDate() + 1);
-            // Если сейчас уже после 12:00, ставим по умолчанию послезавтра
             if (new Date().getHours() >= 12) t.setDate(t.getDate() + 1);
-            
             document.getElementById('dt').value = t.toISOString().split('T')[0];
-            document.getElementById('dt').min = new Date().toISOString().split('T')[0];
-            tg.expand();
+            document.getElementById('dt').min = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0];
             
             const [m, h] = await Promise.all([
-                fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`).then(r => r.json()),
-                fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json())
+                fetch(`${API}?type=menu&user=${user}`).then(r => r.json()),
+                fetch(`${API}?user=${user}`).then(r => r.json())
             ]);
             menuData = m.menu || []; historyData = h || {};
-            document.getElementById('debug-tag').innerText = `Лист: ${m.source} | Юзер: ${user}`;
             renderMenu();
-        } catch (e) { box.innerHTML = '<div class="loader">ОШИБКА СЕТИ</div>'; }
+        } catch (e) { document.getElementById('menu').innerHTML = "Ошибка загрузки"; }
     }
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
-        const locked = isLocked(sel);
-        box.innerHTML = locked ? '<div class="loader" style="color:orange">НА ЭТУ ДАТУ ЗАКАЗ ЗАКРЫТ (ДЕДЛАЙН 12:00)</div>' : '';
-        if (locked) { document.getElementById('tot').innerText = "0 ₽"; return; }
-        
-        let groups = {};
+        if (getLock(sel)) {
+            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:30px;">Заказ на эту дату закрыт.</div>`;
+            document.getElementById('tot').innerText = "0 ₽"; return;
+        }
+        box.innerHTML = ''; let groups = {};
         menuData.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
-        for (let cat in groups) {
-            box.innerHTML += `<div class="cat-title">${cat}</div>`;
-            groups[cat].forEach(i => {
+        for (let c in groups) {
+            box.innerHTML += `<div class="cat-title">${c}</div>`;
+            groups[c].forEach(i => {
                 const q = allOrders[sel]?.[i.name]?.qty || 0;
                 box.innerHTML += `<div class="card row">
-                    <div><b>${i.name}</b><br><small style="color:#777; font-weight:700;">${i.price} ₽</small></div>
+                    <div><b>${i.name}</b><br><small>${i.price} ₽</small></div>
                     <div class="stepper">
                         <button class="btn-s" onclick="upd('${i.name}',${i.price},-1)">-</button>
                         <div class="q-val">${q}</div>
@@ -139,6 +127,7 @@
         document.getElementById('p1').classList.toggle('hidden', t!=='order');
         document.getElementById('p2').classList.toggle('hidden', t!=='hist');
         document.getElementById('f').classList.toggle('hidden', t!=='order');
+        document.getElementById('m-bar').classList.toggle('hidden', t!=='hist');
         document.getElementById('t1').classList.toggle('active', t==='order');
         document.getElementById('t2').classList.toggle('active', t==='hist');
         if(t === 'hist') renderHist();
@@ -147,18 +136,27 @@
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
         const dates = Object.keys(historyData).sort().reverse();
+        if(dates.length === 0) box.innerHTML = '<div style="text-align:center; padding:40px; color:#999;">История пуста</div>';
         dates.forEach(d => {
-            const locked = isLocked(d);
+            const locked = getLock(d);
             box.innerHTML += `<div class="card">
                 <div class="row">
-                    <b>${d}</b> 
-                    <div>
-                        ${!locked ? `<span onclick="edit('${d}')" style="color:var(--brand-main); font-size:20px; cursor:pointer; margin-right:10px;">✎</span>` : ''}
-                        <b>${historyData[d].total} ₽</b>
-                    </div>
+                    <b>${d}</b>
+                    <b style="color:var(--main)">${historyData[d].total} ₽</b>
+                </div>
+                <div class="row" style="margin-top:10px;">
+                    <button class="btn-repeat" onclick="rep('${d}')">ПОВТОРИТЬ</button>
+                    ${!locked ? `<span onclick="edit('${d}')" style="color:var(--main); font-size:24px; cursor:pointer;">✎</span>` : '<span style="font-size:10px; color:#999;">ЗАКРЫТ</span>'}
                 </div>
             </div>`;
         });
+    }
+
+    function rep(d) {
+        const next = document.getElementById('dt').value;
+        allOrders[next] = {};
+        historyData[d].items.forEach(i => { allOrders[next][i.name] = {qty: i.qty, price: i.price}; });
+        tab('order'); renderMenu();
     }
 
     function edit(d) {
@@ -169,17 +167,14 @@
 
     async function send() {
         const sel = document.getElementById('dt').value;
-        if(!allOrders[sel]) return;
-        if(isLocked(sel)) return tg.showAlert("Заказ на эту дату уже закрыт!");
+        if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return;
         tg.showConfirm(`Оформить на ${sel}?`, async (ok) => {
             if(ok) {
-                const res = await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
-                if ((await res.text()) === "OK") { tg.showAlert("ПРИНЯТО!"); load(); tab('hist'); }
-                else { tg.showAlert("ОШИБКА: Дедлайн прошел"); }
+                await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
+                tg.showAlert("ПРИНЯТО!"); load(); tab('hist');
             }
         });
     }
-    function onDateChanged() { renderMenu(); }
     load();
 </script>
 </body>
