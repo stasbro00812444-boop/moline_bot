@@ -24,7 +24,8 @@
         .btn-repeat { background: var(--main); border: none; padding: 12px 0; border-radius: 12px; font-weight: 800; color: #fff; font-size: 12px; cursor: pointer; width: 100%; text-transform: uppercase; }
         .edit-icon { color: var(--main); font-size: 24px; cursor: pointer; padding: 5px; margin-left: 10px; line-height: 1; }
         .hidden { display: none !important; }
-        input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; outline: none; }
+        input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; outline: none; background: #fff; }
+        input[type="date"]:disabled { background: #f0f0f0; color: #ccc; }
     </style>
 </head>
 <body>
@@ -38,10 +39,10 @@
     </div>
     <div id="p1" class="container">
         <div class="card" id="copy-notify" style="display:none; background: #fff3f9; border: 1.5px dashed var(--main); text-align:center; font-size:12px; color:var(--main); font-weight:800; margin-bottom:12px; padding: 12px;">
-            ЗАКАЗ В ПАМЯТИ. ВЫ МОЖЕТЕ ОТРЕДАКТИРОВАТЬ ЕГО НИЖЕ
+            ЗАКАЗ СКОПИРОВАН. ВЫБЕРИТЕ ДОСТУПНУЮ ДАТУ
         </div>
         <div class="card">
-            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div>
+            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ (Прием до 12:00)</div>
             <input type="date" id="dt" onchange="renderMenu()">
         </div>
         <div id="menu"></div>
@@ -66,24 +67,25 @@
         const today = new Date(); today.setHours(0,0,0,0);
         const tom = new Date(today); tom.setDate(today.getDate() + 1);
         
-        // 1. Сегодня - закрыто ВСЕГДА (нужно было заказывать вчера до 12)
-        if (sel.getTime() === today.getTime()) return true;
-        // 2. Прошлое - закрыто всегда
-        if (sel.getTime() < today.getTime()) return true;
-        // 3. Завтра - закрыто, если сегодня уже 12:00 или позже
-        if (sel.getTime() === tom.getTime() && now.getHours() >= 12) return true;
-        
+        if (sel.getTime() <= today.getTime()) return true; // Сегодня и прошлое - блок
+        if (sel.getTime() === tom.getTime() && now.getHours() >= 12) return true; // Завтра после 12 - блок
         return false;
+    }
+
+    function setMinDate() {
+        const now = new Date();
+        let minD = new Date();
+        // Если сегодня до 12, ближайший день - завтра. Если после 12 - послезавтра.
+        minD.setDate(now.getDate() + (now.getHours() >= 12 ? 2 : 1));
+        const minStr = minD.toISOString().split('T')[0];
+        const input = document.getElementById('dt');
+        input.setAttribute('min', minStr);
+        if (input.value < minStr) input.value = minStr;
     }
 
     async function load() {
         try {
-            const now = new Date();
-            let t = new Date();
-            // Ставим дефолтную дату: послезавтра, если сегодня после 12, иначе - завтра
-            t.setDate(now.getDate() + (now.getHours() >= 12 ? 2 : 1));
-            
-            document.getElementById('dt').value = t.toISOString().split('T')[0];
+            setMinDate();
             const [m, h] = await Promise.all([
                 fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`).then(r => r.json()),
                 fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json())
@@ -95,13 +97,12 @@
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
-        if (buffer && !getLock(sel)) { allOrders[sel] = JSON.parse(JSON.stringify(buffer)); }
-
         if (getLock(sel)) {
-            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Заказ на эту дату закрыт.<br><small style="font-size:10px; opacity:0.7;">(Заказы принимаются до 12:00 предыдущего дня)</small></div>`;
+            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Дата недоступна для заказа.<br><small>Выберите другой день в календаре.</small></div>`;
             document.getElementById('tot').innerText = "0 ₽"; return;
         }
-
+        if (buffer) { allOrders[sel] = JSON.parse(JSON.stringify(buffer)); }
+        
         box.innerHTML = ''; let groups = {};
         menuData.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
         for (let c in groups) {
@@ -135,6 +136,7 @@
     }
 
     function applyUpd(s, n, p, q) {
+        if(getLock(s)) return;
         allOrders[s] = allOrders[s] || {};
         if(q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
         renderMenu(); tg.HapticFeedback?.impactOccurred('light');
@@ -175,6 +177,7 @@
                 </div>
                 <div style="font-size:11px; color:#777; margin-bottom:15px; line-height:1.4;">${preview || 'Нет данных'}</div>
                 <button class="btn-repeat" onclick="copyToBuffer('${d}')">Повторить заказ</button>
+                ${locked ? `<div style="text-align:center; font-size:9px; color:#bbb; margin-top:8px; font-weight:800;">РЕДАКТИРОВАНИЕ ЗАКРЫТО</div>` : ''}
             </div>`;
         });
     }
@@ -184,11 +187,12 @@
         historyData[d].items.forEach(i => { if(i.name) buffer[i.name] = {qty: i.qty, price: i.price}; });
         document.getElementById('copy-notify').style.display='block';
         tab('order');
-        tg.showAlert("Заказ скопирован! Теперь выберите дату и отредактируйте, если нужно.");
+        tg.showAlert("Заказ скопирован! Выберите дату доставки.");
         renderMenu();
     }
 
     function edit(d) {
+        if(getLock(d)) { tg.showAlert("Срок редактирования этого заказа истек."); return; }
         buffer = null; 
         allOrders[d] = {};
         historyData[d].items.forEach(i => { if(i.name) allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
@@ -197,6 +201,7 @@
 
     async function send() {
         const s = document.getElementById('dt').value;
+        if(getLock(s)) { tg.showAlert("На эту дату заказ уже не принимается."); return; }
         if(!allOrders[s] || !Object.keys(allOrders[s]).length) return;
         tg.showConfirm(`Оформить на ${s}?`, async (ok) => {
             if(ok) {
