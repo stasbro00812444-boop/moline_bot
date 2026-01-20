@@ -25,6 +25,10 @@
         .edit-icon { color: var(--main); font-size: 24px; cursor: pointer; padding: 5px; margin-left: 10px; line-height: 1; }
         .hidden { display: none !important; }
         input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; outline: none; background: #fff; }
+        
+        /* Стили для новой кнопки отмены */
+        .copy-banner { display:none; background: #fff3f9; border: 1.5px dashed var(--main); border-radius: 18px; margin-bottom:12px; padding: 12px; }
+        .btn-cancel { background: #fff; color: #ff4d4d; border: 1px solid #ff4d4d; padding: 4px 8px; border-radius: 8px; font-size: 10px; font-weight: 800; cursor: pointer; margin-top: 8px; }
     </style>
 </head>
 <body>
@@ -37,8 +41,11 @@
         <button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button>
     </div>
     <div id="p1" class="container">
-        <div class="card" id="copy-notify" style="display:none; background: #fff3f9; border: 1.5px dashed var(--main); text-align:center; font-size:12px; color:var(--main); font-weight:800; margin-bottom:12px; padding: 12px;">
-            ТЕПЕРЬ ВЫБЕРИТЕ НЕОБХОДИМУЮ ВАМ ДАТУ !
+        <div id="copy-notify" class="copy-banner">
+            <div style="font-size:12px; color:var(--main); font-weight:800; text-align:center;">
+                ТЕПЕРЬ ВЫБЕРИТЕ НЕОБХОДИМУЮ ВАМ ДАТУ !
+            </div>
+            <div style="text-align:center;"><button class="btn-cancel" onclick="cancelBuffer()">ОТМЕНИТЬ КОПИРОВАНИЕ</button></div>
         </div>
         <div class="card">
             <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ (Прием до 12:00)</div>
@@ -131,6 +138,15 @@
         calc();
     }
 
+    function cancelBuffer() {
+        const sel = document.getElementById('dt').value;
+        buffer = null; 
+        allOrders[sel] = {}; // Очищаем текущий выбор
+        document.getElementById('copy-notify').style.display = 'none';
+        renderMenu();
+        tg.HapticFeedback?.notificationOccurred('warning');
+    }
+
     function syncToBuffer(n, q) {
         if (buffer) {
             if (q <= 0) delete buffer[n];
@@ -169,7 +185,7 @@
         document.getElementById('p1').classList.toggle('hidden', t!=='order');
         document.getElementById('p2').classList.toggle('hidden', t!=='hist');
         document.getElementById('f').classList.toggle('hidden', t!=='order');
-        document.getElementById('m-bar').classList.toggle('hidden', t!=='hist'); // Кнопка менеджера только в истории
+        document.getElementById('m-bar').classList.toggle('hidden', t!=='hist');
         document.getElementById('t1').classList.toggle('active', t==='order');
         document.getElementById('t2').classList.toggle('active', t==='hist');
         if(t === 'hist') renderHist();
