@@ -21,7 +21,7 @@
         .q-val { min-width: 30px; text-align: center; font-weight: 800; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; }
         .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; font-size: 16px; cursor: pointer; }
-        .btn-repeat { background: var(--main); border: none; padding: 10px 0; border-radius: 12px; font-weight: 800; color: #fff; font-size: 12px; cursor: pointer; width: 100%; text-transform: uppercase; }
+        .btn-repeat { background: var(--main); border: none; padding: 12px 0; border-radius: 12px; font-weight: 800; color: #fff; font-size: 12px; cursor: pointer; width: 100%; text-transform: uppercase; }
         .edit-icon { color: var(--main); font-size: 24px; cursor: pointer; padding: 5px; margin-left: 10px; line-height: 1; }
         .hidden { display: none !important; }
         input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; outline: none; }
@@ -38,7 +38,7 @@
     </div>
     <div id="p1" class="container">
         <div class="card" id="copy-notify" style="display:none; background: #fff3f9; border: 1.5px dashed var(--main); text-align:center; font-size:12px; color:var(--main); font-weight:800; margin-bottom:12px; padding: 12px;">
-            ЗАКАЗ СКОПИРОВАН. ВЫБЕРИТЕ ДАТУ НИЖЕ
+            ЗАКАЗ В ПАМЯТИ. ВЫБЕРИТЕ ЛЮБУЮ ДАТУ
         </div>
         <div class="card">
             <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div>
@@ -65,15 +65,26 @@
         const now = new Date(), sel = new Date(dStr);
         const today = new Date(); today.setHours(0,0,0,0);
         const tom = new Date(today); tom.setDate(today.getDate() + 1);
-        if (sel <= today) return true;
+        
+        // Прошлое - закрыто всегда
+        if (sel.getTime() < today.getTime()) return true;
+        
+        // Сегодня - закрыто после 12:00
+        if (sel.getTime() === today.getTime() && now.getHours() >= 12) return true;
+        
+        // Завтра - закрыто после 12:00
         if (sel.getTime() === tom.getTime() && now.getHours() >= 12) return true;
+        
         return false;
     }
 
     async function load() {
         try {
-            let t = new Date(); t.setDate(t.getDate() + 1);
-            if (new Date().getHours() >= 12) t.setDate(t.getDate() + 1);
+            const now = new Date();
+            let t = new Date();
+            // По умолчанию ставим завтра, если сегодня уже после 12
+            if (now.getHours() >= 12) t.setDate(t.getDate() + 1);
+            
             document.getElementById('dt').value = t.toISOString().split('T')[0];
             const [m, h] = await Promise.all([
                 fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`).then(r => r.json()),
@@ -86,11 +97,17 @@
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
+        
+        // Липкий буфер: подтягивает данные при смене даты, пока не нажали Оформить
+        if (buffer && !getLock(sel)) { 
+            allOrders[sel] = JSON.parse(JSON.stringify(buffer)); 
+        }
+
         if (getLock(sel)) {
-            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">На ${sel} заказ закрыт.</div>`;
+            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">На ${sel} заказ закрыт (после 12:00).</div>`;
             document.getElementById('tot').innerText = "0 ₽"; return;
         }
-        if (buffer) { allOrders[sel] = JSON.parse(JSON.stringify(buffer)); buffer = null; document.getElementById('copy-notify').style.display='none'; }
+
         box.innerHTML = ''; let groups = {};
         menuData.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
         for (let c in groups) {
@@ -153,7 +170,7 @@
                 </div>
                 <div style="font-size:11px; color:#777; margin-bottom:15px; line-height:1.4;">${preview || 'Нет данных'}</div>
                 <button class="btn-repeat" onclick="copyToBuffer('${d}')">Повторить заказ</button>
-                ${locked ? `<div style="text-align:center; font-size:9px; color:#bbb; margin-top:8px; font-weight:800; letter-spacing:1px;">РЕДАКТИРОВАНИЕ ЗАКРЫТО</div>` : ''}
+                ${locked ? `<div style="text-align:center; font-size:9px; color:#bbb; margin-top:8px; font-weight:800; letter-spacing:1px;">ИЗМЕНЕНИЯ ЗАКРЫТЫ</div>` : ''}
             </div>`;
         });
     }
@@ -163,10 +180,12 @@
         historyData[d].items.forEach(i => { if(i.name) buffer[i.name] = {qty: i.qty, price: i.price}; });
         document.getElementById('copy-notify').style.display='block';
         tab('order');
-        tg.showAlert("Заказ скопирован! Теперь выберите новую дату.");
+        tg.showAlert("Заказ скопирован! Теперь выберите дату.");
+        renderMenu();
     }
 
     function edit(d) {
+        buffer = null; 
         allOrders[d] = {};
         historyData[d].items.forEach(i => { if(i.name) allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
         document.getElementById('dt').value = d; tab('order'); renderMenu();
@@ -178,6 +197,8 @@
         tg.showConfirm(`Оформить на ${s}?`, async (ok) => {
             if(ok) {
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:s, items:allOrders[s]})});
+                buffer = null; 
+                document.getElementById('copy-notify').style.display='none';
                 tg.showAlert("ПРИНЯТО!"); load(); tab('hist');
             }
         });
