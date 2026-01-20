@@ -10,6 +10,8 @@
         .tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
         .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; font-size: 13px; }
         .tab.active { color: var(--main); border-bottom: 3px solid var(--main); }
+        .m-bar { background: var(--main); color: #fff; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; }
+        .btn-m { background: #fff; color: var(--main); border: none; padding: 8px 12px; border-radius: 10px; font-weight: 800; cursor: pointer; }
         .container { padding: 15px; padding-bottom: 160px; }
         .card { background: #fff; border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); position: relative; }
         .row { display: flex; align-items: center; justify-content: space-between; }
@@ -30,9 +32,13 @@
         <div id="t1" class="tab active" onclick="tab('order')">ЗАКАЗАТЬ</div>
         <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
     </div>
+    <div id="m-bar" class="m-bar hidden">
+        <span>Нужно изменить заказ после 12:00?</span>
+        <button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button>
+    </div>
     <div id="p1" class="container">
         <div class="card" id="copy-notify" style="display:none; background: #fff3f9; border: 1.5px dashed var(--main); text-align:center; font-size:12px; color:var(--main); font-weight:800; margin-bottom:12px; padding: 12px;">
-            РЕЖИМ КОПИРОВАНИЯ: ЦИФРЫ СОХРАНЯЮТСЯ ПРИ СМЕНЕ ДАТЫ
+            ТЕПЕРЬ ВЫБЕРИТЕ НЕОБХОДИМУЮ ВАМ ДАТУ !
         </div>
         <div class="card">
             <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ (Прием до 12:00)</div>
@@ -93,14 +99,11 @@
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
-        const locked = getLock(sel);
-
-        if (locked) {
+        if (getLock(sel)) {
             box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Дата закрыта.</div>`;
             document.getElementById('tot').innerText = "0 ₽"; return;
         }
 
-        // Если есть буфер - синхронизируем его в текущую дату
         if (buffer) {
             allOrders[sel] = allOrders[sel] || {};
             for (let name in buffer) {
@@ -128,8 +131,7 @@
         calc();
     }
 
-    function syncToBuffer(n, p, q) {
-        // Если мы в режиме копирования, обновляем данные и в буфере тоже!
+    function syncToBuffer(n, q) {
         if (buffer) {
             if (q <= 0) delete buffer[n];
             else buffer[n] = { qty: q };
@@ -142,8 +144,7 @@
         if(getLock(s)) return;
         allOrders[s] = allOrders[s] || {};
         if(q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
-        syncToBuffer(n, p, q);
-        calc(); // Быстрый пересчет без полного ререндера
+        syncToBuffer(n, q); calc();
     }
 
     function upd(n, p, d) {
@@ -152,8 +153,7 @@
         allOrders[s] = allOrders[s] || {};
         let q = (allOrders[s][n]?.qty || 0) + d;
         if(q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
-        syncToBuffer(n, p, q);
-        renderMenu();
+        syncToBuffer(n, q); renderMenu();
         tg.HapticFeedback?.impactOccurred('light');
     }
 
@@ -169,6 +169,7 @@
         document.getElementById('p1').classList.toggle('hidden', t!=='order');
         document.getElementById('p2').classList.toggle('hidden', t!=='hist');
         document.getElementById('f').classList.toggle('hidden', t!=='order');
+        document.getElementById('m-bar').classList.toggle('hidden', t!=='hist'); // Кнопка менеджера только в истории
         document.getElementById('t1').classList.toggle('active', t==='order');
         document.getElementById('t2').classList.toggle('active', t==='hist');
         if(t === 'hist') renderHist();
@@ -198,14 +199,12 @@
         buffer = {};
         historyData[d].items.forEach(i => { if(i.name) buffer[i.name] = {qty: i.qty}; });
         document.getElementById('copy-notify').style.display = 'block';
-        tab('order');
-        renderMenu();
+        tab('order'); renderMenu();
     }
 
     function edit(d) {
         if(getLock(d)) return;
-        buffer = null; // При обычном редактировании буфер не нужен
-        document.getElementById('copy-notify').style.display = 'none';
+        buffer = null; document.getElementById('copy-notify').style.display = 'none';
         allOrders[d] = {};
         historyData[d].items.forEach(i => { if(i.name) allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
         document.getElementById('dt').value = d; tab('order'); renderMenu();
@@ -218,8 +217,7 @@
         tg.showConfirm(`Оформить на ${s}?`, async (ok) => {
             if(ok) {
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:s, items:allOrders[s]})});
-                buffer = null; 
-                document.getElementById('copy-notify').style.display = 'none';
+                buffer = null; document.getElementById('copy-notify').style.display = 'none';
                 load(); tab('hist');
             }
         });
