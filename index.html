@@ -18,7 +18,7 @@
         .cat { font-size: 11px; font-weight: 900; color: var(--main); margin: 15px 0 8px 5px; text-transform: uppercase; }
         .stepper { display: flex; align-items: center; background: #fdf7fc; border-radius: 12px; padding: 4px; border: 1.5px solid #f377c644; }
         .btn-s { border: none; color: var(--main); font-size: 22px; font-weight: 800; background: none; width: 34px; cursor: pointer; }
-        .q-val { min-width: 30px; text-align: center; font-weight: 800; }
+        .q-input { width: 40px; border: none; background: none; text-align: center; font-weight: 800; font-size: 16px; color: var(--text); outline: none; }
         .footer { position: fixed; bottom: 0; width: 100%; background: #fff; padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; }
         .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; font-size: 16px; cursor: pointer; }
         .btn-repeat { background: var(--main); border: none; padding: 12px 0; border-radius: 12px; font-weight: 800; color: #fff; font-size: 12px; cursor: pointer; width: 100%; text-transform: uppercase; }
@@ -38,7 +38,7 @@
     </div>
     <div id="p1" class="container">
         <div class="card" id="copy-notify" style="display:none; background: #fff3f9; border: 1.5px dashed var(--main); text-align:center; font-size:12px; color:var(--main); font-weight:800; margin-bottom:12px; padding: 12px;">
-            ЗАКАЗ В ПАМЯТИ. ВЫБЕРИТЕ ЛЮБУЮ ДАТУ
+            ЗАКАЗ В ПАМЯТИ. ВЫ МОЖЕТЕ ОТРЕДАКТИРОВАТЬ ЕГО НИЖЕ
         </div>
         <div class="card">
             <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div>
@@ -66,13 +66,11 @@
         const today = new Date(); today.setHours(0,0,0,0);
         const tom = new Date(today); tom.setDate(today.getDate() + 1);
         
-        // Прошлое - закрыто всегда
+        // 1. Сегодня - закрыто ВСЕГДА (нужно было заказывать вчера до 12)
+        if (sel.getTime() === today.getTime()) return true;
+        // 2. Прошлое - закрыто всегда
         if (sel.getTime() < today.getTime()) return true;
-        
-        // Сегодня - закрыто после 12:00
-        if (sel.getTime() === today.getTime() && now.getHours() >= 12) return true;
-        
-        // Завтра - закрыто после 12:00
+        // 3. Завтра - закрыто, если сегодня уже 12:00 или позже
         if (sel.getTime() === tom.getTime() && now.getHours() >= 12) return true;
         
         return false;
@@ -82,8 +80,8 @@
         try {
             const now = new Date();
             let t = new Date();
-            // По умолчанию ставим завтра, если сегодня уже после 12
-            if (now.getHours() >= 12) t.setDate(t.getDate() + 1);
+            // Ставим дефолтную дату: послезавтра, если сегодня после 12, иначе - завтра
+            t.setDate(now.getDate() + (now.getHours() >= 12 ? 2 : 1));
             
             document.getElementById('dt').value = t.toISOString().split('T')[0];
             const [m, h] = await Promise.all([
@@ -97,14 +95,10 @@
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
-        
-        // Липкий буфер: подтягивает данные при смене даты, пока не нажали Оформить
-        if (buffer && !getLock(sel)) { 
-            allOrders[sel] = JSON.parse(JSON.stringify(buffer)); 
-        }
+        if (buffer && !getLock(sel)) { allOrders[sel] = JSON.parse(JSON.stringify(buffer)); }
 
         if (getLock(sel)) {
-            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">На ${sel} заказ закрыт (после 12:00).</div>`;
+            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Заказ на эту дату закрыт.<br><small style="font-size:10px; opacity:0.7;">(Заказы принимаются до 12:00 предыдущего дня)</small></div>`;
             document.getElementById('tot').innerText = "0 ₽"; return;
         }
 
@@ -118,7 +112,7 @@
                     <div><b>${i.name}</b><br><small>${i.price} ₽</small></div>
                     <div class="stepper">
                         <button class="btn-s" onclick="upd('${i.name}',${i.price},-1)">-</button>
-                        <div class="q-val">${q}</div>
+                        <input type="number" class="q-input" value="${q}" onchange="manualUpd('${i.name}',${i.price},this.value)">
                         <button class="btn-s" onclick="upd('${i.name}',${i.price},1)">+</button>
                     </div>
                 </div>`;
@@ -131,6 +125,17 @@
         const s = document.getElementById('dt').value;
         allOrders[s] = allOrders[s] || {};
         let q = (allOrders[s][n]?.qty || 0) + d;
+        applyUpd(s, n, p, q);
+    }
+
+    function manualUpd(n, p, v) {
+        const s = document.getElementById('dt').value;
+        let q = parseInt(v) || 0;
+        applyUpd(s, n, p, q);
+    }
+
+    function applyUpd(s, n, p, q) {
+        allOrders[s] = allOrders[s] || {};
         if(q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
         renderMenu(); tg.HapticFeedback?.impactOccurred('light');
     }
@@ -170,7 +175,6 @@
                 </div>
                 <div style="font-size:11px; color:#777; margin-bottom:15px; line-height:1.4;">${preview || 'Нет данных'}</div>
                 <button class="btn-repeat" onclick="copyToBuffer('${d}')">Повторить заказ</button>
-                ${locked ? `<div style="text-align:center; font-size:9px; color:#bbb; margin-top:8px; font-weight:800; letter-spacing:1px;">ИЗМЕНЕНИЯ ЗАКРЫТЫ</div>` : ''}
             </div>`;
         });
     }
@@ -180,7 +184,7 @@
         historyData[d].items.forEach(i => { if(i.name) buffer[i.name] = {qty: i.qty, price: i.price}; });
         document.getElementById('copy-notify').style.display='block';
         tab('order');
-        tg.showAlert("Заказ скопирован! Теперь выберите дату.");
+        tg.showAlert("Заказ скопирован! Теперь выберите дату и отредактируйте, если нужно.");
         renderMenu();
     }
 
