@@ -25,7 +25,6 @@
         .edit-icon { color: var(--main); font-size: 24px; cursor: pointer; padding: 5px; margin-left: 10px; line-height: 1; }
         .hidden { display: none !important; }
         input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; outline: none; background: #fff; }
-        input[type="date"]:disabled { background: #f0f0f0; color: #ccc; }
     </style>
 </head>
 <body>
@@ -62,30 +61,44 @@
     const user = (tg.initDataUnsafe?.user?.username || "guest").toLowerCase();
     let menuData = [], historyData = {}, allOrders = {}, buffer = null;
 
+    // Глобальные константы дат для сравнения строк
+    const getTodayStr = () => new Date().toISOString().split('T')[0];
+    const getTomStr = () => {
+        let d = new Date(); d.setDate(d.getDate() + 1);
+        return d.toISOString().split('T')[0];
+    };
+
     function getLock(dStr) {
-        const now = new Date(), sel = new Date(dStr);
-        const today = new Date(); today.setHours(0,0,0,0);
-        const tom = new Date(today); tom.setDate(today.getDate() + 1);
+        if (!dStr) return true;
+        const todayStr = getTodayStr();
+        const tomStr = getTomStr();
+        const nowHour = new Date().getHours();
+
+        // 1. Прошлое и Сегодня - ВСЕГДА лок
+        if (dStr <= todayStr) return true;
         
-        if (sel.getTime() <= today.getTime()) return true; // Сегодня и прошлое - блок
-        if (sel.getTime() === tom.getTime() && now.getHours() >= 12) return true; // Завтра после 12 - блок
+        // 2. Завтра - лок, если уже 12:00+ сегодня
+        if (dStr === tomStr && nowHour >= 12) return true;
+
         return false;
     }
 
-    function setMinDate() {
-        const now = new Date();
-        let minD = new Date();
-        // Если сегодня до 12, ближайший день - завтра. Если после 12 - послезавтра.
-        minD.setDate(now.getDate() + (now.getHours() >= 12 ? 2 : 1));
-        const minStr = minD.toISOString().split('T')[0];
+    function initCalendar() {
         const input = document.getElementById('dt');
+        const nowHour = new Date().getHours();
+        
+        // Минимально возможная дата для выбора
+        let minDate = new Date();
+        minDate.setDate(minDate.getDate() + (nowHour >= 12 ? 2 : 1));
+        
+        const minStr = minDate.toISOString().split('T')[0];
         input.setAttribute('min', minStr);
-        if (input.value < minStr) input.value = minStr;
+        input.value = minStr;
     }
 
     async function load() {
         try {
-            setMinDate();
+            initCalendar();
             const [m, h] = await Promise.all([
                 fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`).then(r => r.json()),
                 fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json())
@@ -97,10 +110,13 @@
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
+        
         if (getLock(sel)) {
-            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Дата недоступна для заказа.<br><small>Выберите другой день в календаре.</small></div>`;
-            document.getElementById('tot').innerText = "0 ₽"; return;
+            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">На эту дату заказ закрыт.<br><small style="font-size:10px;">Выберите дату в календаре выше</small></div>`;
+            document.getElementById('tot').innerText = "0 ₽";
+            return;
         }
+
         if (buffer) { allOrders[sel] = JSON.parse(JSON.stringify(buffer)); }
         
         box.innerHTML = ''; let groups = {};
@@ -122,22 +138,20 @@
         calc();
     }
 
-    function upd(n, p, d) {
-        const s = document.getElementById('dt').value;
-        allOrders[s] = allOrders[s] || {};
-        let q = (allOrders[s][n]?.qty || 0) + d;
-        applyUpd(s, n, p, q);
-    }
-
     function manualUpd(n, p, v) {
         const s = document.getElementById('dt').value;
         let q = parseInt(v) || 0;
-        applyUpd(s, n, p, q);
-    }
-
-    function applyUpd(s, n, p, q) {
         if(getLock(s)) return;
         allOrders[s] = allOrders[s] || {};
+        if(q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
+        renderMenu();
+    }
+
+    function upd(n, p, d) {
+        const s = document.getElementById('dt').value;
+        if(getLock(s)) return;
+        allOrders[s] = allOrders[s] || {};
+        let q = (allOrders[s][n]?.qty || 0) + d;
         if(q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
         renderMenu(); tg.HapticFeedback?.impactOccurred('light');
     }
@@ -164,6 +178,7 @@
         const box = document.getElementById('p2'); box.innerHTML = '';
         const dates = Object.keys(historyData).sort().reverse();
         if(!dates.length) { box.innerHTML = '<div style="text-align:center; padding:40px; color:#999;">История пуста</div>'; return; }
+        
         dates.forEach(d => {
             const locked = getLock(d);
             let preview = historyData[d].items.map(i => `${i.name} (${i.qty})`).join(', ');
@@ -177,7 +192,7 @@
                 </div>
                 <div style="font-size:11px; color:#777; margin-bottom:15px; line-height:1.4;">${preview || 'Нет данных'}</div>
                 <button class="btn-repeat" onclick="copyToBuffer('${d}')">Повторить заказ</button>
-                ${locked ? `<div style="text-align:center; font-size:9px; color:#bbb; margin-top:8px; font-weight:800;">РЕДАКТИРОВАНИЕ ЗАКРЫТО</div>` : ''}
+                ${locked ? `<div style="text-align:center; font-size:9px; color:#bbb; margin-top:8px; font-weight:800;">ПРИЕМ ЗАКАЗОВ ЗАВЕРШЕН</div>` : ''}
             </div>`;
         });
     }
@@ -187,28 +202,30 @@
         historyData[d].items.forEach(i => { if(i.name) buffer[i.name] = {qty: i.qty, price: i.price}; });
         document.getElementById('copy-notify').style.display='block';
         tab('order');
-        tg.showAlert("Заказ скопирован! Выберите дату доставки.");
+        tg.showAlert("Заказ в памяти. Выберите свободную дату!");
         renderMenu();
     }
 
     function edit(d) {
-        if(getLock(d)) { tg.showAlert("Срок редактирования этого заказа истек."); return; }
+        if(getLock(d)) return;
         buffer = null; 
         allOrders[d] = {};
         historyData[d].items.forEach(i => { if(i.name) allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
-        document.getElementById('dt').value = d; tab('order'); renderMenu();
+        document.getElementById('dt').value = d; 
+        tab('order'); 
+        renderMenu();
     }
 
     async function send() {
         const s = document.getElementById('dt').value;
-        if(getLock(s)) { tg.showAlert("На эту дату заказ уже не принимается."); return; }
+        if(getLock(s)) { tg.showAlert("Стоп! На эту дату заказ уже закрыт."); return; }
         if(!allOrders[s] || !Object.keys(allOrders[s]).length) return;
         tg.showConfirm(`Оформить на ${s}?`, async (ok) => {
             if(ok) {
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:s, items:allOrders[s]})});
                 buffer = null; 
                 document.getElementById('copy-notify').style.display='none';
-                tg.showAlert("ПРИНЯТО!"); load(); tab('hist');
+                tg.showAlert("УСПЕШНО!"); load(); tab('hist');
             }
         });
     }
