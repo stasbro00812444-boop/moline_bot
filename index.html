@@ -25,7 +25,7 @@
         .btn-send { background: var(--brand-main); color: #fff; border: none; padding: 16px; border-radius: 14px; font-weight: 900; width: 100%; font-size: 16px; box-shadow: 0 4px 10px rgba(234, 169, 220, 0.4); }
         .hidden { display: none !important; }
         input[type="date"] { background: #fff; border: 1px solid #ddd; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 800; font-size: 16px; color: var(--text-dark); outline: none; }
-        .history-item { border-left: 4px solid var(--brand-main); padding-left: 10px; }
+        .loader { text-align: center; padding: 50px; font-weight: 800; color: var(--brand-main); }
     </style>
 </head>
 <body>
@@ -35,11 +35,11 @@
     </div>
 
     <div id="p1" class="container">
-        <div class="card" style="border: none; background: #fff;">
+        <div class="card">
             <div style="font-size: 10px; margin-bottom: 6px; font-weight: 800; color: #999;">ВЫБЕРИТЕ ДАТУ ДОСТАВКИ</div>
             <input type="date" id="dt" onchange="onDateChanged()">
         </div>
-        <div id="menu"></div>
+        <div id="menu"><div class="loader">ЗАГРУЗКА МЕНЮ...</div></div>
     </div>
 
     <div id="p2" class="container hidden"></div>
@@ -54,23 +54,37 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbzx9V8HKo7LeQlfoYSA4f-e89IxfUMU7p4PQ58htm5dejZifmQc3brNfW0Y9Pupsm6t/exec';
-    const user = (tg.initDataUnsafe.user?.username || "Guest").toLowerCase();
+    // ТВОЯ НОВАЯ ССЫЛКА ПРОВЕРЕНА И ВСТАВЛЕНА
+    const API = 'https://script.google.com/macros/s/AKfycbwGEHBCQdGZvGSWg14yiws1F66Ve9Ry7xzepgn3NkhVJgAyOnJAe5cbRRSS_-UOVInj/exec';
+    const user = (tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.id || "Guest").toLowerCase();
     let menuData = [], historyData = {}, allOrders = {}, bufferItems = null;
 
     async function load() {
-        let t = new Date(); t.setDate(t.getDate() + 1);
-        document.getElementById('dt').value = t.toISOString().split('T')[0];
-        document.getElementById('dt').min = t.toISOString().split('T')[0];
-        tg.expand();
-        const m = await fetch(`${API}?type=menu&v=${Date.now()}`).then(r => r.json());
-        const h = await fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json());
-        menuData = m.menu || []; historyData = h || {}; renderMenu();
+        try {
+            let t = new Date(); t.setDate(t.getDate() + 1);
+            document.getElementById('dt').value = t.toISOString().split('T')[0];
+            document.getElementById('dt').min = t.toISOString().split('T')[0];
+            tg.expand();
+            
+            const [mRes, hRes] = await Promise.all([
+                fetch(`${API}?type=menu&v=${Date.now()}`).then(r => r.json()),
+                fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json())
+            ]);
+            
+            menuData = mRes.menu || []; 
+            historyData = hRes || {}; 
+            renderMenu();
+        } catch (e) {
+            console.error(e);
+            document.getElementById('menu').innerHTML = `<div class="loader" style="color:red">ОШИБКА ЗАГРУЗКИ.<br>Проверьте деплой GAS.</div>`;
+        }
     }
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
         box.innerHTML = '';
+        if(menuData.length === 0) { box.innerHTML = '<div class="loader">МЕНЮ ПУСТО</div>'; return; }
+        
         let groups = {};
         menuData.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
         for (let cat in groups) {
@@ -139,10 +153,10 @@
         const box = document.getElementById('p2'); box.innerHTML = '';
         const today = new Date().toISOString().split('T')[0];
         const dates = Object.keys(historyData).sort().reverse();
-        if(dates.length === 0) box.innerHTML = '<div style="text-align:center; padding:50px; color:#bbb;">ИСТОРИЯ ПУСТА</div>';
+        if(dates.length === 0) { box.innerHTML = '<div style="text-align:center; padding:50px; color:#bbb;">ИСТОРИЯ ПУСТА</div>'; return; }
         dates.forEach(d => {
             const canEdit = d >= today; 
-            box.innerHTML += `<div class="card history-item">
+            box.innerHTML += `<div class="card" style="border-left: 4px solid var(--brand-main); padding-left: 10px;">
                 <div class="row" style="border-bottom: 1px solid #f5f5f5; padding-bottom: 8px; margin-bottom: 8px;">
                     <b style="font-size:16px;">${d}</b> 
                     <div>
@@ -150,4 +164,41 @@
                         <b style="font-size:16px;">${historyData[d].total} ₽</b>
                     </div>
                 </div>
-                <button class="btn-send" style="padding: 10px; font-size: 12px; background
+                <button class="btn-send" style="padding: 10px; font-size: 12px; background: #fff; color: var(--brand-main); border: 1.5px solid var(--brand-main); box-shadow: none;" onclick="startRepeat('${d}')">ПОВТОРИТЬ НА НОВУЮ ДАТУ</button>
+            </div>`;
+        });
+    }
+
+    function edit(d) {
+        allOrders[d] = {};
+        historyData[d].items.forEach(i => { if(i.name !== "Доставка") allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
+        document.getElementById('dt').value = d;
+        tab('order'); renderMenu();
+    }
+
+    function startRepeat(d) {
+        bufferItems = historyData[d].items;
+        tg.showAlert("Готово! Теперь просто выберите новую дату в календаре.");
+        tab('order');
+    }
+
+    async function send() {
+        const sel = document.getElementById('dt').value;
+        if(!allOrders[sel] || Object.keys(allOrders[sel]).length === 0) return tg.showAlert("КОРЗИНА ПУСТА");
+        tg.showConfirm(`Оформить заказ на ${sel}?`, async (ok) => {
+            if(ok) {
+                try {
+                    await fetch(API, {method:'POST', body:JSON.stringify({user, date:sel, items:allOrders[sel]})});
+                    tg.showAlert("ЗАКАЗ ПРИНЯТ!"); 
+                    // Сбрасываем текущий выбор и обновляем историю
+                    allOrders[sel] = {};
+                    await load(); 
+                    tab('hist');
+                } catch(e) { tg.showAlert("Ошибка при отправке. Попробуйте снова."); }
+            }
+        });
+    }
+    load();
+</script>
+</body>
+</html>
