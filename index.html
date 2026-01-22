@@ -40,17 +40,24 @@
         .edit-icon { color: var(--main); font-size: 24px; cursor: pointer; padding: 5px; margin-left: 10px; }
         .hidden { display: none !important; }
         input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; outline: none; background: #fff; }
+        
+        /* Стили админки */
+        .admin-btn { background: #2c2c2c; color: #fff; border: none; padding: 10px; border-radius: 12px; font-size: 11px; font-weight: 800; width: 100%; margin-top: 10px; cursor: pointer; }
+        .admin-badge { background: #000; color: #fff; padding: 2px 6px; border-radius: 6px; font-size: 9px; vertical-align: middle; margin-left: 5px; }
     </style>
 </head>
 <body>
     <div class="tabs">
         <div id="t1" class="tab active" onclick="tab('order')">ЗАКАЗАТЬ</div>
         <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
+        <div id="t3" class="tab hidden" onclick="tab('admin')">АДМИН</div>
     </div>
+    
     <div id="m-bar" class="m-bar hidden">
         <span>Нужно изменить заказ после 12:00?</span>
         <button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button>
     </div>
+
     <div id="p1" class="container">
         <div id="copy-notify" class="copy-banner">
             <div style="font-size:12px; color:var(--main); font-weight:800; text-align:center;">ТЕПЕРЬ ВЫБЕРИТЕ НЕОБХОДИМУЮ ВАМ ДАТУ !</div>
@@ -62,7 +69,14 @@
         </div>
         <div id="menu"></div>
     </div>
+
     <div id="p2" class="container hidden"></div>
+    
+    <div id="p3" class="container hidden">
+        <div style="font-size: 11px; font-weight: 800; color: #999; margin-bottom: 10px;">ПРОСМОТР ВСЕХ ЗАКАЗОВ:</div>
+        <div id="admin-list"></div>
+    </div>
+
     <div class="footer" id="f">
         <div id="summary" style="font-size: 11px; color: #999; margin-bottom: 5px; text-align: right; font-weight: 700;"></div>
         <div class="row">
@@ -73,9 +87,11 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbxf4FD4YDQr8ARAUe25_ENDJtyb6ypX8CeKTGh6h9VoftUc9J5jdT7YIdOQ_tnNenut/exec';
+    // ВСТАВЬ СВОЙ URL ВЫШЕ ИЛИ ОСТАВЬ ТЕКУЩИЙ (Скрипт использует API из code.gs)
+    const API = 'https://script.google.com/macros/s/AKfycbynm7eDeXM0jA8BrLpYu2YqY7FbDQouQ-5BgjjsRT7kuPKR0-xh7nsZ7ezBtOpcZ4hM/exec';
     const user = (tg.initDataUnsafe?.user?.username || "guest").toLowerCase();
-    let menuData = [], historyData = {}, allOrders = {}, buffer = null, clientDisplayName = user;
+    
+    let menuData = [], historyData = {}, allOrders = {}, buffer = null, clientDisplayName = user, isAdmin = false;
 
     const fmtDate = (s) => s.split('-').reverse().join('.');
 
@@ -108,6 +124,10 @@
             menuData = m.menu || []; 
             historyData = h || {};
             clientDisplayName = m.displayName || user; 
+            isAdmin = m.isAdmin || false;
+
+            if(isAdmin) document.getElementById('t3').classList.remove('hidden');
+
             renderMenu();
         } catch (e) { document.getElementById('menu').innerHTML = "Ошибка сети"; }
     }
@@ -178,11 +198,14 @@
     function tab(t) {
         document.getElementById('p1').classList.toggle('hidden', t!=='order');
         document.getElementById('p2').classList.toggle('hidden', t!=='hist');
-        document.getElementById('f').classList.toggle('hidden', t!=='order');
+        document.getElementById('p3').classList.toggle('hidden', t!=='admin');
+        document.getElementById('f').classList.toggle('hidden', t==='hist' || t==='admin');
         document.getElementById('m-bar').classList.toggle('hidden', t!=='hist');
         document.getElementById('t1').classList.toggle('active', t==='order');
         document.getElementById('t2').classList.toggle('active', t==='hist');
+        document.getElementById('t3').classList.toggle('active', t==='admin');
         if(t === 'hist') renderHist();
+        if(t === 'admin') renderAdmin();
     }
 
     function renderHist() {
@@ -203,6 +226,45 @@
                 <button class="btn-repeat" onclick="copyToBuffer('${d}')">Повторить заказ</button>
             </div>`;
         });
+    }
+
+    async function renderAdmin() {
+        const sel = document.getElementById('dt').value;
+        const box = document.getElementById('admin-list');
+        box.innerHTML = '<center style="padding:20px; color:#999">Загрузка...</center>';
+        try {
+            const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
+            box.innerHTML = '';
+            if(!data.length) box.innerHTML = '<center style="padding:20px;color:#999">Нет заказов на эту дату</center>';
+            data.forEach(ord => {
+                box.innerHTML += `<div class="card">
+                    <div class="row"><b>@${ord.user}</b> <b style="color:var(--main)">${ord.total} ₽</b></div>
+                    <div style="font-size:11px; color:#666; margin-top:8px;">${ord.items.map(i => i.name+' x'+i.qty).join(', ')}</div>
+                    <button class="admin-btn" onclick="editAny('${ord.user}', '${sel}')">ИЗМЕНИТЬ ЗАКАЗ</button>
+                </div>`;
+            });
+        } catch(e) { box.innerHTML = '<center>Ошибка доступа</center>'; }
+    }
+
+    function editAny(targetUser, targetDate) {
+        const input = prompt("Введите изменения (Формат: Название Количество). Например: Круассан 10, Улитка 5");
+        if(!input) return;
+        let items = {};
+        input.split(',').forEach(p => {
+            let parts = p.trim().split(' ');
+            let qty = parseInt(parts.pop());
+            let namePart = parts.join(' ').toLowerCase();
+            let found = menuData.find(m => m.name.toLowerCase().includes(namePart));
+            if(found) items[found.name] = {qty: qty, price: found.price};
+        });
+        if(Object.keys(items).length > 0) {
+            tg.showConfirm(`Изменить заказ @${targetUser}?`, async (ok) => {
+                if(ok) {
+                    await fetch(API, {method:'POST', body:JSON.stringify({user: targetUser, date: targetDate, items: items})});
+                    renderAdmin();
+                }
+            });
+        } else { alert("Товар не найден. Пишите как в меню."); }
     }
 
     function copyToBuffer(d) {
@@ -234,5 +296,3 @@
 </script>
 </body>
 </html>
-
-
