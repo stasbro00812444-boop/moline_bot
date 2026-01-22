@@ -36,7 +36,6 @@
         
         .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; z-index: 100; }
         .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; font-size: 16px; cursor: pointer; }
-        .btn-repeat { background: var(--main); border: none; padding: 12px 0; border-radius: 12px; font-weight: 800; color: #fff; font-size: 12px; cursor: pointer; width: 100%; text-transform: uppercase; margin-top: 10px; }
         
         .edit-icon { color: var(--main); font-size: 20px; cursor: pointer; margin-left: 10px; }
         .hidden { display: none !important; }
@@ -57,7 +56,7 @@
 
     <div id="p1" class="container">
         <div id="copy-notify" class="copy-banner">
-            <div id="copy-text" style="font-size:11px; color:var(--main); font-weight:800; text-align:center;">ВЫБЕРИТЕ ДАТУ</div>
+            <div id="copy-text" style="font-size:11px; color:var(--main); font-weight:800; text-align:center;"></div>
             <div style="text-align:center;"><button class="btn-cancel" onclick="cancelBuffer()">ОТМЕНИТЬ</button></div>
         </div>
         <div class="card">
@@ -84,7 +83,7 @@
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbw0BrADbDzgmX92NeMcVJMAFL3biBFtnoOqlDqcQyuuFlefXdbO6sluuTNamGXY6NYb/exec';
     const user = (tg.initDataUnsafe?.user?.username || "guest").toLowerCase().replace('@', '');
-    let menuData = [], historyData = {}, allOrders = {}, isAdmin = false, editUser = null, buffer = null;
+    let menuData = [], historyData = {}, allOrders = {}, isAdmin = false, editUser = null, buffer = null, isEditMode = false;
 
     function isLocked(dateStr) {
         if (isAdmin) return false;
@@ -122,7 +121,7 @@
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
         const locked = isLocked(sel);
         if (locked) {
-            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Прием заказов закрыт.</div>`;
+            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Прием заказов на эту дату закрыт.</div>`;
             document.getElementById('tot').innerText = "0 ₽";
             document.getElementById('delivery-info').innerText = "Доставка: 0 ₽";
             return;
@@ -166,7 +165,6 @@
         const s = document.getElementById('dt').value; 
         let sub = 0;
         for (let k in allOrders[s] || {}) sub += (allOrders[s][k].qty * allOrders[s][k].price);
-        
         let del = (sub > 0 && sub < 3000) ? 300 : 0;
         document.getElementById('delivery-info').innerText = sub >= 3000 ? "Доставка: Бесплатно" : (sub > 0 ? "Доставка: 300 ₽" : "Доставка: 0 ₽");
         document.getElementById('tot').innerText = (sub + del) + " ₽";
@@ -215,24 +213,26 @@
     }
 
     function copyOrder(d) {
-        buffer = {};
+        buffer = {}; isEditMode = false;
         historyData[d].items.forEach(i => buffer[i.name] = {qty: i.qty});
+        document.getElementById('copy-text').innerText = "ПОВТОР ЗАКАЗА: ВЫБЕРИТЕ ДАТУ";
         document.getElementById('copy-notify').style.display = 'block';
         tab('order'); renderMenu();
     }
 
     function startEdit(u, dispName, date, items) {
         if (isLocked(date) && !isAdmin) return;
-        editUser = u; buffer = null;
+        editUser = u; buffer = null; isEditMode = true;
         allOrders[date] = {};
         items.forEach(i => allOrders[date][i.name] = {qty: i.qty, price: i.price});
         document.getElementById('dt').value = date;
+        document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ ЗАКАЗА: " + (dispName || date.split('-').reverse().join('.'));
         document.getElementById('copy-notify').style.display = 'block';
         tab('order'); renderMenu();
     }
 
     function cancelBuffer() {
-        buffer = null; editUser = null;
+        buffer = null; editUser = null; isEditMode = false;
         document.getElementById('copy-notify').style.display = 'none';
         renderMenu();
     }
@@ -242,13 +242,15 @@
         if(isLocked(s) && !isAdmin) return;
         if(!allOrders[s] || !Object.keys(allOrders[s]).length) return;
 
-        tg.showConfirm(`Оформить заказ на ${s.split('-').reverse().join('.')}?`, async (ok) => {
+        const msg = isEditMode ? `Изменить заказ на ${s.split('-').reverse().join('.')}?` : `Оформить заказ на ${s.split('-').reverse().join('.')}?`;
+
+        tg.showConfirm(msg, async (ok) => {
             if (ok) {
                 tg.MainButton.showProgress();
                 try {
                     await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date:s, items:allOrders[s]})});
                     tg.HapticFeedback.notificationOccurred('success');
-                    buffer = null; editUser = null; 
+                    buffer = null; editUser = null; isEditMode = false;
                     document.getElementById('copy-notify').style.display = 'none';
                     await load(true);
                     tab('hist');
