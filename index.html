@@ -6,30 +6,22 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --main: #f377c6; --bg: #fdfafd; --text: #2c2c2c; }
-        body { 
-            font-family: -apple-system, sans-serif; background-color: var(--bg);
-            background-image: url('https://raw.githubusercontent.com/stasbro00812444-boop/moline_bot/refs/heads/main/LOGO.png');
-            background-repeat: repeat; background-size: 100px; background-attachment: fixed;
-            margin: 0; padding: 0; color: var(--text); -webkit-tap-highlight-color: transparent; 
-        }
-        body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(253, 250, 253, 0.94); z-index: -1; }
-        .tabs { display: flex; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 0; color: var(--text); }
+        .tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
         .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; font-size: 11px; text-transform: uppercase; }
         .tab.active { color: var(--main); border-bottom: 3px solid var(--main); }
-        .container { padding: 15px; padding-bottom: 160px; position: relative; z-index: 1; }
-        .card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(5px); border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .container { padding: 15px; padding-bottom: 160px; }
+        .card { background: #fff; border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         .row { display: flex; align-items: center; justify-content: space-between; }
         .cat { font-size: 11px; font-weight: 900; color: var(--main); margin: 15px 0 8px 5px; text-transform: uppercase; }
-        .stepper { display: flex; align-items: center; background: #fff; border-radius: 12px; padding: 4px; border: 1.5px solid #f377c644; }
+        .stepper { display: flex; align-items: center; background: #f8f8f8; border-radius: 12px; padding: 4px; }
         .btn-s { border: none; color: var(--main); font-size: 22px; font-weight: 800; background: none; width: 34px; cursor: pointer; }
         .q-input { width: 40px; border: none; background: none; text-align: center; font-weight: 800; font-size: 16px; outline: none; }
-        .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; z-index: 100; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; }
         .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; font-size: 16px; cursor: pointer; }
-        .admin-banner { display:none; border-radius: 18px; margin-bottom:12px; padding: 12px; text-align: center; background: #fffbe6; border: 1.5px dashed #ffe58f; }
-        .btn-cancel { background: #fff; color: #ff4d4d; border: 1px solid #ff4d4d; padding: 4px 10px; border-radius: 8px; font-size: 10px; font-weight: 800; margin-top: 8px; }
-        .admin-btn-action { background: #2c2c2c; color: #fff; border: none; padding: 10px; border-radius: 10px; font-size: 11px; font-weight: 800; width: 100%; margin-top: 8px; }
+        .admin-btn { background: #2c2c2c; color: #fff; border: none; padding: 12px; border-radius: 12px; font-size: 12px; width: 100%; margin-top: 10px; font-weight: 700; }
         .hidden { display: none !important; }
-        input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; outline: none; background: #fff; }
+        input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; font-weight: 700; }
     </style>
 </head>
 <body>
@@ -40,79 +32,53 @@
     </div>
 
     <div id="p1" class="container">
-        <div id="admin-notify" class="admin-banner">
-            <div style="font-size:11px; color:#856404; font-weight:800;">РЕЖИМ ПРАВКИ: <span id="admin-user-label"></span></div>
-            <button class="btn-cancel" onclick="exitAdminMode()">ОТМЕНИТЬ ПРАВКИ</button>
+        <div id="admin-info" class="card hidden" style="background:#fffbe6; border:1px dashed #ffe58f;">
+            <div style="font-size:11px; font-weight:800;">РЕЖИМ ПРАВКИ: <span id="edit-user"></span></div>
         </div>
         <div class="card">
-            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ВЫБЕРИТЕ ДАТУ</div>
             <input type="date" id="dt" onchange="onDateChange()">
         </div>
         <div id="menu"></div>
     </div>
 
     <div id="p2" class="container hidden"></div>
-    <div id="p3" class="container hidden"><div id="admin-list"></div></div>
+    <div id="p3" class="container hidden">
+        <button class="admin-btn" style="background:#4caf50; margin-bottom:15px;" onclick="forcePush()">🚀 ОТПРАВИТЬ СВОДКУ НА ЗАВТРА В ГРУППУ</button>
+        <div id="admin-list"></div>
+    </div>
 
     <div class="footer" id="f">
-        <div id="summary" style="font-size: 11px; color: #999; margin-bottom: 5px; text-align: right; font-weight: 700;"></div>
         <div class="row">
             <div><span style="font-size:10px; color:#999; font-weight:800">ИТОГО</span><br><b id="tot" style="font-size:22px">0 ₽</b></div>
-            <button id="main-send-btn" class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button>
+            <button id="send-btn" class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button>
         </div>
     </div>
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbz9v5LvwYu40J6qzAVSQ9QOPgj3J6bbr8O79S80cJl-GKDvNHG356jdeBWKkaGwY_pB/exec';
+    const API = 'https://script.google.com/macros/s/AKfycbzWXfiVehcC_EX9kMEqDMi2i6_YcNLe_qV2ruyK0i87bsMKxnlheEFo8L2N56-o_rzL/exec';
     const user = (tg.initDataUnsafe?.user?.username || "guest").toLowerCase().replace('@', '');
-    let menuData = [], historyData = {}, allOrders = {}, isAdmin = false, currentEditingUser = null;
-
-    function onDateChange() {
-        renderMenu();
-        if (isAdmin) renderAdmin(); // Важно: при смене даты админка тоже перегружается
-    }
-
-    function initCalendar() {
-        const input = document.getElementById('dt');
-        if (isAdmin) {
-            input.removeAttribute('min');
-        } else {
-            let minD = new Date(); 
-            minD.setDate(minD.getDate() + (new Date().getHours() >= 12 ? 2 : 1));
-            input.setAttribute('min', minD.toISOString().split('T')[0]);
-        }
-        if (!input.value) input.value = new Date(new Date().getTime() + 86400000).toISOString().split('T')[0];
-    }
-
-    function getLock(dStr) {
-        if (isAdmin || currentEditingUser) return false;
-        let now = new Date(), tom = new Date(); tom.setDate(now.getDate() + 1);
-        const tomStr = tom.toISOString().split('T')[0];
-        return (dStr < tomStr || (dStr === tomStr && now.getHours() >= 12));
-    }
+    let menuData = [], historyData = {}, allOrders = {}, isAdmin = false, editTarget = null;
 
     async function load() {
-        try {
-            const [m, h] = await Promise.all([
-                fetch(`${API}?type=menu&user=${user}`).then(r => r.json()),
-                fetch(`${API}?user=${user}`).then(r => r.json())
-            ]);
-            menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
-            if(isAdmin) { 
-                document.getElementById('t3').classList.remove('hidden');
-                document.getElementById('dt').removeAttribute('min');
-            }
-            initCalendar(); renderMenu();
-        } catch (e) { console.error(e); }
+        const [m, h] = await Promise.all([
+            fetch(`${API}?type=menu&user=${user}`).then(r => r.json()),
+            fetch(`${API}?user=${user}`).then(r => r.json())
+        ]);
+        menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
+        if(isAdmin) document.getElementById('t3').classList.remove('hidden');
+        
+        const input = document.getElementById('dt');
+        if(!isAdmin) {
+            let minD = new Date(); minD.setDate(minD.getDate() + 1);
+            input.setAttribute('min', minD.toISOString().split('T')[0]);
+        }
+        input.value = new Date(new Date().getTime() + 86400000).toISOString().split('T')[0];
+        renderMenu();
     }
 
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
-        if (getLock(sel)) {
-            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Заказы на эту дату закрыты.</div>`;
-            document.getElementById('tot').innerText = "0 ₽"; return;
-        }
         box.innerHTML = ''; let groups = {};
         menuData.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
         for (let c in groups) {
@@ -143,77 +109,54 @@
     function calc() {
         const s = document.getElementById('dt').value; let sub = 0;
         for (let k in allOrders[s] || {}) sub += (allOrders[s][k].qty * allOrders[s][k].price);
-        let del = (sub > 0 && sub < 3000) ? 300 : 0;
-        document.getElementById('summary').innerText = sub > 0 ? `ТОВАРЫ: ${sub} ₽ • ДОСТАВКА: ${del} ₽` : '';
-        document.getElementById('tot').innerText = (sub + del) + " ₽";
+        document.getElementById('tot').innerText = (sub + (sub > 0 && sub < 3000 ? 300 : 0)) + " ₽";
+    }
+
+    async function forcePush() {
+        if(confirm("Отправить сводку по заказам на завтра в Telegram?")) {
+            await fetch(`${API}?type=test_order&user=${user}`);
+            alert("Сводка отправлена!");
+        }
     }
 
     async function renderAdmin() {
         const box = document.getElementById('admin-list'), sel = document.getElementById('dt').value;
-        box.innerHTML = '<center style="padding:20px;">Загрузка заказов...</center>';
+        box.innerHTML = 'Загрузка...';
         const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
-        box.innerHTML = `<div style="padding:10px; font-weight:800; color:var(--main)">Заказы на ${sel.split('-').reverse().join('.')}:</div>`;
-        if(!data.length) { box.innerHTML += '<center style="padding:40px; color:#999;">Заказов на эту дату нет</center>'; return; }
+        box.innerHTML = '';
         data.forEach(ord => {
             box.innerHTML += `<div class="card">
-                <div class="row"><b>${ord.displayName}</b> <b style="color:var(--main)">${ord.total} ₽</b></div>
-                <div style="font-size:11px; color:#777; margin:8px 0;">${ord.items.map(i=>i.name+' x'+i.qty).join(', ')}</div>
-                <button class="admin-btn-action" onclick="startAdminEdit('${ord.user}', '${ord.displayName}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ИЗМЕНИТЬ ЗАКАЗ</button>
+                <b>${ord.displayName}</b> — ${ord.total} ₽
+                <button class="admin-btn" onclick="startEdit('${ord.user}', '${ord.displayName}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ИЗМЕНИТЬ</button>
             </div>`;
         });
     }
 
-    function startAdminEdit(u, name, date, items) {
-        currentEditingUser = u;
+    function startEdit(u, name, date, items) {
+        editTarget = u;
         allOrders[date] = {};
         items.forEach(i => { allOrders[date][i.name] = {qty: i.qty, price: i.price}; });
-        document.getElementById('admin-notify').style.display = 'block';
-        document.getElementById('admin-user-label').innerText = name;
-        document.getElementById('main-send-btn').innerText = "СОХРАНИТЬ ПРАВКИ";
+        document.getElementById('edit-user').innerText = name;
+        document.getElementById('admin-info').classList.remove('hidden');
         tab('order'); renderMenu();
     }
 
-    function exitAdminMode() {
-        currentEditingUser = null; 
-        document.getElementById('admin-notify').style.display = 'none';
-        document.getElementById('main-send-btn').innerText = "ОФОРМИТЬ";
-        allOrders = {}; renderMenu();
+    async function send() {
+        const s = document.getElementById('dt').value;
+        if(!allOrders[s]) return;
+        tg.MainButton.showProgress();
+        await fetch(API, {method:'POST', body:JSON.stringify({user: editTarget || user, date:s, items:allOrders[s]})});
+        location.reload();
     }
 
     function tab(t) {
         document.querySelectorAll('.container').forEach(c => c.classList.add('hidden'));
         document.getElementById('p' + (t === 'order' ? '1' : t === 'hist' ? '2' : '3')).classList.remove('hidden');
-        document.getElementById('f').classList.toggle('hidden', t!=='order');
-        ['t1','t2','t3'].forEach(id => document.getElementById(id).classList.remove('active'));
-        document.getElementById(t === 'order' ? 't1' : t === 'hist' ? 't2' : 't3').classList.add('active');
-        if(t === 'hist') renderHist();
         if(t === 'admin') renderAdmin();
     }
 
-    function renderHist() {
-        const box = document.getElementById('p2'); box.innerHTML = '';
-        const dates = Object.keys(historyData).sort().reverse();
-        if(!dates.length) { box.innerHTML = '<center style="padding:40px; color:#999;">История пуста</center>'; return; }
-        dates.forEach(d => {
-            box.innerHTML += `<div class="card">
-                <div class="row"><b>${d.split('-').reverse().join('.')}</b> <b style="color:var(--main)">${historyData[d].total} ₽</b></div>
-                <div style="font-size:11px; color:#777; margin-top:8px;">${historyData[d].items.map(i => i.name+'('+i.qty+')').join(', ')}</div>
-            </div>`;
-        });
-    }
+    function onDateChange() { renderMenu(); if(isAdmin) renderAdmin(); }
 
-    async function send() {
-        const s = document.getElementById('dt').value;
-        if(!allOrders[s] || !Object.keys(allOrders[s]).length) return;
-        tg.showConfirm(`Вы уверены? Старый заказ на эту дату будет заменен.`, async (ok) => {
-            if(ok) {
-                tg.MainButton.showProgress();
-                const res = await fetch(API, {method:'POST', body:JSON.stringify({user: currentEditingUser || user, date:s, items:allOrders[s], isAdminEdit: !!currentEditingUser})});
-                if(currentEditingUser) exitAdminMode();
-                await load(); tab('hist'); tg.MainButton.hideProgress();
-            }
-        });
-    }
     load();
 </script>
 </body>
