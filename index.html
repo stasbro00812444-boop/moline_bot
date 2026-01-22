@@ -6,22 +6,27 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --main: #f377c6; --bg: #fdfafd; --text: #2c2c2c; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 0; color: var(--text); }
-        .tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
-        .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; font-size: 11px; text-transform: uppercase; }
+        body { 
+            font-family: -apple-system, sans-serif; background-color: var(--bg);
+            background-image: url('https://raw.githubusercontent.com/stasbro00812444-boop/moline_bot/refs/heads/main/LOGO.png');
+            background-repeat: repeat; background-size: 100px; background-attachment: fixed;
+            margin: 0; padding: 0; color: var(--text); -webkit-tap-highlight-color: transparent; 
+        }
+        body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(253, 250, 253, 0.94); z-index: -1; }
+        .tabs { display: flex; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
+        .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; font-size: 13px; }
         .tab.active { color: var(--main); border-bottom: 3px solid var(--main); }
-        .container { padding: 15px; padding-bottom: 160px; }
-        .card { background: #fff; border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .container { padding: 15px; padding-bottom: 160px; position: relative; z-index: 1; }
+        .card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(5px); border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
         .row { display: flex; align-items: center; justify-content: space-between; }
         .cat { font-size: 11px; font-weight: 900; color: var(--main); margin: 15px 0 8px 5px; text-transform: uppercase; }
-        .stepper { display: flex; align-items: center; background: #f8f8f8; border-radius: 12px; padding: 4px; }
+        .stepper { display: flex; align-items: center; background: #fff; border-radius: 12px; padding: 4px; border: 1.5px solid #f377c644; }
         .btn-s { border: none; color: var(--main); font-size: 22px; font-weight: 800; background: none; width: 34px; cursor: pointer; }
         .q-input { width: 40px; border: none; background: none; text-align: center; font-weight: 800; font-size: 16px; outline: none; }
-        .footer { position: fixed; bottom: 0; width: 100%; background: #fff; padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 15px 20px 30px; border-top: 1px solid #eee; z-index: 100; }
         .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; font-size: 16px; cursor: pointer; }
-        .admin-btn { background: #2c2c2c; color: #fff; border: none; padding: 12px; border-radius: 12px; font-size: 12px; width: 100%; margin-top: 10px; font-weight: 700; }
         .hidden { display: none !important; }
-        input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; font-weight: 700; }
+        input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; font-weight: 700; font-size: 16px; outline: none; background: #fff; }
     </style>
 </head>
 <body>
@@ -32,33 +37,31 @@
     </div>
 
     <div id="p1" class="container">
-        <div id="admin-info" class="card hidden" style="background:#fffbe6; border:1px dashed #ffe58f;">
-            <div style="font-size:11px; font-weight:800;">РЕЖИМ ПРАВКИ: <span id="edit-user"></span></div>
-        </div>
+        <div id="admin-notify" class="card hidden" style="background:#fff3f9; border:1px dashed var(--main); font-size:12px; font-weight:800; text-align:center; color:var(--main);">РЕДАКТИРОВАНИЕ ЗАКАЗА ПАРТНЕРА</div>
         <div class="card">
-            <input type="date" id="dt" onchange="onDateChange()">
+            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div>
+            <input type="date" id="dt" onchange="renderMenu()">
         </div>
         <div id="menu"></div>
     </div>
 
     <div id="p2" class="container hidden"></div>
     <div id="p3" class="container hidden">
-        <button class="admin-btn" style="background:#4caf50; margin-bottom:15px;" onclick="forcePush()">🚀 ОТПРАВИТЬ СВОДКУ НА ЗАВТРА В ГРУППУ</button>
         <div id="admin-list"></div>
     </div>
 
     <div class="footer" id="f">
         <div class="row">
             <div><span style="font-size:10px; color:#999; font-weight:800">ИТОГО</span><br><b id="tot" style="font-size:22px">0 ₽</b></div>
-            <button id="send-btn" class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button>
+            <button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button>
         </div>
     </div>
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbxsHXk1iG35sN1HSKrc3XbxQucS7BGdprFZ_KG_8jlPKp1M3YOrAoIhq1H4E8ifwth7/exec';
+    const API = 'https://script.google.com/macros/s/AKfycbynm7eDeXM0jA8BrLpYu2YqY7FbDQouQ-5BgjjsRT7kuPKR0-xh7nsZ7ezBtOpcZ4hM/exec';
     const user = (tg.initDataUnsafe?.user?.username || "guest").toLowerCase().replace('@', '');
-    let menuData = [], historyData = {}, allOrders = {}, isAdmin = false, editTarget = null;
+    let menuData = [], historyData = {}, allOrders = {}, isAdmin = false, editUser = null;
 
     async function load() {
         const [m, h] = await Promise.all([
@@ -70,7 +73,7 @@
         
         const input = document.getElementById('dt');
         if(!isAdmin) {
-            let minD = new Date(); minD.setDate(minD.getDate() + 1);
+            let minD = new Date(); minD.setDate(minD.getDate() + (new Date().getHours() >= 12 ? 2 : 1));
             input.setAttribute('min', minD.toISOString().split('T')[0]);
         }
         input.value = new Date(new Date().getTime() + 86400000).toISOString().split('T')[0];
@@ -103,7 +106,7 @@
         allOrders[s] = allOrders[s] || {};
         let q = (allOrders[s][n]?.qty || 0) + d;
         if(q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
-        renderMenu();
+        renderMenu(); tg.HapticFeedback?.impactOccurred('light');
     }
 
     function calc() {
@@ -112,40 +115,11 @@
         document.getElementById('tot').innerText = (sub + (sub > 0 && sub < 3000 ? 300 : 0)) + " ₽";
     }
 
-    async function forcePush() {
-        if(confirm("Отправить сводку по заказам на завтра в Telegram?")) {
-            await fetch(`${API}?type=test_order&user=${user}`);
-            alert("Сводка отправлена!");
-        }
-    }
-
-    async function renderAdmin() {
-        const box = document.getElementById('admin-list'), sel = document.getElementById('dt').value;
-        box.innerHTML = 'Загрузка...';
-        const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
-        box.innerHTML = '';
-        data.forEach(ord => {
-            box.innerHTML += `<div class="card">
-                <b>${ord.displayName}</b> — ${ord.total} ₽
-                <button class="admin-btn" onclick="startEdit('${ord.user}', '${ord.displayName}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ИЗМЕНИТЬ</button>
-            </div>`;
-        });
-    }
-
-    function startEdit(u, name, date, items) {
-        editTarget = u;
-        allOrders[date] = {};
-        items.forEach(i => { allOrders[date][i.name] = {qty: i.qty, price: i.price}; });
-        document.getElementById('edit-user').innerText = name;
-        document.getElementById('admin-info').classList.remove('hidden');
-        tab('order'); renderMenu();
-    }
-
     async function send() {
         const s = document.getElementById('dt').value;
         if(!allOrders[s]) return;
         tg.MainButton.showProgress();
-        await fetch(API, {method:'POST', body:JSON.stringify({user: editTarget || user, date:s, items:allOrders[s]})});
+        await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date:s, items:allOrders[s]})});
         location.reload();
     }
 
@@ -155,10 +129,27 @@
         if(t === 'admin') renderAdmin();
     }
 
-    function onDateChange() { renderMenu(); if(isAdmin) renderAdmin(); }
+    async function renderAdmin() {
+        const box = document.getElementById('admin-list'), sel = document.getElementById('dt').value;
+        box.innerHTML = 'Загрузка...';
+        const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
+        box.innerHTML = '';
+        data.forEach(ord => {
+            box.innerHTML += `<div class="card">
+                <b>${ord.user}</b>: ${ord.total} ₽
+                <button onclick="editAsAdmin('${ord.user}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})" style="float:right; background:var(--main); color:#fff; border:none; border-radius:8px; padding:5px 10px;">ПРАВИТЬ</button>
+            </div>`;
+        });
+    }
+
+    function editAsAdmin(u, d, items) {
+        editUser = u; allOrders[d] = {};
+        items.forEach(i => { allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
+        document.getElementById('admin-notify').classList.remove('hidden');
+        tab('order'); renderMenu();
+    }
 
     load();
 </script>
 </body>
 </html>
-
