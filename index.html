@@ -13,20 +13,33 @@
             margin: 0; padding: 0; color: var(--text); -webkit-tap-highlight-color: transparent; 
         }
         body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(253, 250, 253, 0.94); z-index: -1; }
-        .tabs { display: flex; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
-        .tab { flex: 1; text-align: center; padding: 16px; font-weight: 800; color: #ccc; cursor: pointer; font-size: 13px; }
+        
+        .tabs { display: flex; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; height: 50px; }
+        .tab { flex: 1; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #ccc; cursor: pointer; font-size: 11px; text-transform: uppercase; border-bottom: 3px solid transparent; transition: 0.2s; }
         .tab.active { color: var(--main); border-bottom: 3px solid var(--main); }
-        .container { padding: 15px; padding-bottom: 160px; position: relative; z-index: 1; }
-        .card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(5px); border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        
+        .container { padding: 15px; padding-bottom: 160px; }
+        .card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(5px); border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); position: relative; }
+        
+        .admin-banner { background: #fff3f9; border: 1.5px dashed var(--main); border-radius: 15px; padding: 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+        .admin-banner span { font-size: 11px; font-weight: 800; color: var(--main); }
+        .close-btn { background: var(--main); color: #fff; border: none; width: 24px; height: 24px; border-radius: 50%; font-size: 12px; font-weight: 800; cursor: pointer; }
+
         .row { display: flex; align-items: center; justify-content: space-between; }
         .cat { font-size: 11px; font-weight: 900; color: var(--main); margin: 15px 0 8px 5px; text-transform: uppercase; }
+        
         .stepper { display: flex; align-items: center; background: #fff; border-radius: 12px; padding: 4px; border: 1.5px solid #f377c644; }
         .btn-s { border: none; color: var(--main); font-size: 22px; font-weight: 800; background: none; width: 34px; cursor: pointer; }
         .q-input { width: 40px; border: none; background: none; text-align: center; font-weight: 800; font-size: 16px; outline: none; }
-        .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 15px 20px 30px; border-top: 1px solid #eee; z-index: 100; }
+        
+        .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; z-index: 100; }
         .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; font-size: 16px; cursor: pointer; }
+        
+        .admin-item { border-left: 4px solid var(--main); margin-bottom: 10px; padding-left: 10px; }
+        .edit-btn { background: var(--main); color: white; border: none; padding: 6px 12px; border-radius: 8px; font-size: 10px; font-weight: 800; }
+        
         .hidden { display: none !important; }
-        input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; font-weight: 700; font-size: 16px; outline: none; background: #fff; }
+        input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; outline: none; background: #fff; }
     </style>
 </head>
 <body>
@@ -37,10 +50,13 @@
     </div>
 
     <div id="p1" class="container">
-        <div id="admin-notify" class="card hidden" style="background:#fff3f9; border:1px dashed var(--main); font-size:12px; font-weight:800; text-align:center; color:var(--main);">РЕДАКТИРОВАНИЕ ЗАКАЗА ПАРТНЕРА</div>
+        <div id="admin-info" class="admin-banner hidden">
+            <span>ПРАВКА ЗАКАЗА: <b id="edit-name"></b></span>
+            <button class="close-btn" onclick="cancelEdit()">✖</button>
+        </div>
         <div class="card">
             <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div>
-            <input type="date" id="dt" onchange="renderMenu()">
+            <input type="date" id="dt" onchange="onDateChange()">
         </div>
         <div id="menu"></div>
     </div>
@@ -106,7 +122,7 @@
         allOrders[s] = allOrders[s] || {};
         let q = (allOrders[s][n]?.qty || 0) + d;
         if(q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
-        renderMenu(); tg.HapticFeedback?.impactOccurred('light');
+        renderMenu();
     }
 
     function calc() {
@@ -115,42 +131,84 @@
         document.getElementById('tot').innerText = (sub + (sub > 0 && sub < 3000 ? 300 : 0)) + " ₽";
     }
 
+    function tab(t) {
+        document.querySelectorAll('.container').forEach(c => c.classList.add('hidden'));
+        document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+        
+        if (t === 'order') {
+            document.getElementById('p1').classList.remove('hidden');
+            document.getElementById('t1').classList.add('active');
+            document.getElementById('f').classList.remove('hidden');
+        } else if (t === 'hist') {
+            document.getElementById('p2').classList.remove('hidden');
+            document.getElementById('t2').classList.add('active');
+            document.getElementById('f').classList.add('hidden');
+            renderHist();
+        } else {
+            document.getElementById('p3').classList.remove('hidden');
+            document.getElementById('t3').classList.add('active');
+            document.getElementById('f').classList.add('hidden');
+            renderAdmin();
+        }
+    }
+
+    function renderHist() {
+        const box = document.getElementById('p2'); box.innerHTML = '';
+        const dates = Object.keys(historyData).sort().reverse();
+        if(!dates.length) { box.innerHTML = '<div class="card" style="text-align:center; color:#999;">История пуста</div>'; return; }
+        dates.forEach(d => {
+            let items = historyData[d].items.map(i => `${i.name} (${i.qty})`).join(', ');
+            box.innerHTML += `<div class="card">
+                <div class="row"><b>${d.split('-').reverse().join('.')}</b> <b style="color:var(--main)">${historyData[d].total} ₽</b></div>
+                <div style="font-size:11px; color:#777; margin-top:8px;">${items}</div>
+            </div>`;
+        });
+    }
+
+    async function renderAdmin() {
+        const box = document.getElementById('admin-list'), sel = document.getElementById('dt').value;
+        box.innerHTML = '<div class="card" style="text-align:center;">Загрузка данных...</div>';
+        const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
+        box.innerHTML = `<div class="cat">Заказы на ${sel.split('-').reverse().join('.')}</div>`;
+        if(!data.length) box.innerHTML += '<div class="card">Нет заказов на эту дату</div>';
+        data.forEach(ord => {
+            box.innerHTML += `<div class="card admin-item">
+                <div class="row">
+                    <div><b>${ord.displayName}</b><br><small>${ord.total} ₽</small></div>
+                    <button class="edit-btn" onclick="startEdit('${ord.user}', '${ord.displayName}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button>
+                </div>
+            </div>`;
+        });
+    }
+
+    function startEdit(u, name, date, items) {
+        editUser = u;
+        allOrders[date] = {};
+        items.forEach(i => { allOrders[date][i.name] = {qty: i.qty, price: i.price}; });
+        document.getElementById('edit-name').innerText = name;
+        document.getElementById('admin-info').classList.remove('hidden');
+        tab('order'); renderMenu();
+    }
+
+    function cancelEdit() {
+        editUser = null;
+        document.getElementById('admin-info').classList.add('hidden');
+        const sel = document.getElementById('dt').value;
+        allOrders[sel] = {};
+        renderMenu();
+    }
+
     async function send() {
         const s = document.getElementById('dt').value;
-        if(!allOrders[s]) return;
+        if(!allOrders[s] || !Object.keys(allOrders[s]).length) return;
         tg.MainButton.showProgress();
         await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date:s, items:allOrders[s]})});
         location.reload();
     }
 
-    function tab(t) {
-        document.querySelectorAll('.container').forEach(c => c.classList.add('hidden'));
-        document.getElementById('p' + (t === 'order' ? '1' : t === 'hist' ? '2' : '3')).classList.remove('hidden');
-        if(t === 'admin') renderAdmin();
-    }
-
-    async function renderAdmin() {
-        const box = document.getElementById('admin-list'), sel = document.getElementById('dt').value;
-        box.innerHTML = 'Загрузка...';
-        const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
-        box.innerHTML = '';
-        data.forEach(ord => {
-            box.innerHTML += `<div class="card">
-                <b>${ord.user}</b>: ${ord.total} ₽
-                <button onclick="editAsAdmin('${ord.user}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})" style="float:right; background:var(--main); color:#fff; border:none; border-radius:8px; padding:5px 10px;">ПРАВИТЬ</button>
-            </div>`;
-        });
-    }
-
-    function editAsAdmin(u, d, items) {
-        editUser = u; allOrders[d] = {};
-        items.forEach(i => { allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
-        document.getElementById('admin-notify').classList.remove('hidden');
-        tab('order'); renderMenu();
-    }
+    function onDateChange() { renderMenu(); if(!document.getElementById('p3').classList.contains('hidden')) renderAdmin(); }
 
     load();
 </script>
 </body>
 </html>
-
