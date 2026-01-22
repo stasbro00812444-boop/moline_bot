@@ -75,30 +75,29 @@
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbynm7eDeXM0jA8BrLpYu2YqY7FbDQouQ-5BgjjsRT7kuPKR0-xh7nsZ7ezBtOpcZ4hM/exec';
     const user = (tg.initDataUnsafe?.user?.username || "guest").toLowerCase();
-    let menuData = [], historyData = {}, allOrders = {}, buffer = null;
+    let menuData = [], historyData = {}, allOrders = {}, buffer = null, clientDisplayName = user;
 
-    // Функция для красивого отображения даты ДД.ММ.ГГГГ
     const fmtDate = (s) => s.split('-').reverse().join('.');
 
-    const getTodayStr = () => new Date().toISOString().split('T')[0];
-    const getTomStr = () => {
-        let d = new Date(); d.setDate(d.getDate() + 1);
-        return d.toISOString().split('T')[0];
-    };
-    function getLock(dStr) {
-        if (!dStr) return true;
-        const todayStr = getTodayStr(), tomStr = getTomStr();
-        const nowHour = new Date().getHours();
-        if (dStr <= todayStr) return true;
-        if (dStr === tomStr && nowHour >= 12) return true;
-        return false;
-    }
     function initCalendar() {
         const input = document.getElementById('dt');
-        let minD = new Date(); minD.setDate(minD.getDate() + (new Date().getHours() >= 12 ? 2 : 1));
+        let minD = new Date(); 
+        minD.setDate(minD.getDate() + (new Date().getHours() >= 12 ? 2 : 1));
         const minStr = minD.toISOString().split('T')[0];
         input.setAttribute('min', minStr); input.value = minStr;
     }
+    
+    function getLock(dStr) {
+        if (!dStr) return true;
+        let now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+        let tom = new Date(); tom.setDate(now.getDate() + 1);
+        const tomStr = tom.toISOString().split('T')[0];
+        if (dStr <= todayStr) return true;
+        if (dStr === tomStr && now.getHours() >= 12) return true;
+        return false;
+    }
+
     async function load() {
         try {
             initCalendar();
@@ -106,14 +105,17 @@
                 fetch(`${API}?type=menu&user=${user}&v=${Date.now()}`).then(r => r.json()),
                 fetch(`${API}?user=${user}&v=${Date.now()}`).then(r => r.json())
             ]);
-            menuData = m.menu || []; historyData = h || {};
+            menuData = m.menu || []; 
+            historyData = h || {};
+            clientDisplayName = m.displayName || user; 
             renderMenu();
         } catch (e) { document.getElementById('menu').innerHTML = "Ошибка сети"; }
     }
+
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
         if (getLock(sel)) {
-            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Дата закрыта.</div>`;
+            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Дата закрыта. Прием заказов на завтра до 12:00.</div>`;
             document.getElementById('tot').innerText = "0 ₽"; return;
         }
         if (buffer) {
@@ -141,27 +143,30 @@
         }
         calc();
     }
+
     function cancelBuffer() {
         const sel = document.getElementById('dt').value;
         buffer = null; allOrders[sel] = {};
         document.getElementById('copy-notify').style.display = 'none';
         renderMenu(); tg.HapticFeedback?.notificationOccurred('warning');
     }
-    function syncToBuffer(n, q) { if (buffer) { if (q <= 0) delete buffer[n]; else buffer[n] = { qty: q }; } }
+
     function manualUpd(n, p, v) {
         const s = document.getElementById('dt').value;
         let q = parseInt(v) || 0; if(getLock(s)) return;
         allOrders[s] = allOrders[s] || {};
         if(q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
-        syncToBuffer(n, q); calc();
+        calc();
     }
+
     function upd(n, p, d) {
         const s = document.getElementById('dt').value; if(getLock(s)) return;
         allOrders[s] = allOrders[s] || {};
         let q = (allOrders[s][n]?.qty || 0) + d;
         if(q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
-        syncToBuffer(n, q); renderMenu(); tg.HapticFeedback?.impactOccurred('light');
+        renderMenu(); tg.HapticFeedback?.impactOccurred('light');
     }
+
     function calc() {
         const s = document.getElementById('dt').value; let sub = 0;
         for (let k in allOrders[s] || {}) sub += (allOrders[s][k].qty * allOrders[s][k].price);
@@ -169,6 +174,7 @@
         document.getElementById('summary').innerText = sub > 0 ? `ТОВАРЫ: ${sub} ₽ • ДОСТАВКА: ${del} ₽` : '';
         document.getElementById('tot').innerText = (sub + del) + " ₽";
     }
+
     function tab(t) {
         document.getElementById('p1').classList.toggle('hidden', t!=='order');
         document.getElementById('p2').classList.toggle('hidden', t!=='hist');
@@ -178,6 +184,7 @@
         document.getElementById('t2').classList.toggle('active', t==='hist');
         if(t === 'hist') renderHist();
     }
+
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
         const dates = Object.keys(historyData).sort().reverse();
@@ -197,25 +204,29 @@
             </div>`;
         });
     }
+
     function copyToBuffer(d) {
         buffer = {}; historyData[d].items.forEach(i => { if(i.name) buffer[i.name] = {qty: i.qty}; });
         document.getElementById('copy-notify').style.display = 'block';
         tab('order'); renderMenu();
     }
+
     function edit(d) {
         if(getLock(d)) return;
-        buffer = null; document.getElementById('copy-notify').style.display = 'none';
         allOrders[d] = {}; historyData[d].items.forEach(i => { if(i.name) allOrders[d][i.name] = {qty: i.qty, price: i.price}; });
         document.getElementById('dt').value = d; tab('order'); renderMenu();
     }
+
     async function send() {
         const s = document.getElementById('dt').value; if(getLock(s)) return;
         if(!allOrders[s] || !Object.keys(allOrders[s]).length) return;
-        tg.showConfirm(`Оформить на ${fmtDate(s)}?`, async (ok) => {
+        tg.showConfirm(`Оформить для "${clientDisplayName}" на ${fmtDate(s)}?`, async (ok) => {
             if(ok) {
+                tg.MainButton.showProgress();
                 await fetch(API, {method:'POST', body:JSON.stringify({user, date:s, items:allOrders[s]})});
                 buffer = null; document.getElementById('copy-notify').style.display = 'none';
                 load(); tab('hist');
+                tg.MainButton.hideProgress();
             }
         });
     }
@@ -223,4 +234,3 @@
 </script>
 </body>
 </html>
-
