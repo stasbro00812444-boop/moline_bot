@@ -16,6 +16,8 @@
         .tabs { display: flex; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; height: 50px; }
         .tab { flex: 1; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #ccc; cursor: pointer; font-size: 11px; text-transform: uppercase; border-bottom: 3px solid transparent; }
         .tab.active { color: var(--main); border-bottom: 3px solid var(--main); }
+        .m-bar { background: var(--main); color: #fff; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; }
+        .btn-m { background: #fff; color: var(--main); border: none; padding: 8px 12px; border-radius: 10px; font-weight: 800; cursor: pointer; }
         .container { padding: 15px; padding-bottom: 160px; }
         .card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(5px); border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); position: relative; }
         .copy-banner { background: #fff3f9; border: 1.5px dashed var(--main); border-radius: 18px; margin-bottom:12px; padding: 12px; display: none; }
@@ -25,6 +27,7 @@
         .stepper { display: flex; align-items: center; background: #fff; border-radius: 12px; padding: 4px; border: 1.5px solid #f377c644; }
         .btn-s { border: none; color: var(--main); font-size: 22px; font-weight: 800; background: none; width: 34px; cursor: pointer; }
         .q-input { width: 40px; border: none; background: none; text-align: center; font-weight: 800; font-size: 16px; outline: none; }
+        .btn-repeat { background: #eee; border: none; width: 100%; padding: 8px; border-radius: 10px; font-weight: 800; font-size: 10px; text-transform: uppercase; cursor: pointer; margin-top: 10px; color: #777; }
         .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; z-index: 100; }
         .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; font-size: 16px; cursor: pointer; }
         .edit-icon { color: var(--main); font-size: 20px; cursor: pointer; margin-left: 10px; }
@@ -38,6 +41,7 @@
         <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
         <div id="t3" class="tab hidden" onclick="tab('admin')">АДМИН ⚡️</div>
     </div>
+    <div id="m-bar" class="m-bar hidden"><span>Нужно изменить заказ после 12:00?</span><button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button></div>
     <div id="p1" class="container">
         <div id="copy-notify" class="copy-banner"><div id="copy-text" style="font-size:11px; color:var(--main); font-weight:800; text-align:center;"></div><div style="text-align:center;"><button class="btn-cancel" onclick="cancelBuffer()">ОТМЕНИТЬ</button></div></div>
         <div class="card"><div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div><input type="date" id="dt" onchange="onDateChange()"></div>
@@ -50,14 +54,16 @@
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbwidIAeaMoCs_MEE5j7g-LiesEBtjJrP7kk27lDSn4ccxGzGiQVbTXmySBtfRteVlA5/exec';
     const user = (tg.initDataUnsafe?.user?.username || "guest").toLowerCase().replace('@', '');
-    let menuData = [], historyData = {}, isAdmin = false, editUser = null, isEditMode = false, allOrders = {}; 
+    let menuData = [], historyData = {}, isAdmin = false, editUser = null, buffer = null, isEditMode = false, allOrders = {}; 
 
     function isLocked(dateStr) {
         if (isAdmin) return false;
         const now = new Date(), todayStr = now.toISOString().split('T')[0];
         const tom = new Date(); tom.setDate(now.getDate() + 1);
         const tomStr = tom.toISOString().split('T')[0];
-        return (dateStr <= todayStr || (dateStr === tomStr && now.getHours() >= 12));
+        if (dateStr <= todayStr) return true;
+        if (dateStr === tomStr && now.getHours() >= 12) return true;
+        return false;
     }
 
     async function load(quiet = false) {
@@ -83,6 +89,14 @@
             box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Прием заказов на эту дату закрыт.</div>`;
             document.getElementById('tot').innerText = "0 ₽"; return;
         }
+        if (buffer) {
+            allOrders[sel] = {};
+            for (let name in buffer) {
+                const item = menuData.find(m => m.name === name);
+                if (item) allOrders[sel][name] = { qty: buffer[name].qty, price: item.price };
+            }
+            buffer = null; 
+        }
         box.innerHTML = ''; let groups = {};
         menuData.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
         for (let c in groups) {
@@ -99,7 +113,7 @@
         const s = document.getElementById('dt').value;
         allOrders[s] = allOrders[s] || {};
         let q = (allOrders[s][n]?.qty || 0) + d;
-        if(q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
+        if(isNaN(q) || q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
         renderMenu(); tg.HapticFeedback.impactOccurred('light');
     }
 
@@ -114,6 +128,7 @@
     function tab(t) {
         document.querySelectorAll('.container').forEach(c => c.classList.add('hidden'));
         document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+        document.getElementById('m-bar').classList.toggle('hidden', t !== 'hist');
         if (t === 'order') { document.getElementById('p1').classList.remove('hidden'); document.getElementById('t1').classList.add('active'); document.getElementById('f').classList.remove('hidden'); }
         else if (t === 'hist') { document.getElementById('p2').classList.remove('hidden'); document.getElementById('t2').classList.add('active'); document.getElementById('f').classList.add('hidden'); renderHist(); }
         else { document.getElementById('p3').classList.remove('hidden'); document.getElementById('t3').classList.add('active'); document.getElementById('f').classList.add('hidden'); renderAdmin(); }
@@ -126,26 +141,35 @@
         dates.forEach(d => {
             const locked = isLocked(d);
             let preview = historyData[d].items.map(i => `${i.name} (${i.qty})`).join(', ');
-            box.innerHTML += `<div class="card"><div class="row"><b>${d.split('-').reverse().join('.')}</b><div style="display:flex; align-items:center;"><b style="color:var(--main)">${historyData[d].total} ₽</b>${(!locked || isAdmin) ? `<span class="edit-icon" onclick="startEdit('${user}', '', '${d}', ${JSON.stringify(historyData[d].items).replace(/"/g, '&quot;')})">✎</span>` : ''}</div></div><div style="font-size:11px; color:#777; margin:8px 0 12px; line-height:1.4;">${preview}</div></div>`;
+            box.innerHTML += `<div class="card"><div class="row"><b>${d.split('-').reverse().join('.')}</b><div style="display:flex; align-items:center;"><b style="color:var(--main)">${historyData[d].total} ₽</b>${(!locked || isAdmin) ? `<span class="edit-icon" onclick="startEdit('${user}', '', '${d}', ${JSON.stringify(historyData[d].items).replace(/"/g, '&quot;')})">✎</span>` : ''}</div></div><div style="font-size:11px; color:#777; margin:8px 0 12px; line-height:1.4;">${preview}</div><button class="btn-repeat" onclick="copyOrder('${d}')">Повторить заказ</button></div>`;
         });
+    }
+
+    function copyOrder(d) {
+        buffer = {}; isEditMode = false;
+        historyData[d].items.forEach(i => buffer[i.name] = {qty: i.qty});
+        document.getElementById('copy-text').innerText = "ПОВТОР ЗАКАЗА: ВЫБЕРИТЕ ДАТУ";
+        document.getElementById('copy-notify').style.display = 'block';
+        tab('order'); renderMenu();
     }
 
     function startEdit(u, dispName, date, items) {
         allOrders[date] = {}; items.forEach(i => allOrders[date][i.name] = {qty: i.qty, price: i.price});
-        editUser = u; isEditMode = true;
+        editUser = u; buffer = null; isEditMode = true;
         document.getElementById('dt').value = date;
         document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + (dispName || u);
         document.getElementById('copy-notify').style.display = 'block';
         tab('order'); renderMenu();
     }
 
-    function cancelBuffer() { editUser = null; isEditMode = false; document.getElementById('copy-notify').style.display = 'none'; renderMenu(); }
+    function cancelBuffer() { buffer = null; editUser = null; isEditMode = false; document.getElementById('copy-notify').style.display = 'none'; renderMenu(); }
 
     function send() {
         const s = document.getElementById('dt').value;
         if(isLocked(s) && !isAdmin) return;
         if(!allOrders[s] || !Object.keys(allOrders[s]).length) return;
-        tg.showConfirm(isEditMode ? `Изменить заказ?` : `Оформить заказ?`, async (ok) => {
+        const msg = isEditMode ? `Изменить заказ на ${s.split('-').reverse().join('.')}?` : `Оформить заказ на ${s.split('-').reverse().join('.')}?`;
+        tg.showConfirm(msg, async (ok) => {
             if (ok) {
                 tg.MainButton.showProgress();
                 try {
@@ -175,7 +199,8 @@
             box.innerHTML = `<div class="cat">Заказы на ${sel.split('-').reverse().join('.')}</div>`;
             if(!data.length) { box.innerHTML += '<div class="card">Заказов пока нет</div>'; return; }
             data.forEach(ord => {
-                box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.displayName}</b><br><small>${ord.total} ₽</small></div><button class="btn-send" style="width: auto; padding: 10px 20px; font-size: 12px;" onclick="startEdit('${ord.user}', '${ord.displayName}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button></div></div>`;
+                const itemsJson = JSON.stringify(ord.items).replace(/"/g, '&quot;');
+                box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.displayName}</b><br><small>${ord.total} ₽</small></div><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.displayName}', '${sel}', ${itemsJson})">ПРАВИТЬ</button></div></div>`;
             });
         } catch(e) { box.innerHTML = '<div class="card">Ошибка загрузки!</div>'; }
     }
