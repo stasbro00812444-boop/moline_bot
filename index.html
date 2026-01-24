@@ -69,12 +69,16 @@
     async function load(quiet = false) {
         if(!quiet) tg.MainButton.showProgress();
         try {
-            const [m, h] = await Promise.all([fetch(`${API}?type=menu&user=${user}`).then(r => r.json()), fetch(`${API}?user=${user}`).then(r => r.json())]);
+            const [m, h] = await Promise.all([
+                fetch(`${API}?type=menu&user=${user}`).then(r => r.json()), 
+                fetch(`${API}?user=${user}`).then(r => r.json())
+            ]);
             menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
             if(isAdmin) document.getElementById('t3').classList.remove('hidden');
             if(!quiet) {
                 const input = document.getElementById('dt'), now = new Date();
-                let minD = new Date(); minD.setDate(now.getDate() + (now.getHours() >= 12 ? 2 : 1));
+                let minD = new Date(); 
+                minD.setDate(now.getDate() + (now.getHours() >= 12 ? 2 : 1));
                 const minStr = minD.toISOString().split('T')[0];
                 if(!isAdmin) input.setAttribute('min', minStr);
                 input.value = minStr;
@@ -146,7 +150,7 @@
     }
 
     function copyOrder(d) {
-        buffer = {}; isEditMode = false;
+        buffer = {}; isEditMode = false; editUser = null;
         historyData[d].items.forEach(i => buffer[i.name] = {qty: i.qty});
         document.getElementById('copy-text').innerText = "ПОВТОР ЗАКАЗА: ВЫБЕРИТЕ ДАТУ";
         document.getElementById('copy-notify').style.display = 'block';
@@ -154,8 +158,10 @@
     }
 
     function startEdit(u, dispName, date, items) {
-        allOrders[date] = {}; items.forEach(i => allOrders[date][i.name] = {qty: i.qty, price: i.price});
-        editUser = u; buffer = null; isEditMode = true;
+        allOrders[date] = {}; 
+        items.forEach(i => allOrders[date][i.name] = {qty: i.qty, price: i.price});
+        editUser = u; 
+        isEditMode = true; // Важно: устанавливаем режим правки
         document.getElementById('dt').value = date;
         document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + (dispName || u);
         document.getElementById('copy-notify').style.display = 'block';
@@ -168,7 +174,9 @@
         const s = document.getElementById('dt').value;
         if(isLocked(s) && !isAdmin) return;
         if(!allOrders[s] || !Object.keys(allOrders[s]).length) return;
+        
         const msg = isEditMode ? `Изменить заказ на ${s.split('-').reverse().join('.')}?` : `Оформить заказ на ${s.split('-').reverse().join('.')}?`;
+        
         tg.showConfirm(msg, async (ok) => {
             if (ok) {
                 tg.MainButton.showProgress();
@@ -179,7 +187,7 @@
                             user: editUser || user, 
                             date: s, 
                             items: allOrders[s],
-                            isByAdmin: isAdmin && isEditMode
+                            isByAdmin: isAdmin && isEditMode // ГАРАНТИЯ ПЕРЕДАЧИ ФЛАГА ДЛЯ ГРУППЫ
                         })
                     });
                     tg.HapticFeedback.notificationOccurred('success');
