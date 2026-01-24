@@ -34,7 +34,6 @@
         .btn-s { border: none; color: var(--main); font-size: 22px; font-weight: 800; background: none; width: 34px; cursor: pointer; }
         .q-input { width: 40px; border: none; background: none; text-align: center; font-weight: 800; font-size: 16px; outline: none; }
         
-        /* Кнопка "Повторить заказ" из твоего оригинала */
         .btn-repeat { background: #eee; border: none; width: 100%; padding: 8px; border-radius: 10px; font-weight: 800; font-size: 10px; text-transform: uppercase; cursor: pointer; margin-top: 10px; color: #777; }
 
         .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; z-index: 100; }
@@ -84,9 +83,11 @@
 
 <script>
     const tg = window.Telegram.WebApp;
+    // ОБЯЗАТЕЛЬНО ПРОВЕРЬ API URL
     const API = 'https://script.google.com/macros/s/AKfycbw0BrADbDzgmX92NeMcVJMAFL3biBFtnoOqlDqcQyuuFlefXdbO6sluuTNamGXY6NYb/exec';
     const user = (tg.initDataUnsafe?.user?.username || "guest").toLowerCase().replace('@', '');
-    let menuData = [], historyData = {}, allOrders = {}, isAdmin = false, editUser = null, buffer = null, isEditMode = false;
+    let menuData = [], historyData = {}, isAdmin = false, editUser = null, buffer = null, isEditMode = false;
+    let allOrders = {}; 
 
     function isLocked(dateStr) {
         if (isAdmin) return false;
@@ -131,13 +132,17 @@
             document.getElementById('delivery-info').innerText = "Доставка: 0 ₽";
             return;
         }
+        
+        // Если есть буфер (повтор заказа), переносим его в текущую дату
         if (buffer) {
             allOrders[sel] = {};
             for (let name in buffer) {
                 const item = menuData.find(m => m.name === name);
                 if (item) allOrders[sel][name] = { qty: buffer[name].qty, price: item.price };
             }
+            buffer = null; 
         }
+
         box.innerHTML = ''; let groups = {};
         menuData.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
         for (let c in groups) {
@@ -161,8 +166,7 @@
         const s = document.getElementById('dt').value;
         allOrders[s] = allOrders[s] || {};
         let q = (allOrders[s][n]?.qty || 0) + d;
-        if(isNaN(q)) q = 0; // Защита от NaN
-        if(q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
+        if(isNaN(q) || q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
         renderMenu();
         tg.HapticFeedback.impactOccurred('light');
     }
@@ -227,12 +231,14 @@
     }
 
     function startEdit(u, dispName, date, items) {
-        if (isLocked(date) && !isAdmin) return;
-        editUser = u; buffer = null; isEditMode = true;
         allOrders[date] = {};
-        items.forEach(i => allOrders[date][i.name] = {qty: i.qty, price: i.price});
+        // Наполняем корзину данными из существующего заказа
+        items.forEach(i => {
+            allOrders[date][i.name] = {qty: i.qty, price: i.price};
+        });
+        editUser = u; buffer = null; isEditMode = true;
         document.getElementById('dt').value = date;
-        document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ ЗАКАЗА: " + (dispName || date.split('-').reverse().join('.'));
+        document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + (dispName || u);
         document.getElementById('copy-notify').style.display = 'block';
         tab('order'); renderMenu();
     }
@@ -254,10 +260,17 @@
             if (ok) {
                 tg.MainButton.showProgress();
                 try {
-                    await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date:s, items:allOrders[s]})});
+                    await fetch(API, {
+                        method:'POST', 
+                        body:JSON.stringify({
+                            user: editUser || user, 
+                            date: s, 
+                            items: allOrders[s],
+                            isByAdmin: isAdmin && isEditMode
+                        })
+                    });
                     tg.HapticFeedback.notificationOccurred('success');
-                    buffer = null; editUser = null; isEditMode = false;
-                    document.getElementById('copy-notify').style.display = 'none';
+                    cancelBuffer();
                     await load(true);
                     tab('hist');
                 } catch(e) { tg.showAlert("Ошибка!"); } 
@@ -274,20 +287,22 @@
         try {
             const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
             box.innerHTML = `<div class="cat">Заказы на ${sel.split('-').reverse().join('.')}</div>`;
-            if(!data.length) box.innerHTML += '<div class="card">Заказов пока нет</div>';
+            if(!data.length) {
+                box.innerHTML += '<div class="card">Заказов пока нет</div>';
+                return;
+            }
             data.forEach(ord => {
+                const itemsJson = JSON.stringify(ord.items).replace(/"/g, '&quot;');
                 box.innerHTML += `<div class="card">
                     <div class="row">
                         <div><b>${ord.displayName}</b><br><small>${ord.total} ₽</small></div>
-                        <button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.displayName}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button>
+                        <button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.displayName}', '${sel}', ${itemsJson})">ПРАВИТЬ</button>
                     </div>
                 </div>`;
             });
-        } catch(e) { box.innerHTML = '<div class="card">Ошибка!</div>'; }
+        } catch(e) { box.innerHTML = '<div class="card">Ошибка загрузки!</div>'; }
     }
     load();
 </script>
 </body>
 </html>
-
-
