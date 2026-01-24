@@ -173,7 +173,16 @@
             if (ok) {
                 tg.MainButton.showProgress();
                 try {
-                    await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date: s, items: allOrders[s], isByAdmin: isAdmin && isEditMode})});
+                    // ЗДЕСЬ ПЕРЕДАЕМ isByAdmin ДЛЯ ТВОЕГО doPost
+                    await fetch(API, {
+                        method:'POST', 
+                        body:JSON.stringify({
+                            user: editUser || user, 
+                            date: s, 
+                            items: allOrders[s],
+                            isByAdmin: isAdmin && isEditMode
+                        })
+                    });
                     tg.HapticFeedback.notificationOccurred('success');
                     cancelBuffer(); await load(true); tab('hist');
                 } catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
@@ -200,4 +209,3 @@
 </script>
 </body>
 </html>
-
