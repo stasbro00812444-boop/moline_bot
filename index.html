@@ -52,7 +52,7 @@
     <div class="footer" id="f"><div class="row"><div><span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br><b id="tot" style="font-size:22px">0 ₽</b></div><button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button></div></div>
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbzWb5crAkvI1j8djhIBIO71VCxHWeCUc7oivp6QpINgfS7NJQV5FjqVjgzOaGt7CaGN/exec';
+    const API = 'https://script.google.com/macros/s/AKfycby5V6GjQnCBAeat40IF0k5w96hHj6TAXSJrdTza15jwU3M324VN8TIeVAU4jT9XJQPV/exec';
     const user = (tg.initDataUnsafe?.user?.username || "guest").toLowerCase().replace('@', '');
     let menuData = [], historyData = {}, isAdmin = false, editUser = null, buffer = null, isEditMode = false, allOrders = {}; 
 
@@ -216,6 +216,7 @@
 </script>
 </body>
 </html>
+
 
 
 
