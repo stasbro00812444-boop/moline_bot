@@ -31,6 +31,7 @@
         .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; z-index: 100; }
         .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; font-size: 16px; cursor: pointer; }
         .edit-icon { color: var(--main); font-size: 20px; cursor: pointer; margin-left: 10px; }
+        .del-icon { color: #ff4d4d; font-size: 20px; cursor: pointer; margin-left: 15px; }
         .hidden { display: none !important; }
         input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; background: #fff; outline: none; }
     </style>
@@ -145,7 +146,22 @@
         dates.forEach(d => {
             const locked = isLocked(d);
             let preview = historyData[d].items.map(i => `${i.name} (${i.qty})`).join(', ');
-            box.innerHTML += `<div class="card"><div class="row"><b>${d.split('-').reverse().join('.')}</b><div style="display:flex; align-items:center;"><b style="color:var(--main)">${historyData[d].total} ₽</b>${(!locked || isAdmin) ? `<span class="edit-icon" onclick="startEdit('${user}', '', '${d}', ${JSON.stringify(historyData[d].items).replace(/"/g, '&quot;')})">✎</span>` : ''}</div></div><div style="font-size:11px; color:#777; margin:8px 0 12px; line-height:1.4;">${preview}</div><button class="btn-repeat" onclick="copyOrder('${d}')">Повторить заказ</button></div>`;
+            box.innerHTML += `<div class="card"><div class="row"><b>${d.split('-').reverse().join('.')}</b><div style="display:flex; align-items:center;"><b style="color:var(--main)">${historyData[d].total} ₽</b>${(!locked || isAdmin) ? `<span class="edit-icon" onclick="startEdit('${user}', '', '${d}', ${JSON.stringify(historyData[d].items).replace(/"/g, '&quot;')})">✎</span><span class="del-icon" onclick="deleteOrder('${user}','${d}')">✖</span>` : ''}</div></div><div style="font-size:11px; color:#777; margin:8px 0 12px; line-height:1.4;">${preview}</div><button class="btn-repeat" onclick="copyOrder('${d}')">Повторить заказ</button></div>`;
+        });
+    }
+
+    function deleteOrder(u, d) {
+        tg.showConfirm(`Вы хотите удалить этот заказ на ${d.split('-').reverse().join('.')}?`, async (ok) => {
+            if(ok) {
+                tg.MainButton.showProgress();
+                try {
+                    await fetch(API, { method:'POST', body: JSON.stringify({ deleteOrder: true, user: u, date: d }) });
+                    tg.HapticFeedback.notificationOccurred('success');
+                    await load(true);
+                    if(document.getElementById('t2').classList.contains('active')) renderHist();
+                    else renderAdmin();
+                } catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
+            }
         });
     }
 
@@ -161,7 +177,7 @@
         allOrders[date] = {}; 
         items.forEach(i => allOrders[date][i.name] = {qty: i.qty, price: i.price});
         editUser = u; 
-        isEditMode = true; // Важно: устанавливаем режим правки
+        isEditMode = true;
         document.getElementById('dt').value = date;
         document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + (dispName || u);
         document.getElementById('copy-notify').style.display = 'block';
@@ -174,9 +190,7 @@
         const s = document.getElementById('dt').value;
         if(isLocked(s) && !isAdmin) return;
         if(!allOrders[s] || !Object.keys(allOrders[s]).length) return;
-        
         const msg = isEditMode ? `Изменить заказ на ${s.split('-').reverse().join('.')}?` : `Оформить заказ на ${s.split('-').reverse().join('.')}?`;
-        
         tg.showConfirm(msg, async (ok) => {
             if (ok) {
                 tg.MainButton.showProgress();
@@ -187,7 +201,7 @@
                             user: editUser || user, 
                             date: s, 
                             items: allOrders[s],
-                            isByAdmin: isAdmin && isEditMode // ГАРАНТИЯ ПЕРЕДАЧИ ФЛАГА ДЛЯ ГРУППЫ
+                            isByAdmin: isAdmin && isEditMode
                         })
                     });
                     tg.HapticFeedback.notificationOccurred('success');
@@ -208,7 +222,7 @@
             if(!data.length) { box.innerHTML += '<div class="card">Заказов пока нет</div>'; return; }
             data.forEach(ord => {
                 const itemsJson = JSON.stringify(ord.items).replace(/"/g, '&quot;');
-                box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.displayName}</b><br><small>${ord.total} ₽</small></div><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.displayName}', '${sel}', ${itemsJson})">ПРАВИТЬ</button></div></div>`;
+                box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.displayName}</b><br><small>${ord.total} ₽</small></div><div style="display:flex; align-items:center;"><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.displayName}', '${sel}', ${itemsJson})">ПРАВИТЬ</button><span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}')">✖</span></div></div></div>`;
             });
         } catch(e) { box.innerHTML = '<div class="card">Ошибка загрузки!</div>'; }
     }
@@ -216,11 +230,3 @@
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
