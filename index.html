@@ -64,7 +64,6 @@
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbxIZNv6DY9Y_to9XIp2zTAHKQRHBnXbkJOfx4_uTWlzU-gPbjvZr5LgdYgsYE5pMt-x/exec';
     
-    // Генерируем ID если нет username
     const username = tg.initDataUnsafe?.user?.username || "";
     const userId = tg.initDataUnsafe?.user?.id || "0";
     const user = (username ? username : "id_" + userId).toLowerCase().replace('@', '');
@@ -91,7 +90,7 @@
             menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
             
             if(isAdmin) {
-                document.getElementById('tab-bar').classList.add('hidden'); // Прячем табы для админа
+                document.getElementById('tab-bar').classList.add('hidden');
                 document.getElementById('dt-admin').value = new Date().toISOString().split('T')[0];
                 tab('admin'); 
             } else {
@@ -113,14 +112,16 @@
             box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Прием заказов на эту дату закрыт.</div>`;
             document.getElementById('tot').innerText = "0 ₽"; return;
         }
+        
         if (buffer) {
             allOrders[sel] = {};
             for (let name in buffer) {
                 const item = menuData.find(m => m.name === name);
                 if (item) allOrders[sel][name] = { qty: buffer[name].qty, price: item.price };
             }
-            buffer = null; 
+            // НЕ обнуляем buffer здесь, чтобы он тянулся при смене даты до оформления
         }
+        
         box.innerHTML = ''; let groups = {};
         menuData.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
         for (let c in groups) {
@@ -138,6 +139,12 @@
         allOrders[s] = allOrders[s] || {};
         let q = (allOrders[s][n]?.qty || 0) + d;
         if(isNaN(q) || q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
+        
+        // Если меняем руками в режиме повтора, обновляем буфер
+        if(buffer) {
+            if(q <= 0) delete buffer[n]; else buffer[n] = {qty:q};
+        }
+        
         renderMenu(); tg.HapticFeedback.impactOccurred('light');
     }
 
@@ -227,7 +234,14 @@
                         })
                     });
                     tg.HapticFeedback.notificationOccurred('success');
-                    cancelBuffer(); await load(true);
+                    
+                    // ФИКС: Очищаем буфер СРАЗУ после успешной отправки
+                    buffer = null; 
+                    isEditMode = false;
+                    editUser = null;
+                    document.getElementById('copy-notify').style.display = 'none';
+                    
+                    await load(true);
                     if(isAdmin) tab('admin'); else tab('hist');
                 } catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
             }
