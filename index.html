@@ -42,28 +42,22 @@
         <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
         <div id="t3" class="tab hidden" onclick="tab('admin')">АДМИН ⚡️</div>
     </div>
-    
-    <div id="m-bar" class="m-bar hidden"><span>Нужно изменить заказ после 12:00?</span><button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button></div>
-    
+    <div id="m-bar" class="m-bar hidden"><span>Изменить после 12:00?</span><button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button></div>
     <div id="p1" class="container">
         <div id="copy-notify" class="copy-banner"><div id="copy-text" style="font-size:11px; color:var(--main); font-weight:800; text-align:center;"></div><div style="text-align:center;"><button class="btn-cancel" onclick="cancelBuffer()">ОТМЕНИТЬ</button></div></div>
         <div class="card"><div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div><input type="date" id="dt" onchange="onDateChange()"></div>
         <div id="menu"></div>
     </div>
-    
     <div id="p2" class="container hidden"></div>
-    
     <div id="p3" class="container hidden">
         <div class="card"><div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ПРОСМОТР ЗАКАЗОВ НА ДАТУ</div><input type="date" id="dt-admin" onchange="renderAdmin()"></div>
         <div id="admin-list"></div>
     </div>
-    
     <div class="footer" id="f"><div class="row"><div><span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br><b id="tot" style="font-size:22px">0 ₽</b></div><button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button></div></div>
 
 <script>
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbxIZNv6DY9Y_to9XIp2zTAHKQRHBnXbkJOfx4_uTWlzU-gPbjvZr5LgdYgsYE5pMt-x/exec';
-    
     const username = tg.initDataUnsafe?.user?.username || "";
     const userId = tg.initDataUnsafe?.user?.id || "0";
     const user = (username ? username : "id_" + userId).toLowerCase().replace('@', '');
@@ -72,8 +66,7 @@
 
     function isLocked(dateStr) {
         if (isAdmin) return false;
-        const now = new Date(), todayStr = now.toISOString().split('T')[0];
-        const tom = new Date(); tom.setDate(now.getDate() + 1);
+        const now = new Date(), todayStr = now.toISOString().split('T')[0], tom = new Date(); tom.setDate(now.getDate() + 1);
         const tomStr = tom.toISOString().split('T')[0];
         if (dateStr <= todayStr) return true;
         if (dateStr === tomStr && now.getHours() >= 12) return true;
@@ -83,20 +76,15 @@
     async function load(quiet = false) {
         if(!quiet) tg.MainButton.showProgress();
         try {
-            const [m, h] = await Promise.all([
-                fetch(`${API}?type=menu&user=${user}`).then(r => r.json()), 
-                fetch(`${API}?user=${user}`).then(r => r.json())
-            ]);
+            const [m, h] = await Promise.all([fetch(`${API}?type=menu&user=${user}`).then(r => r.json()), fetch(`${API}?user=${user}`).then(r => r.json())]);
             menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
-            
             if(isAdmin) {
                 document.getElementById('tab-bar').classList.add('hidden');
                 document.getElementById('dt-admin').value = new Date().toISOString().split('T')[0];
                 tab('admin'); 
             } else {
                 const input = document.getElementById('dt'), now = new Date();
-                let minD = new Date(); 
-                minD.setDate(now.getDate() + (now.getHours() >= 12 ? 2 : 1));
+                let minD = new Date(); minD.setDate(now.getDate() + (now.getHours() >= 12 ? 2 : 1));
                 const minStr = minD.toISOString().split('T')[0];
                 input.setAttribute('min', minStr);
                 input.value = minStr;
@@ -113,13 +101,13 @@
             document.getElementById('tot').innerText = "0 ₽"; return;
         }
         
+        // ВАЖНО: Если есть буфер, мы ПЕРЕЗАПИСЫВАЕМ текущую выбранную дату данными из буфера
         if (buffer) {
             allOrders[sel] = {};
             for (let name in buffer) {
                 const item = menuData.find(m => m.name === name);
                 if (item) allOrders[sel][name] = { qty: buffer[name].qty, price: item.price };
             }
-            // НЕ обнуляем buffer здесь, чтобы он тянулся при смене даты до оформления
         }
         
         box.innerHTML = ''; let groups = {};
@@ -139,12 +127,7 @@
         allOrders[s] = allOrders[s] || {};
         let q = (allOrders[s][n]?.qty || 0) + d;
         if(isNaN(q) || q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
-        
-        // Если меняем руками в режиме повтора, обновляем буфер
-        if(buffer) {
-            if(q <= 0) delete buffer[n]; else buffer[n] = {qty:q};
-        }
-        
+        if(buffer) { if(q <= 0) delete buffer[n]; else buffer[n] = {qty:q}; }
         renderMenu(); tg.HapticFeedback.impactOccurred('light');
     }
 
@@ -177,15 +160,11 @@
     }
 
     async function deleteOrder(u, d) {
-        tg.showConfirm(`Вы хотите удалить этот заказ?`, async (ok) => {
+        tg.showConfirm(`Удалить заказ?`, async (ok) => {
             if(ok) {
                 tg.MainButton.showProgress();
-                try {
-                    await fetch(API, { method:'POST', body: JSON.stringify({ deleteOrder: true, user: u, date: d }) });
-                    tg.HapticFeedback.notificationOccurred('success');
-                    await load(true);
-                    if(isAdmin) renderAdmin(); else renderHist();
-                } catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
+                try { await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d})}); tg.HapticFeedback.notificationOccurred('success'); await load(true); if(isAdmin) renderAdmin(); else renderHist(); } 
+                catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
             }
         });
     }
@@ -199,10 +178,9 @@
     }
 
     function startEdit(u, dispName, date, items) {
-        allOrders[date] = {}; 
-        items.forEach(i => allOrders[date][i.name] = {qty: i.qty, price: i.price});
-        editUser = u; 
-        isEditMode = true;
+        buffer = null; // Сбрасываем повтор, если вошли в режим редактирования конкретного заказа
+        allOrders[date] = {}; items.forEach(i => allOrders[date][i.name] = {qty: i.qty, price: i.price});
+        editUser = u; isEditMode = true;
         document.getElementById('dt').value = date;
         document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + (dispName || u);
         document.getElementById('copy-notify').style.display = 'block';
@@ -212,35 +190,22 @@
     function cancelBuffer() { 
         buffer = null; editUser = null; isEditMode = false; 
         document.getElementById('copy-notify').style.display = 'none'; 
-        if(isAdmin) tab('admin'); else renderMenu(); 
+        const s = document.getElementById('dt').value; allOrders[s] = {}; // Очищаем корзину на текущей дате
+        renderMenu(); 
     }
 
     function send() {
         const s = document.getElementById('dt').value;
         if(isLocked(s) && !isAdmin) return;
         if(!allOrders[s] || !Object.keys(allOrders[s]).length) return;
-        const msg = isEditMode ? `Изменить заказ?` : `Оформить заказ?`;
-        tg.showConfirm(msg, async (ok) => {
+        tg.showConfirm(isEditMode ? `Изменить?` : `Оформить?`, async (ok) => {
             if (ok) {
                 tg.MainButton.showProgress();
                 try {
-                    await fetch(API, {
-                        method:'POST', 
-                        body:JSON.stringify({
-                            user: editUser || user, 
-                            date: s, 
-                            items: allOrders[s],
-                            isByAdmin: isAdmin && isEditMode
-                        })
-                    });
+                    await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date: s, items: allOrders[s], isByAdmin: isAdmin && isEditMode})});
                     tg.HapticFeedback.notificationOccurred('success');
-                    
-                    // ФИКС: Очищаем буфер СРАЗУ после успешной отправки
-                    buffer = null; 
-                    isEditMode = false;
-                    editUser = null;
+                    buffer = null; isEditMode = false; editUser = null; // ОЧИЩАЕМ БУФЕР
                     document.getElementById('copy-notify').style.display = 'none';
-                    
                     await load(true);
                     if(isAdmin) tab('admin'); else tab('hist');
                 } catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
@@ -261,7 +226,7 @@
                 const itemsJson = JSON.stringify(ord.items).replace(/"/g, '&quot;');
                 box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.displayName}</b><br><small>${ord.total} ₽</small></div><div style="display:flex; align-items:center;"><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.displayName}', '${sel}', ${itemsJson})">ПРАВИТЬ</button><span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}')">✖</span></div></div></div>`;
             });
-        } catch(e) { box.innerHTML = '<div class="card">Ошибка загрузки!</div>'; }
+        } catch(e) { box.innerHTML = '<div class="card">Ошибка!</div>'; }
     }
     load();
 </script>
