@@ -37,24 +37,38 @@
     </style>
 </head>
 <body>
-    <div class="tabs">
+    <div class="tabs" id="tab-bar">
         <div id="t1" class="tab active" onclick="tab('order')">ЗАКАЗАТЬ</div>
         <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
         <div id="t3" class="tab hidden" onclick="tab('admin')">АДМИН ⚡️</div>
     </div>
+    
     <div id="m-bar" class="m-bar hidden"><span>Нужно изменить заказ после 12:00?</span><button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button></div>
+    
     <div id="p1" class="container">
         <div id="copy-notify" class="copy-banner"><div id="copy-text" style="font-size:11px; color:var(--main); font-weight:800; text-align:center;"></div><div style="text-align:center;"><button class="btn-cancel" onclick="cancelBuffer()">ОТМЕНИТЬ</button></div></div>
         <div class="card"><div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div><input type="date" id="dt" onchange="onDateChange()"></div>
         <div id="menu"></div>
     </div>
+    
     <div id="p2" class="container hidden"></div>
-    <div id="p3" class="container hidden"><div id="admin-list"></div></div>
+    
+    <div id="p3" class="container hidden">
+        <div class="card"><div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ПРОСМОТР ЗАКАЗОВ НА ДАТУ</div><input type="date" id="dt-admin" onchange="renderAdmin()"></div>
+        <div id="admin-list"></div>
+    </div>
+    
     <div class="footer" id="f"><div class="row"><div><span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br><b id="tot" style="font-size:22px">0 ₽</b></div><button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button></div></div>
+
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycby3mQjqgEnnZTNMWf9oQUaMjvTHH3zvVuRnhgpgEVsZ8L7_lTWYqz1FaVwbn8E1_6wj/exec';
-    const user = (tg.initDataUnsafe?.user?.username || "guest").toLowerCase().replace('@', '');
+    const API = 'https://script.google.com/macros/s/AKfycbxIZNv6DY9Y_to9XIp2zTAHKQRHBnXbkJOfx4_uTWlzU-gPbjvZr5LgdYgsYE5pMt-x/exec';
+    
+    // Генерируем ID если нет username
+    const username = tg.initDataUnsafe?.user?.username || "";
+    const userId = tg.initDataUnsafe?.user?.id || "0";
+    const user = (username ? username : "id_" + userId).toLowerCase().replace('@', '');
+
     let menuData = [], historyData = {}, isAdmin = false, editUser = null, buffer = null, isEditMode = false, allOrders = {}; 
 
     function isLocked(dateStr) {
@@ -75,16 +89,21 @@
                 fetch(`${API}?user=${user}`).then(r => r.json())
             ]);
             menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
-            if(isAdmin) document.getElementById('t3').classList.remove('hidden');
-            if(!quiet) {
+            
+            if(isAdmin) {
+                document.getElementById('tab-bar').classList.add('hidden'); // Прячем табы для админа
+                document.getElementById('dt-admin').value = new Date().toISOString().split('T')[0];
+                tab('admin'); 
+            } else {
                 const input = document.getElementById('dt'), now = new Date();
                 let minD = new Date(); 
                 minD.setDate(now.getDate() + (now.getHours() >= 12 ? 2 : 1));
                 const minStr = minD.toISOString().split('T')[0];
-                if(!isAdmin) input.setAttribute('min', minStr);
+                input.setAttribute('min', minStr);
                 input.value = minStr;
-                renderMenu(); tg.MainButton.hideProgress();
+                renderMenu();
             }
+            if(!quiet) tg.MainButton.hideProgress();
         } catch(e) { tg.MainButton.hideProgress(); }
     }
 
@@ -150,16 +169,15 @@
         });
     }
 
-    function deleteOrder(u, d) {
-        tg.showConfirm(`Вы хотите удалить этот заказ на ${d.split('-').reverse().join('.')}?`, async (ok) => {
+    async function deleteOrder(u, d) {
+        tg.showConfirm(`Вы хотите удалить этот заказ?`, async (ok) => {
             if(ok) {
                 tg.MainButton.showProgress();
                 try {
                     await fetch(API, { method:'POST', body: JSON.stringify({ deleteOrder: true, user: u, date: d }) });
                     tg.HapticFeedback.notificationOccurred('success');
                     await load(true);
-                    if(document.getElementById('t2').classList.contains('active')) renderHist();
-                    else renderAdmin();
+                    if(isAdmin) renderAdmin(); else renderHist();
                 } catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
             }
         });
@@ -184,13 +202,17 @@
         tab('order'); renderMenu();
     }
 
-    function cancelBuffer() { buffer = null; editUser = null; isEditMode = false; document.getElementById('copy-notify').style.display = 'none'; renderMenu(); }
+    function cancelBuffer() { 
+        buffer = null; editUser = null; isEditMode = false; 
+        document.getElementById('copy-notify').style.display = 'none'; 
+        if(isAdmin) tab('admin'); else renderMenu(); 
+    }
 
     function send() {
         const s = document.getElementById('dt').value;
         if(isLocked(s) && !isAdmin) return;
         if(!allOrders[s] || !Object.keys(allOrders[s]).length) return;
-        const msg = isEditMode ? `Изменить заказ на ${s.split('-').reverse().join('.')}?` : `Оформить заказ на ${s.split('-').reverse().join('.')}?`;
+        const msg = isEditMode ? `Изменить заказ?` : `Оформить заказ?`;
         tg.showConfirm(msg, async (ok) => {
             if (ok) {
                 tg.MainButton.showProgress();
@@ -205,16 +227,17 @@
                         })
                     });
                     tg.HapticFeedback.notificationOccurred('success');
-                    cancelBuffer(); await load(true); tab('hist');
+                    cancelBuffer(); await load(true);
+                    if(isAdmin) tab('admin'); else tab('hist');
                 } catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
             }
         });
     }
 
-    function onDateChange() { renderMenu(); if(!document.getElementById('p3').classList.contains('hidden')) renderAdmin(); }
+    function onDateChange() { renderMenu(); }
 
     async function renderAdmin() {
-        const box = document.getElementById('admin-list'), sel = document.getElementById('dt').value;
+        const box = document.getElementById('admin-list'), sel = document.getElementById('dt-admin').value;
         box.innerHTML = '<div class="card" style="text-align:center;">Загрузка...</div>';
         try {
             const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
@@ -230,5 +253,3 @@
 </script>
 </body>
 </html>
-
-
