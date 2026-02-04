@@ -1,468 +1,191 @@
 <!DOCTYPE html>
-
 <html lang="ru">
-
 <head>
-
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
     <style>
-
         :root { --main: #f377c6; --bg: #fdfafd; --text: #2c2c2c; }
-
         body { 
-
             font-family: -apple-system, sans-serif; background-color: var(--bg);
-
             background-image: url('https://raw.githubusercontent.com/stasbro00812444-boop/moline_bot/refs/heads/main/LOGO.png');
-
             background-repeat: repeat; background-size: 100px; background-attachment: fixed;
-
             margin: 0; padding: 0; color: var(--text); -webkit-tap-highlight-color: transparent; 
-
         }
-
         body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(253, 250, 253, 0.94); z-index: -1; }
-
         .tabs { display: flex; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; height: 50px; }
-
         .tab { flex: 1; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #ccc; cursor: pointer; font-size: 11px; text-transform: uppercase; border-bottom: 3px solid transparent; }
-
         .tab.active { color: var(--main); border-bottom: 3px solid var(--main); }
-
-        .m-bar { background: var(--main); color: #fff; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; }
-
-        .btn-m { background: #fff; color: var(--main); border: none; padding: 8px 12px; border-radius: 10px; font-weight: 800; cursor: pointer; }
-
         .container { padding: 15px; padding-bottom: 160px; }
-
         .card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(5px); border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); position: relative; }
-
         .copy-banner { background: #fff3f9; border: 1.5px dashed var(--main); border-radius: 18px; margin-bottom:12px; padding: 12px; display: none; }
-
-        .btn-cancel { background: #fff; color: #ff4d4d; border: 1px solid #ff4d4d; padding: 4px 10px; border-radius: 8px; font-size: 10px; font-weight: 800; cursor: pointer; margin-top: 8px; }
-
         .row { display: flex; align-items: center; justify-content: space-between; }
-
         .cat { font-size: 11px; font-weight: 900; color: var(--main); margin: 15px 0 8px 5px; text-transform: uppercase; }
-
         .stepper { display: flex; align-items: center; background: #fff; border-radius: 12px; padding: 4px; border: 1.5px solid #f377c644; }
-
         .btn-s { border: none; color: var(--main); font-size: 22px; font-weight: 800; background: none; width: 34px; cursor: pointer; }
-
         .q-input { width: 40px; border: none; background: none; text-align: center; font-weight: 800; font-size: 16px; outline: none; }
-
-        .btn-repeat { background: #eee; border: none; width: 100%; padding: 8px; border-radius: 10px; font-weight: 800; font-size: 10px; text-transform: uppercase; cursor: pointer; margin-top: 10px; color: #777; }
-
         .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; z-index: 100; }
-
         .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; font-size: 16px; cursor: pointer; }
-
-        .edit-icon { color: var(--main); font-size: 20px; cursor: pointer; margin-left: 10px; }
-
         .del-icon { color: #ff4d4d; font-size: 20px; cursor: pointer; margin-left: 15px; }
-
+        input, select { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; background: #fff; outline: none; }
         .hidden { display: none !important; }
-
-        input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; background: #fff; outline: none; }
-
+        .shop-badge { font-size: 9px; background: var(--main); color: #fff; padding: 2px 6px; border-radius: 5px; margin-left: 5px; }
     </style>
-
 </head>
-
 <body>
-
     <div class="tabs" id="tab-bar">
-
         <div id="t1" class="tab active" onclick="tab('order')">ЗАКАЗАТЬ</div>
-
         <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
-
         <div id="t3" class="tab hidden" onclick="tab('admin')">АДМИН ⚡️</div>
-
     </div>
-
-    <div id="m-bar" class="m-bar hidden"><span>Изменить после 12:00?</span><button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button></div>
-
+    
     <div id="p1" class="container">
-
-        <div id="copy-notify" class="copy-banner"><div id="copy-text" style="font-size:11px; color:var(--main); font-weight:800; text-align:center;"></div><div style="text-align:center;"><button class="btn-cancel" onclick="cancelBuffer()">ОТМЕНИТЬ</button></div></div>
-
-        <div class="card"><div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div><input type="date" id="dt" onchange="onDateChange()"></div>
-
+        <div id="copy-notify" class="copy-banner"><div id="copy-text" style="font-size:11px; color:var(--main); font-weight:800; text-align:center;"></div></div>
+        <div class="card">
+            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА И КОФЕЙНЯ</div>
+            <input type="date" id="dt" onchange="onDateChange()">
+            <select id="shop-select" style="margin-top:10px;" onchange="onShopChange()"></select>
+        </div>
         <div id="menu"></div>
-
     </div>
 
     <div id="p2" class="container hidden"></div>
-
     <div id="p3" class="container hidden">
-
-        <div class="card"><div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ПРОСМОТР ЗАКАЗОВ НА ДАТУ</div><input type="date" id="dt-admin" onchange="renderAdmin()"></div>
-
+        <div class="card"><input type="date" id="dt-admin" onchange="renderAdmin()"></div>
         <div id="admin-list"></div>
-
     </div>
 
     <div class="footer" id="f"><div class="row"><div><span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br><b id="tot" style="font-size:22px">0 ₽</b></div><button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button></div></div>
 
-
-
 <script>
-
     const tg = window.Telegram.WebApp;
+    const API = 'https://script.google.com/macros/s/AKfycbyXi7boVMhDqYS54RYObvZ4_wl7RAtq99sesgtuEnSXmKqxrKoiTjiNVJQLZNl9Na_U/exec';
+    const rawUser = tg.initDataUnsafe?.user?.username || "id_" + (tg.initDataUnsafe?.user?.id || "0");
+    const user = rawUser.toLowerCase().replace('@', '');
 
-    const API = 'https://script.google.com/macros/s/AKfycbztPRRBEEpnfpK7caUznIQ6pBsnMOc5qSwmYs-gfzlGaijQN4YmHWdaQwxHXMysmHJT/exec';
-
-    const username = tg.initDataUnsafe?.user?.username || "";
-
-    const userId = tg.initDataUnsafe?.user?.id || "0";
-
-    const user = (username ? username : "id_" + userId).toLowerCase().replace('@', '');
-
-
-
-    let menuData = [], historyData = {}, isAdmin = false, editUser = null, buffer = null, isEditMode = false, allOrders = {}; 
-
-
-
-    function isLocked(dateStr) {
-
-        if (isAdmin) return false;
-
-        const now = new Date(), todayStr = now.toISOString().split('T')[0], tom = new Date(); tom.setDate(now.getDate() + 1);
-
-        const tomStr = tom.toISOString().split('T')[0];
-
-        if (dateStr <= todayStr) return true;
-
-        if (dateStr === tomStr && now.getHours() >= 12) return true;
-
-        return false;
-
-    }
-
-
+    let menuData = [], historyData = {}, isAdmin = false, currentSheet = "products", editUser = null, allOrders = {}; 
 
     async function load(quiet = false) {
-
         if(!quiet) tg.MainButton.showProgress();
-
         try {
-
-            const [m, h] = await Promise.all([fetch(`${API}?type=menu&user=${user}`).then(r => r.json()), fetch(`${API}?user=${user}`).then(r => r.json())]);
-
+            const m = await fetch(`${API}?type=menu&user=${user}&sheet=${currentSheet}`).then(r => r.json());
+            const h = await fetch(`${API}?user=${user}`).then(r => r.json());
             menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
+            
+            const shopSel = document.getElementById('shop-select');
+            shopSel.innerHTML = '';
+            m.availableSheets.forEach(s => shopSel.innerHTML += `<option value="${s}" ${s === currentSheet ? 'selected' : ''}>${s}</option>`);
+            shopSel.classList.toggle('hidden', m.availableSheets.length <= 1);
 
-            if(isAdmin) {
-
-                document.getElementById('tab-bar').classList.add('hidden');
-
-                document.getElementById('dt-admin').value = new Date().toISOString().split('T')[0];
-
-                tab('admin'); 
-
-            } else {
-
-                const input = document.getElementById('dt'), now = new Date();
-
+            if(isAdmin) document.getElementById('t3').classList.remove('hidden');
+            if(!document.getElementById('dt').value) {
+                const now = new Date();
                 let minD = new Date(); minD.setDate(now.getDate() + (now.getHours() >= 12 ? 2 : 1));
-
-                const minStr = minD.toISOString().split('T')[0];
-
-                input.setAttribute('min', minStr);
-
-                input.value = minStr;
-
-                renderMenu();
-
+                document.getElementById('dt').value = minD.toISOString().split('T')[0];
             }
-
+            renderMenu();
             if(!quiet) tg.MainButton.hideProgress();
-
         } catch(e) { tg.MainButton.hideProgress(); }
-
     }
-
-
 
     function renderMenu() {
-
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
-
-        if (isLocked(sel)) {
-
-            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Прием заказов на эту дату закрыт.</div>`;
-
-            document.getElementById('tot').innerText = "0 ₽"; return;
-
-        }
-
-        
-
-        // ВАЖНО: Если есть буфер, мы ПЕРЕЗАПИСЫВАЕМ текущую выбранную дату данными из буфера
-
-        if (buffer) {
-
-            allOrders[sel] = {};
-
-            for (let name in buffer) {
-
-                const item = menuData.find(m => m.name === name);
-
-                if (item) allOrders[sel][name] = { qty: buffer[name].qty, price: item.price };
-
-            }
-
-        }
-
-        
-
         box.innerHTML = ''; let groups = {};
-
         menuData.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
-
+        const key = sel + "_" + currentSheet;
         for (let c in groups) {
-
             box.innerHTML += `<div class="cat">${c}</div>`;
-
             groups[c].forEach(i => {
-
-                const q = allOrders[sel]?.[i.name]?.qty || 0;
-
+                const q = allOrders[key]?.[i.name]?.qty || 0;
                 box.innerHTML += `<div class="card row"><div><b>${i.name}</b><br><small>${i.price} ₽</small></div><div class="stepper"><button class="btn-s" onclick="upd('${i.name}',${i.price},-1)">-</button><input type="number" class="q-input" value="${q}" readonly><button class="btn-s" onclick="upd('${i.name}',${i.price},1)">+</button></div></div>`;
-
             });
-
         }
-
         calc();
-
     }
-
-
 
     function upd(n, p, d) {
-
-        const s = document.getElementById('dt').value;
-
-        allOrders[s] = allOrders[s] || {};
-
-        let q = (allOrders[s][n]?.qty || 0) + d;
-
-        if(isNaN(q) || q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
-
-        if(buffer) { if(q <= 0) delete buffer[n]; else buffer[n] = {qty:q}; }
-
-        renderMenu(); tg.HapticFeedback.impactOccurred('light');
-
+        const key = document.getElementById('dt').value + "_" + currentSheet;
+        allOrders[key] = allOrders[key] || {};
+        let q = (allOrders[key][n]?.qty || 0) + d;
+        if(q <= 0) delete allOrders[key][n]; else allOrders[key][n] = {qty:q, price:p};
+        renderMenu();
     }
-
-
 
     function calc() {
-
-        const s = document.getElementById('dt').value; let sub = 0;
-
-        for (let k in allOrders[s] || {}) sub += (allOrders[s][k].qty * allOrders[s][k].price);
-
+        const key = document.getElementById('dt').value + "_" + currentSheet;
+        let sub = 0;
+        for (let k in allOrders[key] || {}) sub += (allOrders[key][k].qty * allOrders[key][k].price);
         let del = (sub > 0 && sub < 3000) ? 300 : 0;
-
-        document.getElementById('delivery-info').innerText = sub >= 3000 ? "Доставка: Бесплатно" : (sub > 0 ? "Доставка: 300 ₽" : "Доставка: 0 ₽");
-
         document.getElementById('tot').innerText = (sub + del) + " ₽";
-
     }
-
-
 
     function tab(t) {
-
         document.querySelectorAll('.container').forEach(c => c.classList.add('hidden'));
-
         document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-
-        document.getElementById('m-bar').classList.toggle('hidden', t !== 'hist');
-
         if (t === 'order') { document.getElementById('p1').classList.remove('hidden'); document.getElementById('t1').classList.add('active'); document.getElementById('f').classList.remove('hidden'); }
-
         else if (t === 'hist') { document.getElementById('p2').classList.remove('hidden'); document.getElementById('t2').classList.add('active'); document.getElementById('f').classList.add('hidden'); renderHist(); }
-
         else { document.getElementById('p3').classList.remove('hidden'); document.getElementById('t3').classList.add('active'); document.getElementById('f').classList.add('hidden'); renderAdmin(); }
-
     }
-
-
 
     function renderHist() {
-
         const box = document.getElementById('p2'); box.innerHTML = '';
-
-        const dates = Object.keys(historyData).sort().reverse();
-
-        if(!dates.length) { box.innerHTML = '<div class="card" style="text-align:center; padding:20px;">История пуста</div>'; return; }
-
-        dates.forEach(d => {
-
-            const locked = isLocked(d);
-
-            let preview = historyData[d].items.map(i => `${i.name} (${i.qty})`).join(', ');
-
-            box.innerHTML += `<div class="card"><div class="row"><b>${d.split('-').reverse().join('.')}</b><div style="display:flex; align-items:center;"><b style="color:var(--main)">${historyData[d].total} ₽</b>${(!locked || isAdmin) ? `<span class="edit-icon" onclick="startEdit('${user}', '', '${d}', ${JSON.stringify(historyData[d].items).replace(/"/g, '&quot;')})">✎</span><span class="del-icon" onclick="deleteOrder('${user}','${d}')">✖</span>` : ''}</div></div><div style="font-size:11px; color:#777; margin:8px 0 12px; line-height:1.4;">${preview}</div><button class="btn-repeat" onclick="copyOrder('${d}')">Повторить заказ</button></div>`;
-
+        const keys = Object.keys(historyData).sort().reverse();
+        keys.forEach(k => {
+            const ord = historyData[k];
+            box.innerHTML += `<div class="card"><div class="row"><b>${ord.date.split('-').reverse().join('.')} <span class="shop-badge">${ord.sheet}</span></b><div style="display:flex; align-items:center;"><b style="color:var(--main)">${ord.total} ₽</b><span style="margin-left:10px; cursor:pointer;" onclick="startEdit('${user}','${ord.date}','${ord.sheet}',${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">✎</span><span class="del-icon" onclick="deleteOrder('${user}','${ord.date}','${ord.sheet}')">✖</span></div></div><div style="font-size:11px; color:#777; margin-top:8px;">${ord.items.map(i => i.name+' ('+i.qty+')').join(', ')}</div></div>`;
         });
-
     }
 
-
-
-    async function deleteOrder(u, d) {
-
+    async function deleteOrder(u, d, s) {
         tg.showConfirm(`Удалить заказ?`, async (ok) => {
-
             if(ok) {
-
                 tg.MainButton.showProgress();
-
-                try { await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d})}); tg.HapticFeedback.notificationOccurred('success'); await load(true); if(isAdmin) renderAdmin(); else renderHist(); } 
-
-                catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
-
+                await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, sheet:s})});
+                await load(true); if(isAdmin) renderAdmin(); else renderHist();
+                tg.MainButton.hideProgress();
             }
-
         });
-
     }
 
-
-
-    function copyOrder(d) {
-
-        buffer = {}; isEditMode = false; editUser = null;
-
-        historyData[d].items.forEach(i => buffer[i.name] = {qty: i.qty});
-
-        document.getElementById('copy-text').innerText = "ПОВТОР ЗАКАЗА: ВЫБЕРИТЕ ДАТУ";
-
+    function startEdit(u, d, s, items) {
+        const key = d + "_" + s;
+        allOrders[key] = {}; items.forEach(i => allOrders[key][i.name] = {qty: i.qty, price: i.price});
+        editUser = u; currentSheet = s;
+        document.getElementById('dt').value = d;
+        document.getElementById('shop-select').value = s;
         document.getElementById('copy-notify').style.display = 'block';
-
+        document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + s;
         tab('order'); renderMenu();
-
     }
-
-
-
-    function startEdit(u, dispName, date, items) {
-
-        buffer = null; // Сбрасываем повтор, если вошли в режим редактирования конкретного заказа
-
-        allOrders[date] = {}; items.forEach(i => allOrders[date][i.name] = {qty: i.qty, price: i.price});
-
-        editUser = u; isEditMode = true;
-
-        document.getElementById('dt').value = date;
-
-        document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + (dispName || u);
-
-        document.getElementById('copy-notify').style.display = 'block';
-
-        tab('order'); renderMenu();
-
-    }
-
-
-
-    function cancelBuffer() { 
-
-        buffer = null; editUser = null; isEditMode = false; 
-
-        document.getElementById('copy-notify').style.display = 'none'; 
-
-        const s = document.getElementById('dt').value; allOrders[s] = {}; // Очищаем корзину на текущей дате
-
-        renderMenu(); 
-
-    }
-
-
-
-    function send() {
-
-        const s = document.getElementById('dt').value;
-
-        if(isLocked(s) && !isAdmin) return;
-
-        if(!allOrders[s] || !Object.keys(allOrders[s]).length) return;
-
-        tg.showConfirm(isEditMode ? `Изменить?` : `Оформить?`, async (ok) => {
-
-            if (ok) {
-
-                tg.MainButton.showProgress();
-
-                try {
-
-                    await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date: s, items: allOrders[s], isByAdmin: isAdmin && isEditMode})});
-
-                    tg.HapticFeedback.notificationOccurred('success');
-
-                    buffer = null; isEditMode = false; editUser = null; // ОЧИЩАЕМ БУФЕР
-
-                    document.getElementById('copy-notify').style.display = 'none';
-
-                    await load(true);
-
-                    if(isAdmin) tab('admin'); else tab('hist');
-
-                } catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
-
-            }
-
-        });
-
-    }
-
-
 
     function onDateChange() { renderMenu(); }
+    function onShopChange() { currentSheet = document.getElementById('shop-select').value; load(true); }
 
-
-
-    async function renderAdmin() {
-
-        const box = document.getElementById('admin-list'), sel = document.getElementById('dt-admin').value;
-
-        box.innerHTML = '<div class="card" style="text-align:center;">Загрузка...</div>';
-
-        try {
-
-            const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
-
-            box.innerHTML = `<div class="cat">Заказы на ${sel.split('-').reverse().join('.')}</div>`;
-
-            if(!data.length) { box.innerHTML += '<div class="card">Заказов пока нет</div>'; return; }
-
-            data.forEach(ord => {
-
-                const itemsJson = JSON.stringify(ord.items).replace(/"/g, '&quot;');
-
-                box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.displayName}</b><br><small>${ord.total} ₽</small></div><div style="display:flex; align-items:center;"><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.displayName}', '${sel}', ${itemsJson})">ПРАВИТЬ</button><span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}')">✖</span></div></div></div>`;
-
-            });
-
-        } catch(e) { box.innerHTML = '<div class="card">Ошибка!</div>'; }
-
+    function send() {
+        const s = document.getElementById('dt').value;
+        const key = s + "_" + currentSheet;
+        if(!allOrders[key] || !Object.keys(allOrders[key]).length) return;
+        tg.showConfirm(`Отправить заказ?`, async (ok) => {
+            if (ok) {
+                tg.MainButton.showProgress();
+                await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date: s, items: allOrders[key], sheet: currentSheet})});
+                document.getElementById('copy-notify').style.display = 'none';
+                editUser = null; await load(true); tab('hist');
+                tg.MainButton.hideProgress();
+            }
+        });
     }
 
+    async function renderAdmin() {
+        const box = document.getElementById('admin-list'), sel = document.getElementById('dt-admin').value;
+        if(!sel) return;
+        const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
+        box.innerHTML = '';
+        data.forEach(ord => {
+            box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.displayName}</b><br><small>${ord.shop} | ${ord.total} ₽</small></div><div style="display:flex; align-items:center;"><button style="background:var(--main); color:#fff; border:none; padding:8px 12px; border-radius:10px; font-weight:800;" onclick="startEdit('${ord.user}','${sel}','${ord.shop}',${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button><span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}','${ord.shop}')">✖</span></div></div></div>`;
+        });
+    }
     load();
-
 </script>
-
 </body>
-
 </html>
-
