@@ -27,13 +27,12 @@
         .stepper { display: flex; align-items: center; background: #fff; border-radius: 12px; padding: 4px; border: 1.5px solid #f377c644; }
         .btn-s { border: none; color: var(--main); font-size: 22px; font-weight: 800; background: none; width: 34px; cursor: pointer; }
         .q-input { width: 40px; border: none; background: none; text-align: center; font-weight: 800; font-size: 16px; outline: none; }
-        .btn-repeat { background: #eee; border: none; width: 100%; padding: 8px; border-radius: 10px; font-weight: 800; font-size: 10px; text-transform: uppercase; cursor: pointer; margin-top: 10px; color: #777; }
         .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; z-index: 100; }
         .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; font-size: 16px; cursor: pointer; }
-        .edit-icon { color: var(--main); font-size: 20px; cursor: pointer; margin-left: 10px; }
         .del-icon { color: #ff4d4d; font-size: 20px; cursor: pointer; margin-left: 15px; }
         .hidden { display: none !important; }
-        input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; background: #fff; outline: none; }
+        input, select { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; background: #fff; outline: none; }
+        .shop-badge { font-size: 9px; background: var(--main); color: #fff; padding: 2px 6px; border-radius: 5px; margin-left: 5px; vertical-align: middle; }
     </style>
 </head>
 <body>
@@ -43,26 +42,32 @@
         <div id="t3" class="tab hidden" onclick="tab('admin')">АДМИН ⚡️</div>
     </div>
     <div id="m-bar" class="m-bar hidden"><span>Изменить после 12:00?</span><button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button></div>
+    
     <div id="p1" class="container">
         <div id="copy-notify" class="copy-banner"><div id="copy-text" style="font-size:11px; color:var(--main); font-weight:800; text-align:center;"></div><div style="text-align:center;"><button class="btn-cancel" onclick="cancelBuffer()">ОТМЕНИТЬ</button></div></div>
-        <div class="card"><div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div><input type="date" id="dt" onchange="onDateChange()"></div>
+        <div class="card">
+            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА И КОФЕЙНЯ</div>
+            <input type="date" id="dt" onchange="onDateChange()">
+            <select id="shop-select" style="margin-top:10px;" onchange="onShopChange()"></select>
+        </div>
         <div id="menu"></div>
     </div>
+
     <div id="p2" class="container hidden"></div>
     <div id="p3" class="container hidden">
         <div class="card"><div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ПРОСМОТР ЗАКАЗОВ НА ДАТУ</div><input type="date" id="dt-admin" onchange="renderAdmin()"></div>
         <div id="admin-list"></div>
     </div>
+
     <div class="footer" id="f"><div class="row"><div><span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br><b id="tot" style="font-size:22px">0 ₽</b></div><button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button></div></div>
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbwkXR2FdishqN6inrI9bN55Hb7NDzfA-35a3pYB4OrUMCFG-86zEKSXWxGFBCQ67jIb/exec';
-    const username = tg.initDataUnsafe?.user?.username || "";
-    const userId = tg.initDataUnsafe?.user?.id || "0";
-    const user = (username ? username : "id_" + userId).toLowerCase().replace('@', '');
+    const API = 'https://script.google.com/macros/s/AKfycbw2HGUY4smOKcYX6d-XXL34UONhv2nQbXOUsjQEWiW4y96573eaUA0R2PNoEM2YEeqd/exec';
+    const rawUser = tg.initDataUnsafe?.user?.username || "id_" + (tg.initDataUnsafe?.user?.id || "0");
+    const user = rawUser.toLowerCase().replace('@', '');
 
-    let menuData = [], historyData = {}, isAdmin = false, editUser = null, buffer = null, isEditMode = false, allOrders = {}; 
+    let menuData = [], historyData = {}, isAdmin = false, currentSheet = "products", editUser = null, isEditMode = false, allOrders = {}; 
 
     function isLocked(dateStr) {
         if (isAdmin) return false;
@@ -76,20 +81,22 @@
     async function load(quiet = false) {
         if(!quiet) tg.MainButton.showProgress();
         try {
-            const [m, h] = await Promise.all([fetch(`${API}?type=menu&user=${user}`).then(r => r.json()), fetch(`${API}?user=${user}`).then(r => r.json())]);
+            const m = await fetch(`${API}?type=menu&user=${user}&sheet=${currentSheet}`).then(r => r.json());
+            const h = await fetch(`${API}?user=${user}`).then(r => r.json());
             menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
-            if(isAdmin) {
-                document.getElementById('tab-bar').classList.add('hidden');
-                document.getElementById('dt-admin').value = new Date().toISOString().split('T')[0];
-                tab('admin'); 
-            } else {
-                const input = document.getElementById('dt'), now = new Date();
+            
+            const shopSel = document.getElementById('shop-select');
+            shopSel.innerHTML = '';
+            m.availableSheets.forEach(s => shopSel.innerHTML += `<option value="${s}" ${s === currentSheet ? 'selected' : ''}>${s}</option>`);
+            shopSel.classList.toggle('hidden', m.availableSheets.length <= 1);
+
+            if(isAdmin) document.getElementById('t3').classList.remove('hidden');
+            if(!document.getElementById('dt').value) {
+                const now = new Date();
                 let minD = new Date(); minD.setDate(now.getDate() + (now.getHours() >= 12 ? 2 : 1));
-                const minStr = minD.toISOString().split('T')[0];
-                input.setAttribute('min', minStr);
-                input.value = minStr;
-                renderMenu();
+                document.getElementById('dt').value = minD.toISOString().split('T')[0];
             }
+            renderMenu();
             if(!quiet) tg.MainButton.hideProgress();
         } catch(e) { tg.MainButton.hideProgress(); }
     }
@@ -97,25 +104,16 @@
     function renderMenu() {
         const box = document.getElementById('menu'), sel = document.getElementById('dt').value;
         if (isLocked(sel)) {
-            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Прием заказов на эту дату закрыт.</div>`;
+            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Прием закрыт</div>`;
             document.getElementById('tot').innerText = "0 ₽"; return;
         }
-        
-        // ВАЖНО: Если есть буфер, мы ПЕРЕЗАПИСЫВАЕМ текущую выбранную дату данными из буфера
-        if (buffer) {
-            allOrders[sel] = {};
-            for (let name in buffer) {
-                const item = menuData.find(m => m.name === name);
-                if (item) allOrders[sel][name] = { qty: buffer[name].qty, price: item.price };
-            }
-        }
-        
         box.innerHTML = ''; let groups = {};
         menuData.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
+        const key = sel + "_" + currentSheet;
         for (let c in groups) {
             box.innerHTML += `<div class="cat">${c}</div>`;
             groups[c].forEach(i => {
-                const q = allOrders[sel]?.[i.name]?.qty || 0;
+                const q = allOrders[key]?.[i.name]?.qty || 0;
                 box.innerHTML += `<div class="card row"><div><b>${i.name}</b><br><small>${i.price} ₽</small></div><div class="stepper"><button class="btn-s" onclick="upd('${i.name}',${i.price},-1)">-</button><input type="number" class="q-input" value="${q}" readonly><button class="btn-s" onclick="upd('${i.name}',${i.price},1)">+</button></div></div>`;
             });
         }
@@ -123,17 +121,17 @@
     }
 
     function upd(n, p, d) {
-        const s = document.getElementById('dt').value;
-        allOrders[s] = allOrders[s] || {};
-        let q = (allOrders[s][n]?.qty || 0) + d;
-        if(isNaN(q) || q <= 0) delete allOrders[s][n]; else allOrders[s][n] = {qty:q, price:p};
-        if(buffer) { if(q <= 0) delete buffer[n]; else buffer[n] = {qty:q}; }
+        const key = document.getElementById('dt').value + "_" + currentSheet;
+        allOrders[key] = allOrders[key] || {};
+        let q = (allOrders[key][n]?.qty || 0) + d;
+        if(q <= 0) delete allOrders[key][n]; else allOrders[key][n] = {qty:q, price:p};
         renderMenu(); tg.HapticFeedback.impactOccurred('light');
     }
 
     function calc() {
-        const s = document.getElementById('dt').value; let sub = 0;
-        for (let k in allOrders[s] || {}) sub += (allOrders[s][k].qty * allOrders[s][k].price);
+        const key = document.getElementById('dt').value + "_" + currentSheet;
+        let sub = 0;
+        for (let k in allOrders[key] || {}) sub += (allOrders[key][k].qty * allOrders[key][k].price);
         let del = (sub > 0 && sub < 3000) ? 300 : 0;
         document.getElementById('delivery-info').innerText = sub >= 3000 ? "Доставка: Бесплатно" : (sub > 0 ? "Доставка: 300 ₽" : "Доставка: 0 ₽");
         document.getElementById('tot').innerText = (sub + del) + " ₽";
@@ -150,86 +148,66 @@
 
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
-        const dates = Object.keys(historyData).sort().reverse();
-        if(!dates.length) { box.innerHTML = '<div class="card" style="text-align:center; padding:20px;">История пуста</div>'; return; }
-        dates.forEach(d => {
-            const locked = isLocked(d);
-            let preview = historyData[d].items.map(i => `${i.name} (${i.qty})`).join(', ');
-            box.innerHTML += `<div class="card"><div class="row"><b>${d.split('-').reverse().join('.')}</b><div style="display:flex; align-items:center;"><b style="color:var(--main)">${historyData[d].total} ₽</b>${(!locked || isAdmin) ? `<span class="edit-icon" onclick="startEdit('${user}', '', '${d}', ${JSON.stringify(historyData[d].items).replace(/"/g, '&quot;')})">✎</span><span class="del-icon" onclick="deleteOrder('${user}','${d}')">✖</span>` : ''}</div></div><div style="font-size:11px; color:#777; margin:8px 0 12px; line-height:1.4;">${preview}</div><button class="btn-repeat" onclick="copyOrder('${d}')">Повторить заказ</button></div>`;
+        const keys = Object.keys(historyData).sort().reverse();
+        if(!keys.length) { box.innerHTML = '<div class="card" style="text-align:center;">История пуста</div>'; return; }
+        keys.forEach(k => {
+            const ord = historyData[k];
+            const locked = isLocked(ord.date);
+            box.innerHTML += `<div class="card"><div class="row"><b>${ord.date.split('-').reverse().join('.')} <span class="shop-badge">${ord.sheet}</span></b><div style="display:flex; align-items:center;"><b style="color:var(--main)">${ord.total} ₽</b>${(!locked || isAdmin) ? `<span style="margin-left:10px;" onclick="startEdit('${user}','${ord.date}','${ord.sheet}',${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">✎</span><span class="del-icon" onclick="deleteOrder('${user}','${ord.date}','${ord.sheet}')">✖</span>` : ''}</div></div><div style="font-size:11px; color:#777; margin-top:8px;">${ord.items.map(i => i.name+' ('+i.qty+')').join(', ')}</div></div>`;
         });
     }
 
-    async function deleteOrder(u, d) {
+    async function deleteOrder(u, d, s) {
         tg.showConfirm(`Удалить заказ?`, async (ok) => {
             if(ok) {
                 tg.MainButton.showProgress();
-                try { await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d})}); tg.HapticFeedback.notificationOccurred('success'); await load(true); if(isAdmin) renderAdmin(); else renderHist(); } 
-                catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
+                await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, sheet:s})});
+                await load(true); if(isAdmin) renderAdmin(); else renderHist();
+                tg.MainButton.hideProgress();
             }
         });
     }
 
-    function copyOrder(d) {
-        buffer = {}; isEditMode = false; editUser = null;
-        historyData[d].items.forEach(i => buffer[i.name] = {qty: i.qty});
-        document.getElementById('copy-text').innerText = "ПОВТОР ЗАКАЗА: ВЫБЕРИТЕ ДАТУ";
+    function startEdit(u, d, s, items) {
+        const key = d + "_" + s;
+        allOrders[key] = {}; items.forEach(i => allOrders[key][i.name] = {qty: i.qty, price: i.price});
+        editUser = u; currentSheet = s; isEditMode = true;
+        document.getElementById('dt').value = d;
+        document.getElementById('shop-select').value = s;
+        document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + s;
         document.getElementById('copy-notify').style.display = 'block';
         tab('order'); renderMenu();
     }
 
-    function startEdit(u, dispName, date, items) {
-        buffer = null; // Сбрасываем повтор, если вошли в режим редактирования конкретного заказа
-        allOrders[date] = {}; items.forEach(i => allOrders[date][i.name] = {qty: i.qty, price: i.price});
-        editUser = u; isEditMode = true;
-        document.getElementById('dt').value = date;
-        document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + (dispName || u);
-        document.getElementById('copy-notify').style.display = 'block';
-        tab('order'); renderMenu();
-    }
-
-    function cancelBuffer() { 
-        buffer = null; editUser = null; isEditMode = false; 
-        document.getElementById('copy-notify').style.display = 'none'; 
-        const s = document.getElementById('dt').value; allOrders[s] = {}; // Очищаем корзину на текущей дате
-        renderMenu(); 
-    }
+    function cancelBuffer() { isEditMode = false; editUser = null; document.getElementById('copy-notify').style.display = 'none'; renderMenu(); }
+    function onDateChange() { renderMenu(); }
+    function onShopChange() { currentSheet = document.getElementById('shop-select').value; load(true); }
 
     function send() {
         const s = document.getElementById('dt').value;
-        if(isLocked(s) && !isAdmin) return;
-        if(!allOrders[s] || !Object.keys(allOrders[s]).length) return;
-        tg.showConfirm(isEditMode ? `Изменить?` : `Оформить?`, async (ok) => {
+        const key = s + "_" + currentSheet;
+        if(!allOrders[key] || !Object.keys(allOrders[key]).length) return;
+        tg.showConfirm(`Отправить заказ?`, async (ok) => {
             if (ok) {
                 tg.MainButton.showProgress();
-                try {
-                    await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date: s, items: allOrders[s], isByAdmin: isAdmin && isEditMode})});
-                    tg.HapticFeedback.notificationOccurred('success');
-                    buffer = null; isEditMode = false; editUser = null; // ОЧИЩАЕМ БУФЕР
-                    document.getElementById('copy-notify').style.display = 'none';
-                    await load(true);
-                    if(isAdmin) tab('admin'); else tab('hist');
-                } catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
+                await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date: s, items: allOrders[key], sheet: currentSheet})});
+                cancelBuffer(); await load(true); tab('hist');
+                tg.MainButton.hideProgress();
             }
         });
     }
 
-    function onDateChange() { renderMenu(); }
-
     async function renderAdmin() {
         const box = document.getElementById('admin-list'), sel = document.getElementById('dt-admin').value;
-        box.innerHTML = '<div class="card" style="text-align:center;">Загрузка...</div>';
-        try {
-            const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
-            box.innerHTML = `<div class="cat">Заказы на ${sel.split('-').reverse().join('.')}</div>`;
-            if(!data.length) { box.innerHTML += '<div class="card">Заказов пока нет</div>'; return; }
-            data.forEach(ord => {
-                const itemsJson = JSON.stringify(ord.items).replace(/"/g, '&quot;');
-                box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.displayName}</b><br><small>${ord.total} ₽</small></div><div style="display:flex; align-items:center;"><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.displayName}', '${sel}', ${itemsJson})">ПРАВИТЬ</button><span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}')">✖</span></div></div></div>`;
-            });
-        } catch(e) { box.innerHTML = '<div class="card">Ошибка!</div>'; }
+        if(!sel) return;
+        box.innerHTML = '<div class="card">Загрузка...</div>';
+        const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
+        box.innerHTML = '';
+        data.forEach(ord => {
+            box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.displayName}</b><br><small>${ord.sheet} | ${ord.total} ₽</small></div><div style="display:flex; align-items:center;"><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}','${sel}','${ord.sheet}',${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button><span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}','${ord.sheet}')">✖</span></div></div></div>`;
+        });
     }
     load();
 </script>
 </body>
 </html>
-
