@@ -42,7 +42,7 @@
         <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
         <div id="t3" class="tab hidden" onclick="tab('admin')">АДМИН ⚡️</div>
     </div>
-    <div id="m-bar" class="m-bar hidden"><span>Изменить после 12:00?</span><button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button></div>
+    <div id="m-bar" class="m-bar hidden"><span>Изменить после 11:00?</span><button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button></div>
     <div id="p1" class="container">
         <div id="copy-notify" class="copy-banner"><div id="copy-text" style="font-size:11px; color:var(--main); font-weight:800; text-align:center;"></div><div style="text-align:center;"><button class="btn-cancel" onclick="cancelBuffer()">ОТМЕНИТЬ</button></div></div>
         <div class="card"><div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div><input type="date" id="dt" onchange="onDateChange()"></div>
@@ -69,7 +69,7 @@
         const now = new Date(), todayStr = now.toISOString().split('T')[0], tom = new Date(); tom.setDate(now.getDate() + 1);
         const tomStr = tom.toISOString().split('T')[0];
         if (dateStr <= todayStr) return true;
-        if (dateStr === tomStr && now.getHours() >= 12) return true;
+        if (dateStr === tomStr && now.getHours() >= 11) return true; // ИЗМЕНЕНО НА 11
         return false;
     }
 
@@ -79,17 +79,15 @@
             const [m, h] = await Promise.all([fetch(`${API}?type=menu&user=${user}`).then(r => r.json()), fetch(`${API}?user=${user}`).then(r => r.json())]);
             menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
             if(isAdmin) {
-                document.getElementById('tab-bar').classList.add('hidden');
+                document.getElementById('t3').classList.remove('hidden');
                 document.getElementById('dt-admin').value = new Date().toISOString().split('T')[0];
-                tab('admin'); 
-            } else {
-                const input = document.getElementById('dt'), now = new Date();
-                let minD = new Date(); minD.setDate(now.getDate() + (now.getHours() >= 12 ? 2 : 1));
-                const minStr = minD.toISOString().split('T')[0];
-                input.setAttribute('min', minStr);
-                input.value = minStr;
-                renderMenu();
             }
+            const input = document.getElementById('dt'), now = new Date();
+            let minD = new Date(); minD.setDate(now.getDate() + (now.getHours() >= 11 ? 2 : 1));
+            const minStr = minD.toISOString().split('T')[0];
+            input.setAttribute('min', minStr);
+            if (!input.value) input.value = minStr;
+            renderMenu();
             if(!quiet) tg.MainButton.hideProgress();
         } catch(e) { tg.MainButton.hideProgress(); }
     }
@@ -100,8 +98,6 @@
             box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Прием заказов на эту дату закрыт.</div>`;
             document.getElementById('tot').innerText = "0 ₽"; return;
         }
-        
-        // ВАЖНО: Если есть буфер, мы ПЕРЕЗАПИСЫВАЕМ текущую выбранную дату данными из буфера
         if (buffer) {
             allOrders[sel] = {};
             for (let name in buffer) {
@@ -109,7 +105,6 @@
                 if (item) allOrders[sel][name] = { qty: buffer[name].qty, price: item.price };
             }
         }
-        
         box.innerHTML = ''; let groups = {};
         menuData.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
         for (let c in groups) {
@@ -178,8 +173,7 @@
     }
 
     function startEdit(u, dispName, date, items) {
-        buffer = null; // Сбрасываем повтор, если вошли в режим редактирования конкретного заказа
-        allOrders[date] = {}; items.forEach(i => allOrders[date][i.name] = {qty: i.qty, price: i.price});
+        buffer = null; allOrders[date] = {}; items.forEach(i => allOrders[date][i.name] = {qty: i.qty, price: i.price});
         editUser = u; isEditMode = true;
         document.getElementById('dt').value = date;
         document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + (dispName || u);
@@ -190,7 +184,7 @@
     function cancelBuffer() { 
         buffer = null; editUser = null; isEditMode = false; 
         document.getElementById('copy-notify').style.display = 'none'; 
-        const s = document.getElementById('dt').value; allOrders[s] = {}; // Очищаем корзину на текущей дате
+        const s = document.getElementById('dt').value; allOrders[s] = {};
         renderMenu(); 
     }
 
@@ -202,9 +196,9 @@
             if (ok) {
                 tg.MainButton.showProgress();
                 try {
-                    await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date: s, items: allOrders[s], isByAdmin: isAdmin && isEditMode})});
+                    await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date: s, items: allOrders[s]})});
                     tg.HapticFeedback.notificationOccurred('success');
-                    buffer = null; isEditMode = false; editUser = null; // ОЧИЩАЕМ БУФЕР
+                    buffer = null; isEditMode = false; editUser = null;
                     document.getElementById('copy-notify').style.display = 'none';
                     await load(true);
                     if(isAdmin) tab('admin'); else tab('hist');
