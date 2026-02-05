@@ -75,13 +75,12 @@
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbxW14gNBlp5cZSC5WGBE2bzYa2b_lEL-UVh6VgfTrFDc3DdcZwBK8py8AtC9Nn7w-r2/exec';
     
-    // ФИКС ID: Используем UID если нет username
     const username = tg.initDataUnsafe?.user?.username || "";
     const userId = tg.initDataUnsafe?.user?.id || "0";
     const user = (username ? username : "id_" + userId).toLowerCase().replace('@', '');
 
     let menuData = [], historyData = [], isAdmin = false, editUser = null, buffer = null, isEditMode = false;
-    let allOrders = {}; // Формат: { "date_shopname": { items } }
+    let allOrders = {}; 
 
     function isLocked(dateStr) {
         if (isAdmin) return false;
@@ -101,7 +100,6 @@
             ]);
             menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
             
-            // Настройка селектора кофеен
             const shopSelect = document.getElementById('shop-select');
             const shopBox = document.getElementById('shop-selector-box');
             shopSelect.innerHTML = '';
@@ -220,7 +218,7 @@
                     </div>
                 </div>
                 <div style="font-size:11px; color:#777; margin:8px 0 12px; line-height:1.4;">${preview}</div>
-                <button class="btn-repeat" onclick="copyOrder(${JSON.stringify(h.items).replace(/"/g, '&quot;')})">Повторить заказ</button>
+                <button class="btn-repeat" onclick="copyOrder(${JSON.stringify(h.items).replace(/"/g, '&quot;')}, '${h.shopName}')">Повторить заказ</button>
             </div>`;
         });
     }
@@ -240,11 +238,12 @@
         });
     }
 
-    function copyOrder(items) {
+    function copyOrder(items, shopName) {
         buffer = {}; isEditMode = false; editUser = null;
         items.forEach(i => buffer[i.name] = {qty: i.qty});
-        document.getElementById('copy-text').innerText = "ПОВТОР ЗАКАЗА: ВЫБЕРИТЕ ДАТУ И МАГАЗИН";
+        document.getElementById('copy-text').innerText = "ПОВТОР ЗАКАЗА: " + shopName;
         document.getElementById('copy-notify').style.display = 'block';
+        document.getElementById('shop-select').value = shopName;
         tab('order'); renderMenu();
     }
 
@@ -309,7 +308,7 @@
                 const itemsJson = JSON.stringify(ord.items).replace(/"/g, '&quot;');
                 box.innerHTML += `<div class="card">
                     <div class="row">
-                        <div><b>${ord.shopName}</b><br><small>${ord.total} ₽ (User: ${ord.user})</small></div>
+                        <div><b>${ord.shopName}</b><br><small>${ord.total} ₽ (Ник: ${ord.user})</small></div>
                         <div style="display:flex; align-items:center;">
                             <button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.shopName}', '${sel}', ${itemsJson})">ПРАВИТЬ</button>
                             <span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}','${ord.shopName}')">✖</span>
