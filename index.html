@@ -69,7 +69,7 @@
         const now = new Date(), todayStr = now.toISOString().split('T')[0], tom = new Date(); tom.setDate(now.getDate() + 1);
         const tomStr = tom.toISOString().split('T')[0];
         if (dateStr <= todayStr) return true;
-        if (dateStr === tomStr && now.getHours() >= 11) return true; // ИЗМЕНЕНО НА 11
+        if (dateStr === tomStr && now.getHours() >= 11) return true; 
         return false;
     }
 
