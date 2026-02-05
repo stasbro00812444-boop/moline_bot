@@ -6,106 +6,148 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --main: #f377c6; --bg: #fdfafd; --text: #2c2c2c; }
-        body { font-family: -apple-system, sans-serif; background-color: var(--bg); margin: 0; color: var(--text); }
-        .tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; height: 50px; }
-        .tab { flex: 1; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #ccc; font-size: 11px; cursor: pointer; border-bottom: 3px solid transparent; }
+        body { 
+            font-family: -apple-system, sans-serif; background-color: var(--bg);
+            background-image: url('https://raw.githubusercontent.com/stasbro00812444-boop/moline_bot/refs/heads/main/LOGO.png');
+            background-repeat: repeat; background-size: 100px; background-attachment: fixed;
+            margin: 0; padding: 0; color: var(--text); -webkit-tap-highlight-color: transparent; 
+        }
+        body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(253, 250, 253, 0.94); z-index: -1; }
+        .tabs { display: flex; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; height: 50px; }
+        .tab { flex: 1; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #ccc; cursor: pointer; font-size: 11px; text-transform: uppercase; border-bottom: 3px solid transparent; }
         .tab.active { color: var(--main); border-bottom: 3px solid var(--main); }
+        .m-bar { background: var(--main); color: #fff; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; }
+        .btn-m { background: #fff; color: var(--main); border: none; padding: 8px 12px; border-radius: 10px; font-weight: 800; cursor: pointer; }
         .container { padding: 15px; padding-bottom: 160px; }
-        .card { background: #fff; border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(5px); border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); position: relative; }
+        .copy-banner { background: #fff3f9; border: 1.5px dashed var(--main); border-radius: 18px; margin-bottom:12px; padding: 12px; display: none; }
+        .btn-cancel { background: #fff; color: #ff4d4d; border: 1px solid #ff4d4d; padding: 4px 10px; border-radius: 8px; font-size: 10px; font-weight: 800; cursor: pointer; margin-top: 8px; }
         .row { display: flex; align-items: center; justify-content: space-between; }
         .cat { font-size: 11px; font-weight: 900; color: var(--main); margin: 15px 0 8px 5px; text-transform: uppercase; }
         .stepper { display: flex; align-items: center; background: #fff; border-radius: 12px; padding: 4px; border: 1.5px solid #f377c644; }
         .btn-s { border: none; color: var(--main); font-size: 22px; font-weight: 800; background: none; width: 34px; cursor: pointer; }
-        .q-input { width: 40px; border: none; text-align: center; font-weight: 800; font-size: 16px; outline: none; }
-        .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; z-index: 100; }
-        .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; font-size: 16px; }
-        .shop-select { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #eee; font-weight: 700; margin-bottom: 10px; background: #fff; }
+        .q-input { width: 40px; border: none; background: none; text-align: center; font-weight: 800; font-size: 16px; outline: none; }
+        .btn-repeat { background: #eee; border: none; width: 100%; padding: 8px; border-radius: 10px; font-weight: 800; font-size: 10px; text-transform: uppercase; cursor: pointer; margin-top: 10px; color: #777; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; z-index: 100; }
+        .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; font-size: 16px; cursor: pointer; }
+        .edit-icon { color: var(--main); font-size: 20px; cursor: pointer; margin-left: 10px; }
+        .del-icon { color: #ff4d4d; font-size: 20px; cursor: pointer; margin-left: 15px; }
         .hidden { display: none !important; }
-        input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; }
-        .copy-banner { background: #fff3f9; border: 1.5px dashed var(--main); border-radius: 18px; margin-bottom:12px; padding: 12px; display: none; text-align: center; }
-        .edit-icon, .del-icon { font-size: 20px; cursor: pointer; margin-left: 10px; }
-        .del-icon { color: #ff4d4d; }
+        input[type="date"], select { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; background: #fff; outline: none; -webkit-appearance: none; }
     </style>
 </head>
 <body>
-    <div class="tabs">
+    <div class="tabs" id="tab-bar">
         <div id="t1" class="tab active" onclick="tab('order')">ЗАКАЗАТЬ</div>
         <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
         <div id="t3" class="tab hidden" onclick="tab('admin')">АДМИН ⚡️</div>
     </div>
-
+    <div id="m-bar" class="m-bar hidden"><span>Изменить после 11:00?</span><button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button></div>
+    
     <div id="p1" class="container">
         <div id="copy-notify" class="copy-banner">
-            <div id="copy-text" style="font-size:11px; color:var(--main); font-weight:800;"></div>
-            <button onclick="cancelBuffer()" style="margin-top:5px; border:1px solid red; color:red; background:none; border-radius:5px; font-size:9px; padding:2px 5px;">ОТМЕНИТЬ</button>
+            <div id="copy-text" style="font-size:11px; color:var(--main); font-weight:800; text-align:center;"></div>
+            <div style="text-align:center;"><button class="btn-cancel" onclick="cancelBuffer()">ОТМЕНИТЬ</button></div>
         </div>
+        
+        <div class="card" id="shop-selector-box" style="display:none;">
+            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ВЫБЕРИТЕ КОФЕЙНЮ</div>
+            <select id="shop-select" onchange="onShopChange()"></select>
+        </div>
+
         <div class="card">
-            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">КОФЕЙНЯ И ДАТА</div>
-            <select id="shop-select" class="shop-select" onchange="renderMenu()"></select>
-            <input type="date" id="dt" onchange="renderMenu()">
+            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div>
+            <input type="date" id="dt" onchange="onDateChange()">
         </div>
         <div id="menu"></div>
     </div>
 
     <div id="p2" class="container hidden"></div>
+
     <div id="p3" class="container hidden">
-        <div class="card"><input type="date" id="dt-admin" onchange="renderAdmin()"></div>
+        <div class="card"><div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ПРОСМОТР ЗАКАЗОВ НА ДАТУ</div><input type="date" id="dt-admin" onchange="renderAdmin()"></div>
         <div id="admin-list"></div>
     </div>
 
-    <div class="footer" id="f">
-        <div class="row">
-            <div><span id="delivery-info" style="font-size:10px; color:var(--main); font-weight:800">Доставка: 0 ₽</span><br><b id="tot" style="font-size:22px">0 ₽</b></div>
-            <button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button>
-        </div>
-    </div>
+    <div class="footer" id="f"><div class="row"><div><span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br><b id="tot" style="font-size:22px">0 ₽</b></div><button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button></div></div>
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbzEmP0MSelMyAk6YvV8MSr-Ck4x2djNy1A2WrRq1apzVnShWtJI_vnxnh8XZLiWNSan/exec';
-    const rawUser = tg.initDataUnsafe?.user?.username || "id_" + tg.initDataUnsafe?.user?.id;
-    const user = String(rawUser).toLowerCase().replace('@', '');
+    const API = 'https://script.google.com/macros/s/AKfycbxW14gNBlp5cZSC5WGBE2bzYa2b_lEL-UVh6VgfTrFDc3DdcZwBK8py8AtC9Nn7w-r2/exec';
+    
+    // ФИКС ID: Используем UID если нет username
+    const username = tg.initDataUnsafe?.user?.username || "";
+    const userId = tg.initDataUnsafe?.user?.id || "0";
+    const user = (username ? username : "id_" + userId).toLowerCase().replace('@', '');
 
-    let menuData = [], historyData = {}, isAdmin = false, shops = [], allOrders = {}, isEditMode = false, editUser = null;
+    let menuData = [], historyData = [], isAdmin = false, editUser = null, buffer = null, isEditMode = false;
+    let allOrders = {}; // Формат: { "date_shopname": { items } }
 
     function isLocked(dateStr) {
         if (isAdmin) return false;
-        const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
-        const tom = new Date(); tom.setDate(now.getDate() + 1);
+        const now = new Date(), todayStr = now.toISOString().split('T')[0], tom = new Date(); tom.setDate(now.getDate() + 1);
         const tomStr = tom.toISOString().split('T')[0];
         if (dateStr <= todayStr) return true;
-        if (dateStr === tomStr && now.getHours() >= 11) return true;
+        if (dateStr === tomStr && now.getHours() >= 11) return true; 
         return false;
     }
 
-    async function load() {
-        tg.MainButton.showProgress();
+    async function load(quiet = false) {
+        if(!quiet) tg.MainButton.showProgress();
         try {
             const [m, h] = await Promise.all([
-                fetch(`${API}?type=menu&user=${user}`).then(r => r.json()),
-                fetch(`${API}?user=${user}`).then(r => r.json())
+                fetch(`${API}?type=menu&user=${user}&uid=${userId}`).then(r => r.json()), 
+                fetch(`${API}?user=${user}&uid=${userId}`).then(r => r.json())
             ]);
-            menuData = m.menu; historyData = h; isAdmin = m.isAdmin; shops = m.displayNames;
+            menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
+            
+            // Настройка селектора кофеен
+            const shopSelect = document.getElementById('shop-select');
+            const shopBox = document.getElementById('shop-selector-box');
+            shopSelect.innerHTML = '';
+            m.displayNames.forEach(name => {
+                shopSelect.innerHTML += `<option value="${name}">${name}</option>`;
+            });
+            shopBox.style.display = m.displayNames.length > 1 ? 'block' : 'none';
 
-            const sSelect = document.getElementById('shop-select');
-            sSelect.innerHTML = shops.map(s => `<option value="${s}">${s}</option>`).join('');
-            if (shops.length <= 1) sSelect.classList.add('hidden');
+            const input = document.getElementById('dt'), now = new Date();
+            let minD = new Date(); minD.setDate(now.getDate() + (now.getHours() >= 11 ? 2 : 1));
+            const minStr = minD.toISOString().split('T')[0];
+            input.setAttribute('min', minStr);
+            if (!input.value) input.value = minStr;
 
-            const input = document.getElementById('dt');
-            let minD = new Date(); minD.setDate(minD.getDate() + (new Date().getHours() >= 11 ? 2 : 1));
-            input.value = minD.toISOString().split('T')[0];
-
-            if(isAdmin) document.getElementById('t3').classList.remove('hidden');
-            renderMenu();
-        } finally { tg.MainButton.hideProgress(); }
+            if(isAdmin) {
+                document.getElementById('t1').classList.add('hidden');
+                document.getElementById('t2').classList.add('hidden');
+                document.getElementById('t3').classList.remove('hidden');
+                document.getElementById('dt-admin').value = new Date().toISOString().split('T')[0];
+                tab('admin');
+            } else {
+                renderMenu();
+            }
+            if(!quiet) tg.MainButton.hideProgress();
+        } catch(e) { tg.MainButton.hideProgress(); }
     }
 
     function renderMenu() {
-        const box = document.getElementById('menu'), date = document.getElementById('dt').value, shop = document.getElementById('shop-select').value;
+        const box = document.getElementById('menu');
+        const date = document.getElementById('dt').value;
+        const shop = document.getElementById('shop-select').value || "Default";
         const key = date + "_" + shop;
-        if (isLocked(date)) { box.innerHTML = `<div class="card" style="text-align:center; color:orange;">Заказы на эту дату закрыты.</div>`; return; }
-        
+
+        if (isLocked(date)) {
+            box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Прием заказов на эту дату закрыт.</div>`;
+            document.getElementById('tot').innerText = "0 ₽"; return;
+        }
+
+        if (buffer) {
+            allOrders[key] = {};
+            for (let name in buffer) {
+                const item = menuData.find(m => m.name === name);
+                if (item) allOrders[key][name] = { qty: buffer[name].qty, price: item.price };
+            }
+        }
+
         box.innerHTML = ''; let groups = {};
         menuData.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
         for (let c in groups) {
@@ -119,64 +161,99 @@
     }
 
     function upd(n, p, d) {
-        const key = document.getElementById('dt').value + "_" + document.getElementById('shop-select').value;
+        const date = document.getElementById('dt').value;
+        const shop = document.getElementById('shop-select').value || "Default";
+        const key = date + "_" + shop;
+        
         allOrders[key] = allOrders[key] || {};
         let q = (allOrders[key][n]?.qty || 0) + d;
-        if(q <= 0) delete allOrders[key][n]; else allOrders[key][n] = {qty:q, price:p};
+        if(isNaN(q) || q <= 0) delete allOrders[key][n]; else allOrders[key][n] = {qty:q, price:p};
+        if(buffer) { if(q <= 0) delete buffer[n]; else buffer[n] = {qty:q}; }
         renderMenu(); tg.HapticFeedback.impactOccurred('light');
     }
 
     function calc() {
-        const key = document.getElementById('dt').value + "_" + document.getElementById('shop-select').value;
-        let sub = 0; for (let k in allOrders[key] || {}) sub += (allOrders[key][k].qty * allOrders[key][k].price);
+        const date = document.getElementById('dt').value;
+        const shop = document.getElementById('shop-select').value || "Default";
+        const key = date + "_" + shop;
+        let sub = 0;
+        for (let k in allOrders[key] || {}) sub += (allOrders[key][k].qty * allOrders[key][k].price);
         let del = (sub > 0 && sub < 3000) ? 300 : 0;
         document.getElementById('delivery-info').innerText = sub >= 3000 ? "Доставка: Бесплатно" : (sub > 0 ? "Доставка: 300 ₽" : "Доставка: 0 ₽");
         document.getElementById('tot').innerText = (sub + del) + " ₽";
     }
 
-    async function send() {
-        const date = document.getElementById('dt').value, shop = document.getElementById('shop-select').value;
-        const key = date + "_" + shop;
-        if(!allOrders[key] || !Object.keys(allOrders[key]).length) return;
-        tg.showConfirm(`Оформить заказ для ${shop}?`, async (ok) => {
-            if(ok) {
-                tg.MainButton.showProgress();
-                await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date: date, shopName: shop, items: allOrders[key]})});
-                allOrders[key] = {}; isEditMode = false; editUser = null;
-                document.getElementById('copy-notify').style.display = 'none';
-                await load(); tab('hist');
-            }
-        });
-    }
-
     function tab(t) {
         document.querySelectorAll('.container').forEach(c => c.classList.add('hidden'));
         document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-        if (t === 'order') { document.getElementById('p1').classList.remove('hidden'); document.getElementById('t1').classList.add('active'); document.getElementById('f').classList.remove('hidden'); }
-        else if (t === 'hist') { document.getElementById('p2').classList.remove('hidden'); document.getElementById('t2').classList.add('active'); document.getElementById('f').classList.add('hidden'); renderHist(); }
-        else { document.getElementById('p3').classList.remove('hidden'); document.getElementById('t3').classList.add('active'); document.getElementById('f').classList.add('hidden'); renderAdmin(); }
+        document.getElementById('m-bar').classList.toggle('hidden', t !== 'hist');
+        if (t === 'order') { 
+            document.getElementById('p1').classList.remove('hidden'); 
+            document.getElementById('t1').classList.add('active'); 
+            document.getElementById('f').classList.remove('hidden'); 
+        } else if (t === 'hist') { 
+            document.getElementById('p2').classList.remove('hidden'); 
+            document.getElementById('t2').classList.add('active'); 
+            document.getElementById('f').classList.add('hidden'); 
+            renderHist(); 
+        } else { 
+            document.getElementById('p3').classList.remove('hidden'); 
+            document.getElementById('t3').classList.add('active'); 
+            document.getElementById('f').classList.add('hidden'); 
+            renderAdmin(); 
+        }
     }
 
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
-        const keys = Object.keys(historyData).sort().reverse();
-        if(!keys.length) { box.innerHTML = '<div class="card" style="text-align:center;">История пуста</div>'; return; }
-        keys.forEach(k => {
-            const ord = historyData[k]; const locked = isLocked(ord.date);
-            box.innerHTML += `<div class="card"><div class="row"><b>${ord.shopName} (${ord.date.split('-').reverse().join('.')})</b><div style="display:flex;"><b style="color:var(--main)">${ord.total} ₽</b>${!locked || isAdmin ? `<span class="edit-icon" onclick="startEdit('${user}','${ord.shopName}','${ord.date}',${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">✎</span><span class="del-icon" onclick="deleteOrder('${user}','${ord.date}','${ord.shopName}')">✖</span>` : ''}</div></div><div style="font-size:11px; color:#777; margin-top:5px;">${ord.items.map(i => i.name + ' (' + i.qty + ')').join(', ')}</div></div>`;
+        if(!historyData.length) { box.innerHTML = '<div class="card" style="text-align:center; padding:20px;">История пуста</div>'; return; }
+        
+        historyData.sort((a,b) => b.date.localeCompare(a.date)).forEach(h => {
+            const locked = isLocked(h.date);
+            let preview = h.items.map(i => `${i.name} (${i.qty})`).join(', ');
+            box.innerHTML += `<div class="card">
+                <div class="row">
+                    <div><b>${h.date.split('-').reverse().join('.')}</b><br><small style="color:var(--main)">${h.shopName}</small></div>
+                    <div style="display:flex; align-items:center;">
+                        <b style="color:var(--main)">${h.total} ₽</b>
+                        ${(!locked || isAdmin) ? `<span class="edit-icon" onclick="startEdit('${user}', '${h.shopName}', '${h.date}', ${JSON.stringify(h.items).replace(/"/g, '&quot;')})">✎</span><span class="del-icon" onclick="deleteOrder('${user}','${h.date}','${h.shopName}')">✖</span>` : ''}
+                    </div>
+                </div>
+                <div style="font-size:11px; color:#777; margin:8px 0 12px; line-height:1.4;">${preview}</div>
+                <button class="btn-repeat" onclick="copyOrder(${JSON.stringify(h.items).replace(/"/g, '&quot;')})">Повторить заказ</button>
+            </div>`;
         });
     }
 
-    async function deleteOrder(u, d, s) {
-        tg.showConfirm(`Удалить заказ?`, async (ok) => {
-            if(ok) { await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, shopName:s})}); await load(); renderHist(); }
+    async function deleteOrder(u, d, shop) {
+        tg.showConfirm(`Удалить заказ ${shop}?`, async (ok) => {
+            if(ok) {
+                tg.MainButton.showProgress();
+                try { 
+                    await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, shopName: shop})}); 
+                    tg.HapticFeedback.notificationOccurred('success'); 
+                    await load(true); 
+                    if(isAdmin) renderAdmin(); else renderHist(); 
+                } 
+                catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
+            }
         });
+    }
+
+    function copyOrder(items) {
+        buffer = {}; isEditMode = false; editUser = null;
+        items.forEach(i => buffer[i.name] = {qty: i.qty});
+        document.getElementById('copy-text').innerText = "ПОВТОР ЗАКАЗА: ВЫБЕРИТЕ ДАТУ И МАГАЗИН";
+        document.getElementById('copy-notify').style.display = 'block';
+        tab('order'); renderMenu();
     }
 
     function startEdit(u, shop, date, items) {
-        editUser = u; isEditMode = true;
-        const key = date + "_" + shop; allOrders[key] = {};
+        buffer = null; 
+        const key = date + "_" + shop;
+        allOrders[key] = {}; 
         items.forEach(i => allOrders[key][i.name] = {qty: i.qty, price: i.price});
+        editUser = u; isEditMode = true;
         document.getElementById('dt').value = date;
         document.getElementById('shop-select').value = shop;
         document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + shop;
@@ -184,16 +261,63 @@
         tab('order'); renderMenu();
     }
 
-    function cancelBuffer() { isEditMode = false; editUser = null; document.getElementById('copy-notify').style.display = 'none'; renderMenu(); }
+    function cancelBuffer() { 
+        buffer = null; editUser = null; isEditMode = false; 
+        document.getElementById('copy-notify').style.display = 'none'; 
+        if(isAdmin) tab('admin'); else renderMenu(); 
+    }
+
+    function send() {
+        const date = document.getElementById('dt').value;
+        const shop = document.getElementById('shop-select').value || "Default";
+        const key = date + "_" + shop;
+        if(isLocked(date) && !isAdmin) return;
+        if(!allOrders[key] || !Object.keys(allOrders[key]).length) return;
+        
+        tg.showConfirm(isEditMode ? `Изменить заказ для ${shop}?` : `Оформить заказ для ${shop}?`, async (ok) => {
+            if (ok) {
+                tg.MainButton.showProgress();
+                try {
+                    await fetch(API, {method:'POST', body:JSON.stringify({
+                        user: editUser || user, 
+                        date: date, 
+                        shopName: shop,
+                        items: allOrders[key]
+                    })});
+                    tg.HapticFeedback.notificationOccurred('success');
+                    buffer = null; isEditMode = false; editUser = null;
+                    document.getElementById('copy-notify').style.display = 'none';
+                    await load(true);
+                    if(isAdmin) tab('admin'); else tab('hist');
+                } catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
+            }
+        });
+    }
+
+    function onDateChange() { renderMenu(); }
+    function onShopChange() { renderMenu(); }
 
     async function renderAdmin() {
         const box = document.getElementById('admin-list'), sel = document.getElementById('dt-admin').value;
         if (!sel) return;
-        const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
-        box.innerHTML = `<div class="cat">Заказы на ${sel}</div>`;
-        data.forEach(ord => {
-            box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.shopName || ord.user}</b><br><small>${ord.total} ₽</small></div><button class="btn-s" style="font-size:14px" onclick="startEdit('${ord.user}','${ord.shopName}','${sel}',${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">✎</button></div></div>`;
-        });
+        box.innerHTML = '<div class="card" style="text-align:center;">Загрузка заказов...</div>';
+        try {
+            const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
+            box.innerHTML = `<div class="cat">Заказы на ${sel.split('-').reverse().join('.')}</div>`;
+            if(!data.length) { box.innerHTML += '<div class="card">Заказов пока нет</div>'; return; }
+            data.forEach(ord => {
+                const itemsJson = JSON.stringify(ord.items).replace(/"/g, '&quot;');
+                box.innerHTML += `<div class="card">
+                    <div class="row">
+                        <div><b>${ord.shopName}</b><br><small>${ord.total} ₽ (User: ${ord.user})</small></div>
+                        <div style="display:flex; align-items:center;">
+                            <button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.shopName}', '${sel}', ${itemsJson})">ПРАВИТЬ</button>
+                            <span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}','${ord.shopName}')">✖</span>
+                        </div>
+                    </div>
+                </div>`;
+            });
+        } catch(e) { box.innerHTML = '<div class="card">Ошибка загрузки!</div>'; }
     }
 
     load();
