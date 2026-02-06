@@ -72,15 +72,15 @@
     <div class="footer" id="f"><div class="row"><div><span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br><b id="tot" style="font-size:22px">0 ₽</b></div><button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button></div></div>
 
 <script>
-    <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbxkjRjEpQid-f05-C6K7XhoxtMu7HQ3CiSHiLesiHfDrBORiDV24YYdts644qCJ0xT5/exec;
+    // Ссылка на твой Google Script (проверь, что она актуальная после деплоя)
+    const API = 'https://script.google.com/macros/s/AKfycbxkjRjEpQid-f05-C6K7XhoxtMu7HQ3CiSHiLesiHfDrBORiDV24YYdts644qCJ0xT5/exec';
     
-    // ИСПРАВЛЕННАЯ ЛОГИКА ОПРЕДЕЛЕНИЯ USER
+    // ДАННЫЕ ПОЛЬЗОВАТЕЛЯ ИЗ ТЕЛЕГРАМ
     const tgUser = tg.initDataUnsafe?.user;
     const userId = tgUser?.id || "0";
     const rawUsername = tgUser?.username;
-    // Если ника нет, используем id_12345, как и на сервере
+    // Унифицированная логика ID: ник или id_12345
     const user = (rawUsername ? rawUsername : "id_" + userId).toLowerCase().replace('@', '').trim();
 
     let menuData = [], historyData = [], isAdmin = false, editUser = null, buffer = null, isEditMode = false;
@@ -95,22 +95,30 @@
         return false;
     }
 
+    // ЗАГРУЗКА ДАННЫХ С АВТОРЕГИСТРАЦИЕЙ
     async function load(quiet = false) {
         if(!quiet) tg.MainButton.showProgress();
         try {
+            // Передаем user и uid для автоматической регистрации в Google Sheets
             const [m, h] = await Promise.all([
                 fetch(`${API}?type=menu&user=${user}&uid=${userId}`).then(r => r.json()), 
                 fetch(`${API}?user=${user}&uid=${userId}`).then(r => r.json())
             ]);
-            menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
+            
+            menuData = m.menu; 
+            historyData = h; 
+            isAdmin = m.isAdmin;
             
             const shopSelect = document.getElementById('shop-select');
             const shopBox = document.getElementById('shop-selector-box');
             shopSelect.innerHTML = '';
-            m.displayNames.forEach(name => {
-                shopSelect.innerHTML += `<option value="${name}">${name}</option>`;
-            });
-            shopBox.style.display = m.displayNames.length > 1 ? 'block' : 'none';
+            
+            if (m.displayNames && m.displayNames.length > 0) {
+                m.displayNames.forEach(name => {
+                    shopSelect.innerHTML += `<option value="${name}">${name}</option>`;
+                });
+                shopBox.style.display = m.displayNames.length > 1 ? 'block' : 'none';
+            }
 
             const input = document.getElementById('dt'), now = new Date();
             let minD = new Date(); minD.setDate(now.getDate() + (now.getHours() >= 11 ? 2 : 1));
@@ -128,13 +136,16 @@
                 renderMenu();
             }
             if(!quiet) tg.MainButton.hideProgress();
-        } catch(e) { tg.MainButton.hideProgress(); }
+        } catch(e) { 
+            console.error(e);
+            tg.MainButton.hideProgress(); 
+        }
     }
 
     function renderMenu() {
         const box = document.getElementById('menu');
         const date = document.getElementById('dt').value;
-        const shop = document.getElementById('shop-select').value || "Default";
+        const shop = document.getElementById('shop-select').value || user;
         const key = date + "_" + shop;
 
         if (isLocked(date)) {
@@ -164,7 +175,7 @@
 
     function upd(n, p, d) {
         const date = document.getElementById('dt').value;
-        const shop = document.getElementById('shop-select').value || "Default";
+        const shop = document.getElementById('shop-select').value || user;
         const key = date + "_" + shop;
         
         allOrders[key] = allOrders[key] || {};
@@ -176,7 +187,7 @@
 
     function calc() {
         const date = document.getElementById('dt').value;
-        const shop = document.getElementById('shop-select').value || "Default";
+        const shop = document.getElementById('shop-select').value || user;
         const key = date + "_" + shop;
         let sub = 0;
         for (let k in allOrders[key] || {}) sub += (allOrders[key][k].qty * allOrders[key][k].price);
@@ -272,7 +283,7 @@
 
     function send() {
         const date = document.getElementById('dt').value;
-        const shop = document.getElementById('shop-select').value || "Default";
+        const shop = document.getElementById('shop-select').value || user;
         const key = date + "_" + shop;
         if(isLocked(date) && !isAdmin) return;
         if(!allOrders[key] || !Object.keys(allOrders[key]).length) return;
@@ -327,7 +338,3 @@
 </script>
 </body>
 </html>
-
-
-
-
