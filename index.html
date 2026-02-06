@@ -72,15 +72,19 @@
     <div class="footer" id="f"><div class="row"><div><span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br><b id="tot" style="font-size:22px">0 ₽</b></div><button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button></div></div>
 
 <script>
+    <script>
     const tg = window.Telegram.WebApp;
     const API = 'https://script.google.com/macros/s/AKfycbxyh4fa-yaGTjDZqNeiT65pmtX4nGRWB4qU5gOWx6UHJ2dmE92jXR79bbgagp8xjHM_/exec';
     
-    const username = tg.initDataUnsafe?.user?.username || "";
-    const userId = tg.initDataUnsafe?.user?.id || "0";
-    const user = (username ? username : "id_" + userId).toLowerCase().replace('@', '');
+    // ИСПРАВЛЕННАЯ ЛОГИКА ОПРЕДЕЛЕНИЯ USER
+    const tgUser = tg.initDataUnsafe?.user;
+    const userId = tgUser?.id || "0";
+    const rawUsername = tgUser?.username;
+    // Если ника нет, используем id_12345, как и на сервере
+    const user = (rawUsername ? rawUsername : "id_" + userId).toLowerCase().replace('@', '').trim();
 
     let menuData = [], historyData = [], isAdmin = false, editUser = null, buffer = null, isEditMode = false;
-    let allOrders = {}; 
+    let allOrders = {};
 
     function isLocked(dateStr) {
         if (isAdmin) return false;
@@ -323,4 +327,5 @@
 </script>
 </body>
 </html>
+
 
