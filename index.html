@@ -73,18 +73,14 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    // Ссылка на твой Google Script (проверь, что она актуальная после деплоя)
     const API = 'https://script.google.com/macros/s/AKfycbxkjRjEpQid-f05-C6K7XhoxtMu7HQ3CiSHiLesiHfDrBORiDV24YYdts644qCJ0xT5/exec';
     
-    // ДАННЫЕ ПОЛЬЗОВАТЕЛЯ ИЗ ТЕЛЕГРАМ
-    const tgUser = tg.initDataUnsafe?.user;
-    const userId = tgUser?.id || "0";
-    const rawUsername = tgUser?.username;
-    // Унифицированная логика ID: ник или id_12345
-    const user = (rawUsername ? rawUsername : "id_" + userId).toLowerCase().replace('@', '').trim();
+    const username = tg.initDataUnsafe?.user?.username || "";
+    const userId = tg.initDataUnsafe?.user?.id || "0";
+    const user = (username ? username : "id_" + userId).toLowerCase().replace('@', '');
 
     let menuData = [], historyData = [], isAdmin = false, editUser = null, buffer = null, isEditMode = false;
-    let allOrders = {};
+    let allOrders = {}; 
 
     function isLocked(dateStr) {
         if (isAdmin) return false;
@@ -95,30 +91,22 @@
         return false;
     }
 
-    // ЗАГРУЗКА ДАННЫХ С АВТОРЕГИСТРАЦИЕЙ
     async function load(quiet = false) {
         if(!quiet) tg.MainButton.showProgress();
         try {
-            // Передаем user и uid для автоматической регистрации в Google Sheets
             const [m, h] = await Promise.all([
                 fetch(`${API}?type=menu&user=${user}&uid=${userId}`).then(r => r.json()), 
                 fetch(`${API}?user=${user}&uid=${userId}`).then(r => r.json())
             ]);
-            
-            menuData = m.menu; 
-            historyData = h; 
-            isAdmin = m.isAdmin;
+            menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
             
             const shopSelect = document.getElementById('shop-select');
             const shopBox = document.getElementById('shop-selector-box');
             shopSelect.innerHTML = '';
-            
-            if (m.displayNames && m.displayNames.length > 0) {
-                m.displayNames.forEach(name => {
-                    shopSelect.innerHTML += `<option value="${name}">${name}</option>`;
-                });
-                shopBox.style.display = m.displayNames.length > 1 ? 'block' : 'none';
-            }
+            m.displayNames.forEach(name => {
+                shopSelect.innerHTML += `<option value="${name}">${name}</option>`;
+            });
+            shopBox.style.display = m.displayNames.length > 1 ? 'block' : 'none';
 
             const input = document.getElementById('dt'), now = new Date();
             let minD = new Date(); minD.setDate(now.getDate() + (now.getHours() >= 11 ? 2 : 1));
@@ -136,10 +124,7 @@
                 renderMenu();
             }
             if(!quiet) tg.MainButton.hideProgress();
-        } catch(e) { 
-            console.error(e);
-            tg.MainButton.hideProgress(); 
-        }
+        } catch(e) { tg.MainButton.hideProgress(); }
     }
 
     function renderMenu() {
