@@ -14,7 +14,7 @@
         }
         body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(253, 250, 253, 0.94); z-index: -1; }
         .tabs { display: flex; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; height: 50px; }
-        .tab { flex: 1; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #ccc; cursor: pointer; font-size: 11px; text-transform: uppercase; border-bottom: 3px solid transparent; }
+        .tab { flex: 1; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #ccc; cursor: pointer; font-size: 9px; text-transform: uppercase; border-bottom: 3px solid transparent; text-align: center; }
         .tab.active { color: var(--main); border-bottom: 3px solid var(--main); }
         .m-bar { background: var(--main); color: #fff; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; }
         .btn-m { background: #fff; color: var(--main); border: none; padding: 8px 12px; border-radius: 10px; font-weight: 800; cursor: pointer; }
@@ -34,7 +34,9 @@
         .del-icon { color: #ff4d4d; font-size: 20px; cursor: pointer; margin-left: 15px; }
         .hidden { display: none !important; }
         input[type="date"], select { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; background: #fff; outline: none; -webkit-appearance: none; }
-        .admin-select-partner { display: block; width: 100%; padding: 12px; margin-bottom: 5px; background: #fff; border: 1px solid #eee; border-radius: 10px; font-weight: 700; text-align: left; cursor: pointer; }
+        .admin-select-partner { display: block; width: 100%; padding: 12px; margin-bottom: 5px; background: #fff; border: 1px solid #eee; border-radius: 10px; font-weight: 700; text-align: left; cursor: pointer; font-size: 13px; }
+        .block-toggle { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; }
+        .block-toggle input { width: 18px; height: 18px; accent-color: #ff4d4d; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -42,7 +44,9 @@
         <div id="t1" class="tab active" onclick="tab('order')">ЗАКАЗАТЬ</div>
         <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
         <div id="t3" class="tab hidden" onclick="tab('admin')">АДМИН ⚡️</div>
+        <div id="t4" class="tab hidden" onclick="tab('partners_list')">ПАРТНЕРЫ 👥</div>
     </div>
+    
     <div id="m-bar" class="m-bar hidden"><span>Изменить после 11:00?</span><button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button></div>
     
     <div id="p1" class="container">
@@ -68,7 +72,7 @@
     <div id="p3" class="container hidden">
         <button class="btn-send" style="margin-bottom: 15px;" onclick="showPartnerList()">+ СОЗДАТЬ НОВЫЙ ЗАКАЗ</button>
         <div id="partner-list-modal" class="card hidden">
-            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 10px;">ВЫБЕРИТЕ ПАРТНЕРА</div>
+            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 10px;">ВЫБЕРИТЕ ПАРТНЕРА И ТОЧКУ</div>
             <div id="partners-btns"></div>
             <button class="btn-cancel" style="width:100%; font-size:12px;" onclick="hidePartnerList()">ЗАКРЫТЬ</button>
         </div>
@@ -76,14 +80,19 @@
         <div id="admin-list"></div>
     </div>
 
+    <div id="p4" class="container hidden">
+        <div class="cat">Управление партнерами</div>
+        <div id="partners-settings-list"></div>
+    </div>
+
     <div class="footer" id="f"><div class="row"><div><span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br><b id="tot" style="font-size:22px">0 ₽</b></div><button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button></div></div>
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbwwrA730Ri5TNu9zuFN3pfc2rsF_Z9yD9htvEIQ_s3je1ChDRVHhRO6WTC9YChfq6od/exec';
+    const API = 'https://script.google.com/macros/s/AKfycbyOtV_aCyLFWBNM9pHVEWz2_cV2Tc0YBUtEQQwkBn7bzGR_SAvE_Wp2lZ1cJxa5ddhl/exec';
     const user = (tg.initDataUnsafe?.user?.username || "id_" + tg.initDataUnsafe?.user?.id).toLowerCase().replace('@', '');
 
-    let menuData = [], historyData = [], isAdmin = false, editUser = null, buffer = null, isEditMode = false, allPartners = [];
+    let menuData = [], historyData = [], isAdmin = false, editUser = null, allPartners = [];
     let allOrders = {}; 
 
     function isLocked(dateStr) {
@@ -102,12 +111,18 @@
                 fetch(`${API}?type=menu&user=${user}`).then(r => r.json()), 
                 fetch(`${API}?user=${user}`).then(r => r.json())
             ]);
-            menuData = m.menu; historyData = h; isAdmin = m.isAdmin; allPartners = m.allPartners || [];
+            
+            if (m.isBlocked) {
+                document.body.innerHTML = '<div style="text-align:center; padding:100px 20px; color:var(--main); font-weight:800;">Ваш доступ ограничен администратором.</div>';
+                return;
+            }
+
+            menuData = m.menu || []; historyData = h || []; isAdmin = m.isAdmin; allPartners = m.allPartners || [];
             
             const shopSelect = document.getElementById('shop-select');
             shopSelect.innerHTML = '';
-            m.displayNames.forEach(name => shopSelect.innerHTML += `<option value="${name}">${name}</option>`);
-            document.getElementById('shop-selector-box').style.display = m.displayNames.length > 1 ? 'block' : 'none';
+            (m.displayNames || [user]).forEach(name => shopSelect.innerHTML += `<option value="${name}">${name}</option>`);
+            document.getElementById('shop-selector-box').style.display = (m.displayNames && m.displayNames.length > 1) ? 'block' : 'none';
 
             const input = document.getElementById('dt');
             if (!input.value) {
@@ -120,6 +135,7 @@
                 document.getElementById('t1').classList.add('hidden');
                 document.getElementById('t2').classList.add('hidden');
                 document.getElementById('t3').classList.remove('hidden');
+                document.getElementById('t4').classList.remove('hidden');
                 document.getElementById('dt-admin').value = new Date().toISOString().split('T')[0];
                 tab('admin');
             } else { renderMenu(); }
@@ -178,11 +194,16 @@
             document.getElementById('t2').classList.add('active'); 
             document.getElementById('f').classList.add('hidden'); 
             renderHist(); 
-        } else { 
+        } else if (t === 'admin') { 
             document.getElementById('p3').classList.remove('hidden'); 
             document.getElementById('t3').classList.add('active'); 
             document.getElementById('f').classList.add('hidden'); 
             renderAdmin(); 
+        } else if (t === 'partners_list') {
+            document.getElementById('p4').classList.remove('hidden'); 
+            document.getElementById('t4').classList.add('active'); 
+            document.getElementById('f').classList.add('hidden'); 
+            renderPartnersList();
         }
     }
 
@@ -210,7 +231,7 @@
         const key = date + "_" + shop;
         allOrders[key] = {}; 
         items.forEach(i => allOrders[key][i.name] = {qty: i.qty, price: i.price});
-        editUser = u; isEditMode = true;
+        editUser = u; 
         document.getElementById('dt').value = date;
         document.getElementById('shop-select').innerHTML = `<option value="${shop}">${shop}</option>`;
         document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + shop;
@@ -231,7 +252,9 @@
     function showPartnerList() {
         const box = document.getElementById('partners-btns'); box.innerHTML = '';
         allPartners.forEach(p => {
-            box.innerHTML += `<button class="admin-select-partner" onclick="createForPartner('${p.uid}', '${p.name}')">${p.name}</button>`;
+            p.names.forEach(name => {
+                box.innerHTML += `<button class="admin-select-partner" onclick="createForPartner('${p.uid}', '${name}')">📍 ${name} (@${p.uid})</button>`;
+            });
         });
         document.getElementById('partner-list-modal').classList.remove('hidden');
     }
@@ -239,28 +262,47 @@
     function hidePartnerList() { document.getElementById('partner-list-modal').classList.add('hidden'); }
 
     function createForPartner(uid, name) {
-        editUser = uid; isEditMode = true;
+        editUser = uid; 
         document.getElementById('shop-select').innerHTML = `<option value="${name}">${name}</option>`;
+        document.getElementById('shop-selector-box').style.display = 'block';
         document.getElementById('copy-text').innerText = "НОВЫЙ ЗАКАЗ: " + name;
         document.getElementById('copy-notify').style.display = 'block';
         hidePartnerList(); tab('order'); renderMenu();
     }
 
-    function cancelBuffer() { 
-        editUser = null; isEditMode = false; document.getElementById('copy-notify').style.display = 'none'; 
-        load(true); if(isAdmin) tab('admin');
+    function renderPartnersList() {
+        const box = document.getElementById('partners-settings-list'); box.innerHTML = '';
+        allPartners.forEach(p => {
+            box.innerHTML += `<div class="card row">
+                <div><b>@${p.uid}</b><br><small>${p.names.join(', ')}</small></div>
+                <div class="block-toggle">
+                    <span style="color:${p.blocked ? 'red':'#999'}">${p.blocked ? 'BLOCK':'ACTIVE'}</span>
+                    <input type="checkbox" ${p.blocked ? 'checked':''} onchange="toggleBlock('${p.uid}', this.checked)">
+                </div>
+            </div>`;
+        });
     }
+
+    async function toggleBlock(u, status) {
+        tg.MainButton.showProgress();
+        await fetch(API, {method:'POST', body: JSON.stringify({type:'toggle_block', user:u, block: status})});
+        await load(true);
+        renderPartnersList();
+        tg.MainButton.hideProgress();
+    }
+
+    function cancelBuffer() { editUser = null; document.getElementById('copy-notify').style.display = 'none'; load(true); if(isAdmin) tab('admin'); }
 
     async function send() {
         const date = document.getElementById('dt').value, shop = document.getElementById('shop-select').value || user, key = date + "_" + shop;
         if(!allOrders[key] || !Object.keys(allOrders[key]).length) return;
-        tg.showConfirm(`Подтвердить заказ ${shop}?`, async (ok) => {
+        tg.showConfirm(`Заказать для "${shop}"?`, async (ok) => {
             if (ok) {
                 tg.MainButton.showProgress();
                 try {
                     await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date: date, shopName: shop, items: allOrders[key]})});
                     tg.HapticFeedback.notificationOccurred('success');
-                    editUser = null; isEditMode = false; document.getElementById('copy-notify').style.display = 'none';
+                    editUser = null; document.getElementById('copy-notify').style.display = 'none';
                     await load(true); if(isAdmin) tab('admin'); else tab('hist');
                 } catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
             }
@@ -268,7 +310,7 @@
     }
 
     async function deleteOrder(u, d, shop) {
-        tg.showConfirm(`Удалить заказ ${shop}?`, async (ok) => {
+        tg.showConfirm(`Удалить заказ "${shop}"?`, async (ok) => {
             if(ok) {
                 tg.MainButton.showProgress();
                 await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, shopName: shop})});
@@ -296,4 +338,3 @@
 </script>
 </body>
 </html>
-
