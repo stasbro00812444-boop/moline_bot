@@ -6,52 +6,49 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --main: #f377c6; --bg: #fdfafd; --text: #2c2c2c; }
-        body { 
-            font-family: -apple-system, sans-serif; background-color: var(--bg);
-            background-image: url('https://raw.githubusercontent.com/stasbro00812444-boop/moline_bot/refs/heads/main/LOGO.png');
-            background-repeat: repeat; background-size: 100px; background-attachment: fixed;
-            margin: 0; padding: 0; color: var(--text);
-        }
+        body { font-family: -apple-system, sans-serif; background-color: var(--bg); background-image: url('https://raw.githubusercontent.com/stasbro00812444-boop/moline_bot/refs/heads/main/LOGO.png'); background-repeat: repeat; background-size: 100px; background-attachment: fixed; margin: 0; padding: 0; color: var(--text); }
         body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(253, 250, 253, 0.94); z-index: -1; }
         .container { padding: 15px; padding-bottom: 120px; }
         .card { background: rgba(255, 255, 255, 0.92); border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
         .row { display: flex; align-items: center; justify-content: space-between; }
+        .cat { font-size: 11px; font-weight: 900; color: var(--main); margin: 15px 0 8px 5px; text-transform: uppercase; }
         .btn-send { background: var(--main); color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: 800; width: 100%; cursor: pointer; }
         .btn-m { background: var(--main); color: #fff; border: none; padding: 8px 12px; border-radius: 10px; font-weight: 800; cursor: pointer; font-size: 12px; }
+        .btn-s { border: none; color: var(--main); font-size: 22px; font-weight: 800; background: none; width: 34px; cursor: pointer; }
+        .q-input { width: 30px; border: none; background: none; text-align: center; font-weight: 800; font-size: 16px; }
         .del-icon { color: #ff4d4d; font-size: 20px; cursor: pointer; margin-left: 15px; }
-        .cat { font-size: 11px; font-weight: 900; color: var(--main); margin: 15px 0 8px 5px; text-transform: uppercase; }
-        input[type="date"], select { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; background: #fff; }
-        .partner-item { padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; font-weight: bold; color: var(--main); }
+        input[type="date"] { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; background: #fff; }
+        .partner-item { padding: 14px; border-bottom: 1px solid #eee; cursor: pointer; font-weight: 700; color: var(--main); }
         .hidden { display: none !important; }
-        .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.95); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; }
     </style>
 </head>
 <body>
-    <div id="app" class="container">
+    <div class="container">
         <div class="card">
-            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА</div>
+            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ДАТА ДОСТАВКИ</div>
             <input type="date" id="main-date" onchange="refresh()">
         </div>
 
         <div id="admin-ui" class="hidden">
-            <div id="admin-orders-list"></div>
-            <button id="btn-add-order" class="btn-send" style="margin-top:10px;" onclick="showPartners()">+ СОЗДАТЬ НОВЫЙ ЗАКАЗ</button>
-            
-            <div id="partners-modal" class="card hidden" style="margin-top:10px;">
+            <button class="btn-send" style="margin-bottom:15px;" onclick="showPartners()">+ СОЗДАТЬ НОВЫЙ ЗАКАЗ</button>
+            <div id="partners-modal" class="card hidden" style="border: 2px solid var(--main);">
                 <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 10px;">ВЫБЕРИТЕ ПАРТНЕРА</div>
-                <div id="partners-list"></div>
-                <button class="btn-send" style="background:#eee; color:#777; margin-top:10px;" onclick="hidePartners()">ОТМЕНА</button>
+                <div id="partners-list" style="max-height: 250px; overflow-y: auto;"></div>
+                <button class="btn-send" style="background:#eee; color:#777; margin-top:10px; padding:10px;" onclick="hidePartners()">ОТМЕНА</button>
             </div>
+            <div id="admin-orders-list"></div>
         </div>
 
         <div id="menu-ui" class="hidden">
+            <div id="menu-header" style="margin-bottom: 10px; font-weight: 800; color: var(--main); text-align: center;"></div>
             <div id="menu-content"></div>
         </div>
     </div>
 
     <div id="footer" class="footer hidden">
         <div class="row">
-            <div><b id="total-price" style="font-size:22px">0 ₽</b></div>
+            <div><span id="deliv-info" style="font-size:10px; color:var(--main); font-weight:800">Доставка: 0 ₽</span><br><b id="total-price" style="font-size:22px">0 ₽</b></div>
             <button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="submitOrder()">ОФОРМИТЬ</button>
         </div>
     </div>
@@ -61,17 +58,14 @@
     const API = 'https://script.google.com/macros/s/AKfycbxkjRjEpQid-f05-C6K7XhoxtMu7HQ3CiSHiLesiHfDrBORiDV24YYdts644qCJ0xT5/exec';
     const user = (tg.initDataUnsafe?.user?.username || "id_" + tg.initDataUnsafe?.user?.id).toLowerCase().replace('@', '');
 
-    let state = { isAdmin: false, menu: [], allPartners: [], currentOrder: {}, editingUser: user };
+    let state = { isAdmin: false, menu: [], allPartners: [], currentOrder: {}, editingUser: user, editingShopName: "" };
 
     async function init() {
         tg.MainButton.showProgress();
         const res = await fetch(`${API}?type=menu&user=${user}`).then(r => r.json());
-        state.isAdmin = res.isAdmin;
-        state.menu = res.menu;
-        state.allPartners = res.allPartners || [];
-        
+        state.isAdmin = res.isAdmin; state.menu = res.menu; state.allPartners = res.allPartners || [];
+        state.editingShopName = res.displayNames[0];
         document.getElementById('main-date').value = new Date().toISOString().split('T')[0];
-        
         if (state.isAdmin) {
             document.getElementById('admin-ui').classList.remove('hidden');
             refreshAdminList();
@@ -86,17 +80,15 @@
     async function refreshAdminList() {
         const date = document.getElementById('main-date').value;
         const list = document.getElementById('admin-orders-list');
-        list.innerHTML = 'Загрузка...';
-        
+        list.innerHTML = '<div class="card" style="text-align:center">Загрузка...</div>';
         const data = await fetch(`${API}?type=admin_all&date=${date}&user=${user}`).then(r => r.json());
-        list.innerHTML = `<div class="cat">Заказы на ${date}</div>`;
-        
-        if(!data.length) { list.innerHTML += '<div class="card">Нет заказов</div>'; }
+        list.innerHTML = `<div class="cat">Заказы на ${date.split('-').reverse().join('.')}</div>`;
+        if(!data.length) { list.innerHTML += '<div class="card" style="text-align:center">Заказов нет</div>'; return; }
         data.forEach(ord => {
             list.innerHTML += `<div class="card row">
-                <div><b>${ord.shopName}</b><br><small>${ord.total} ₽</small></div>
+                <div style="flex:1"><b>${ord.shopName}</b><br><small>${ord.total} ₽</small></div>
                 <div style="display:flex; align-items:center;">
-                    <button class="btn-m" onclick="startEdit('${ord.user}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button>
+                    <button class="btn-m" onclick="startEdit('${ord.user}', '${ord.shopName}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button>
                     <span class="del-icon" onclick="deleteOrder('${ord.user}','${date}','${ord.shopName}')">✖</span>
                 </div>
             </div>`;
@@ -105,55 +97,54 @@
 
     function renderMenu() {
         const box = document.getElementById('menu-content');
-        box.innerHTML = `<div class="cat">Меню для: ${state.editingUser}</div>`;
-        // Группировка и отрисовка меню (твоя оригинальная логика)
-        state.menu.forEach(item => {
-            const q = state.currentOrder[item.name]?.qty || 0;
-            box.innerHTML += `<div class="card row">
-                <div><b>${item.name}</b><br><small>${item.price} ₽</small></div>
-                <div style="display:flex; align-items:center;">
-                    <button onclick="upd('${item.name}',${item.price},-1)">-</button>
-                    <span style="margin:0 10px">${q}</span>
-                    <button onclick="upd('${item.name}',${item.price},1)">+</button>
-                </div>
-            </div>`;
-        });
+        document.getElementById('menu-header').innerText = "ЗАКАЗ ДЛЯ: " + state.editingShopName;
+        box.innerHTML = ''; let groups = {};
+        state.menu.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
+        for (let c in groups) {
+            box.innerHTML += `<div class="cat">${c}</div>`;
+            groups[c].forEach(i => {
+                const q = state.currentOrder[i.name]?.qty || 0;
+                box.innerHTML += `<div class="card row">
+                    <div><b>${i.name}</b><br><small>${i.price} ₽</small></div>
+                    <div style="display:flex; align-items:center;">
+                        <button class="btn-s" onclick="upd('${i.name}',${i.price},-1)">-</button>
+                        <input class="q-input" value="${q}" readonly>
+                        <button class="btn-s" onclick="upd('${i.name}',${i.price},1)">+</button>
+                    </div>
+                </div>`;
+            });
+        }
+        calc();
     }
 
-    function upd(name, price, delta) {
-        state.currentOrder[name] = state.currentOrder[name] || {qty:0, price:price};
-        state.currentOrder[name].qty += delta;
-        if(state.currentOrder[name].qty <= 0) delete state.currentOrder[name];
+    function upd(n, p, d) {
+        state.currentOrder[n] = state.currentOrder[n] || {qty:0, price:p};
+        state.currentOrder[n].qty += d;
+        if(state.currentOrder[n].qty <= 0) delete state.currentOrder[n];
         renderMenu();
-        let total = 0;
-        for(let k in state.currentOrder) total += state.currentOrder[k].qty * state.currentOrder[k].price;
-        document.getElementById('total-price').innerText = total + " ₽";
+    }
+
+    function calc() {
+        let s = 0; for(let k in state.currentOrder) s += state.currentOrder[k].qty * state.currentOrder[k].price;
+        let d = (s > 0 && s < 3000) ? 300 : 0;
+        document.getElementById('deliv-info').innerText = `Доставка: ${d} ₽`;
+        document.getElementById('total-price').innerText = (s + d) + " ₽";
     }
 
     function showPartners() {
-        const list = document.getElementById('partners-list');
-        list.innerHTML = '';
+        const list = document.getElementById('partners-list'); list.innerHTML = '';
         state.allPartners.forEach(p => {
-            const div = document.createElement('div');
-            div.className = 'partner-item';
+            const div = document.createElement('div'); div.className = 'partner-item';
             div.innerText = p.names[0];
-            div.onclick = () => {
-                state.editingUser = p.uid;
-                state.currentOrder = {};
-                document.getElementById('admin-ui').classList.add('hidden');
-                document.getElementById('menu-ui').classList.remove('hidden');
-                document.getElementById('footer').classList.remove('hidden');
-                renderMenu();
-            };
+            div.onclick = () => { state.editingUser = p.uid; state.editingShopName = p.names[0]; state.currentOrder = {}; hidePartners(); document.getElementById('admin-ui').classList.add('hidden'); document.getElementById('menu-ui').classList.remove('hidden'); document.getElementById('footer').classList.remove('hidden'); renderMenu(); };
             list.appendChild(div);
         });
         document.getElementById('partners-modal').classList.remove('hidden');
     }
 
-    function startEdit(uid, items) {
-        state.editingUser = uid;
-        state.currentOrder = {};
-        items.forEach(i => state.currentOrder[i.name] = {qty: i.qty, price: i.price});
+    function startEdit(u, s, i) {
+        state.editingUser = u; state.editingShopName = s; state.currentOrder = {};
+        i.forEach(it => state.currentOrder[it.name] = {qty: it.qty, price: it.price});
         document.getElementById('admin-ui').classList.add('hidden');
         document.getElementById('menu-ui').classList.remove('hidden');
         document.getElementById('footer').classList.remove('hidden');
@@ -161,19 +152,14 @@
     }
 
     async function submitOrder() {
-        const date = document.getElementById('main-date').value;
-        await fetch(API, {method:'POST', body: JSON.stringify({
-            user: state.editingUser,
-            date: date,
-            items: state.currentOrder,
-            shopName: state.editingUser // Упрощено для примера
-        })});
+        tg.MainButton.showProgress();
+        await fetch(API, {method:'POST', body: JSON.stringify({user: state.editingUser, date: document.getElementById('main-date').value, items: state.currentOrder, shopName: state.editingShopName})});
         location.reload();
     }
 
+    async function deleteOrder(u, d, s) { if(confirm(`Удалить заказ ${s}?`)) { await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, shopName: s})}); refreshAdminList(); } }
     function refresh() { if(state.isAdmin) refreshAdminList(); else renderMenu(); }
     function hidePartners() { document.getElementById('partners-modal').classList.add('hidden'); }
-
     init();
 </script>
 </body>
