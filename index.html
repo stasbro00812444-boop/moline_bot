@@ -9,8 +9,8 @@
         body { font-family: -apple-system, sans-serif; background-color: var(--bg); background-image: url('https://raw.githubusercontent.com/stasbro00812444-boop/moline_bot/refs/heads/main/LOGO.png'); background-repeat: repeat; background-size: 100px; background-attachment: fixed; margin: 0; padding: 0; color: var(--text); -webkit-tap-highlight-color: transparent; }
         body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(253, 250, 253, 0.94); z-index: -1; }
         .container { padding: 15px; padding-bottom: 140px; }
-        .tabs { display: flex; background: #fff; border-bottom: 1px solid #eee; position: sticky; top: 0; z-index: 99; }
-        .tab { flex: 1; padding: 15px; text-align: center; font-size: 11px; font-weight: 800; color: #ccc; cursor: pointer; }
+        .tabs { display: flex; background: #fff; border-bottom: 1px solid #eee; position: sticky; top: 0; z-index: 99; height: 50px; }
+        .tab { flex: 1; display:flex; align-items:center; justify-content:center; font-size: 11px; font-weight: 800; color: #ccc; cursor: pointer; text-transform: uppercase; }
         .tab.active { color: var(--main); border-bottom: 3px solid var(--main); }
         .card { background: rgba(255, 255, 255, 0.92); border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
         .row { display: flex; align-items: center; justify-content: space-between; }
@@ -22,9 +22,10 @@
         .del-icon { color: #ff4d4d; font-size: 20px; cursor: pointer; margin-left: 15px; }
         input[type="date"], select { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; outline: none; background: #fff; }
         .banner { background: #fff3f9; border: 2px dashed var(--main); border-radius: 15px; padding: 12px; margin-bottom: 15px; text-align: center; }
-        .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.96); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; }
+        .footer { position: fixed; bottom: 0; width: 100%; background: rgba(255, 255, 255, 0.96); padding: 15px 20px 30px; border-top: 1px solid #eee; box-sizing: border-box; z-index: 100; }
         .hidden { display: none !important; }
         .partner-row { padding: 14px; border-bottom: 1px solid #eee; cursor: pointer; font-weight: 700; color: var(--main); }
+        .partner-row:last-child { border-bottom: none; }
     </style>
 </head>
 <body>
@@ -55,13 +56,16 @@
     <div id="p-admin" class="container hidden">
         <button class="btn-send" style="margin-bottom:15px;" onclick="showPartnerPicker()">+ СОЗДАТЬ НОВЫЙ ЗАКАЗ</button>
         
-        <div id="partner-picker" class="card hidden" style="border: 2px solid var(--main);">
-            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 10px;">ВЫБЕРИТЕ КОФЕЙНЮ</div>
-            <div id="partner-list" style="max-height: 250px; overflow-y: auto;"></div>
-            <button class="btn-send" style="background:#eee; color:#777; margin-top:10px; padding:10px;" onclick="hidePartnerPicker()">ОТМЕНА</button>
+        <div id="partner-picker" class="card hidden" style="border: 2px solid var(--main); padding: 0;">
+            <div style="font-size: 10px; font-weight: 800; color: #999; padding: 15px 15px 5px;">ВЫБЕРИТЕ КОФЕЙНЮ</div>
+            <div id="partner-list" style="max-height: 300px; overflow-y: auto;"></div>
+            <div style="padding: 10px 15px 15px;">
+                <button class="btn-send" style="background:#eee; color:#777; padding:10px;" onclick="hidePartnerPicker()">ЗАКРЫТЬ</button>
+            </div>
         </div>
 
         <div class="card">
+            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ПРОСМОТР ЗАКАЗОВ НА ДАТУ</div>
             <input type="date" id="admin-date" onchange="refreshAdmin()">
         </div>
         <div id="admin-orders"></div>
@@ -84,10 +88,15 @@
     async function init() {
         tg.expand();
         const res = await fetch(`${API}?type=menu&user=${user}`).then(r => r.json());
-        state.isAdmin = res.isAdmin; state.menu = res.menu; state.activePartners = res.activePartners || [];
+        state.isAdmin = res.isAdmin;
+        state.menu = res.menu;
+        state.activePartners = res.activePartners || [];
         
         document.getElementById('order-date').value = new Date().toISOString().split('T')[0];
+        
         if (state.isAdmin) {
+            // Если админ — убираем вкладку Заказ из навигации
+            document.getElementById('t-order').classList.add('hidden');
             document.getElementById('t-admin').classList.remove('hidden');
             document.getElementById('admin-date').value = document.getElementById('order-date').value;
             switchTab('admin');
@@ -143,32 +152,33 @@
         let del = (sub > 0 && sub < 3000) ? 300 : 0;
         document.getElementById('deliv-info').innerText = `Доставка: ${del} ₽`;
         document.getElementById('total-price').innerText = (sub + del) + " ₽";
-        document.getElementById('btn-submit').innerText = state.isEditMode ? "СОХРАНИТЬ ИЗМЕНЕНИЯ" : "ОФОРМИТЬ";
+        document.getElementById('btn-submit').innerText = "СОХРАНИТЬ";
     }
 
     async function refreshAdmin() {
         const date = document.getElementById('admin-date').value;
         const list = document.getElementById('admin-orders');
-        list.innerHTML = '<center style="padding:20px;">Загрузка...</center>';
-        const data = await fetch(`${API}?type=admin_all&date=${date}&user=${user}`).then(r => r.json());
-        list.innerHTML = '';
-        if(!data.length) { list.innerHTML = '<div class="card">Заказов нет</div>'; return; }
-        data.forEach(ord => {
-            list.innerHTML += `<div class="card row">
-                <div style="flex:1"><b>${ord.shopName}</b><br><small>${ord.total} ₽</small></div>
-                <div style="display:flex; align-items:center;">
-                    <button class="btn-m" onclick="startEdit('${ord.user}', '${ord.shopName}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button>
-                    <span class="del-icon" onclick="deleteOrd('${ord.user}','${ord.shopName}')">✖</span>
-                </div>
-            </div>`;
-        });
+        list.innerHTML = '<center style="padding:20px; font-size:12px; color:#999;">Обновление данных...</center>';
+        try {
+            const data = await fetch(`${API}?type=admin_all&date=${date}&user=${user}`).then(r => r.json());
+            list.innerHTML = '';
+            if(!data.length) { list.innerHTML = '<div class="card" style="text-align:center; color:#999;">Заказов на эту дату нет</div>'; return; }
+            data.forEach(ord => {
+                list.innerHTML += `<div class="card row">
+                    <div style="flex:1"><b>${ord.shopName}</b><br><small>${ord.total} ₽ (ID: ${ord.user})</small></div>
+                    <div style="display:flex; align-items:center;">
+                        <button class="btn-m" onclick="startEdit('${ord.user}', '${ord.shopName}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button>
+                        <span class="del-icon" onclick="deleteOrd('${ord.user}','${ord.shopName}')">✖</span>
+                    </div>
+                </div>`;
+            });
+        } catch(e) { list.innerHTML = '<div class="card">Ошибка загрузки</div>'; }
     }
 
     function startEdit(uid, shop, items) {
         state.isEditMode = true; state.editingUser = uid; state.editingShop = shop; state.currentOrder = {};
-        // НАПОЛНЕНИЕ ДАННЫМИ: Больше не будет 0 при входе
         items.forEach(it => { state.currentOrder[it.name] = {qty: it.qty, price: it.price}; });
-        document.getElementById('edit-title').innerText = "РЕДАКТИРОВАНИЕ: " + shop;
+        document.getElementById('edit-title').innerText = "ПРАВКА: " + shop;
         document.getElementById('edit-banner').classList.remove('hidden');
         document.getElementById('order-date').value = document.getElementById('admin-date').value;
         switchTab('order');
@@ -181,14 +191,24 @@
     }
 
     function showPartnerPicker() {
-        const list = document.getElementById('partner-list'); list.innerHTML = '';
+        const list = document.getElementById('partner-list'); 
+        list.innerHTML = '';
+        if (state.activePartners.length === 0) {
+            list.innerHTML = '<div style="padding:20px; text-align:center; font-size:12px;">Партнеры не найдены</div>';
+        }
         state.activePartners.forEach(p => {
-            const div = document.createElement('div'); div.className = 'partner-row'; div.innerText = p.name;
+            const div = document.createElement('div'); 
+            div.className = 'partner-row'; 
+            div.innerText = p.name;
             div.onclick = () => {
-                state.isEditMode = true; state.editingUser = p.uid; state.editingShop = p.name; state.currentOrder = {};
+                state.isEditMode = true; 
+                state.editingUser = p.uid; 
+                state.editingShop = p.name; 
+                state.currentOrder = {};
                 document.getElementById('edit-title').innerText = "НОВЫЙ ЗАКАЗ: " + p.name;
                 document.getElementById('edit-banner').classList.remove('hidden');
-                hidePartnerPicker(); switchTab('order');
+                hidePartnerPicker(); 
+                switchTab('order');
             };
             list.appendChild(div);
         });
@@ -197,17 +217,24 @@
 
     async function submit() {
         const date = document.getElementById('order-date').value;
-        const shop = state.isEditMode ? state.editingShop : document.getElementById('shop-select').value;
+        const shop = state.editingShop;
         if (!Object.keys(state.currentOrder).length) return alert("Заказ пуст!");
         tg.MainButton.showProgress();
-        await fetch(API, {method:'POST', body: JSON.stringify({user: state.editingUser, date: date, items: state.currentOrder, shopName: shop})});
+        try {
+            await fetch(API, {method:'POST', body: JSON.stringify({user: state.editingUser, date: date, items: state.currentOrder, shopName: shop})});
+            state.isEditMode = false; 
+            state.currentOrder = {};
+            document.getElementById('edit-banner').classList.add('hidden');
+            switchTab('admin');
+        } catch(e) { alert("Ошибка сохранения!"); }
         tg.MainButton.hideProgress();
-        if(state.isAdmin) { state.isEditMode = false; document.getElementById('edit-banner').classList.add('hidden'); switchTab('admin'); } else { location.reload(); }
     }
 
     async function deleteOrd(u, s) {
-        if(!confirm("Удалить?")) return;
+        if(!confirm("Удалить этот заказ?")) return;
+        tg.MainButton.showProgress();
         await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:document.getElementById('admin-date').value, shopName:s})});
+        tg.MainButton.hideProgress();
         refreshAdmin();
     }
 
