@@ -34,6 +34,7 @@
         .del-icon { color: #ff4d4d; font-size: 20px; cursor: pointer; margin-left: 15px; }
         .hidden { display: none !important; }
         input[type="date"], select { border: 1px solid #eee; padding: 12px; border-radius: 12px; width: 100%; box-sizing: border-box; font-weight: 700; font-size: 16px; background: #fff; outline: none; -webkit-appearance: none; }
+        .admin-controls { display: flex; gap: 8px; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -65,7 +66,11 @@
     <div id="p2" class="container hidden"></div>
 
     <div id="p3" class="container hidden">
-        <div class="card"><div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ПРОСМОТР ЗАКАЗОВ НА ДАТУ</div><input type="date" id="dt-admin" onchange="renderAdmin()"></div>
+        <div class="card">
+            <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ПРОСМОТР ЗАКАЗОВ НА ДАТУ</div>
+            <input type="date" id="dt-admin" onchange="renderAdmin()">
+            <button class="btn-repeat" style="margin-top:15px; background: var(--main); color:#fff;" onclick="showNewOrderModal()">+ СОЗДАТЬ НОВЫЙ ЗАКАЗ</button>
+        </div>
         <div id="admin-list"></div>
     </div>
 
@@ -79,7 +84,7 @@
     const userId = tg.initDataUnsafe?.user?.id || "0";
     const user = (username ? username : "id_" + userId).toLowerCase().replace('@', '');
 
-    let menuData = [], historyData = [], isAdmin = false, editUser = null, buffer = null, isEditMode = false;
+    let menuData = [], historyData = [], isAdmin = false, editUser = null, buffer = null, isEditMode = false, allPartners = [];
     let allOrders = {}; 
 
     function isLocked(dateStr) {
@@ -98,7 +103,7 @@
                 fetch(`${API}?type=menu&user=${user}&uid=${userId}`).then(r => r.json()), 
                 fetch(`${API}?user=${user}&uid=${userId}`).then(r => r.json())
             ]);
-            menuData = m.menu; historyData = h; isAdmin = m.isAdmin;
+            menuData = m.menu; historyData = h; isAdmin = m.isAdmin; allPartners = m.allPartners || [];
             
             const shopSelect = document.getElementById('shop-select');
             const shopBox = document.getElementById('shop-selector-box');
@@ -115,8 +120,8 @@
             if (!input.value) input.value = minStr;
 
             if(isAdmin) {
-                document.getElementById('t1').classList.add('hidden');
-                document.getElementById('t2').classList.add('hidden');
+                document.getElementById('t1').classList.remove('hidden'); // Админ видит всё
+                document.getElementById('t2').classList.remove('hidden');
                 document.getElementById('t3').classList.remove('hidden');
                 document.getElementById('dt-admin').value = new Date().toISOString().split('T')[0];
                 tab('admin');
@@ -138,12 +143,14 @@
             document.getElementById('tot').innerText = "0 ₽"; return;
         }
 
+        // Если есть буфер (повтор заказа), переносим его в текущий ключ
         if (buffer) {
             allOrders[key] = {};
             for (let name in buffer) {
                 const item = menuData.find(m => m.name === name);
                 if (item) allOrders[key][name] = { qty: buffer[name].qty, price: item.price };
             }
+            buffer = null; // Очищаем после применения
         }
 
         box.innerHTML = ''; let groups = {};
@@ -166,7 +173,6 @@
         allOrders[key] = allOrders[key] || {};
         let q = (allOrders[key][n]?.qty || 0) + d;
         if(isNaN(q) || q <= 0) delete allOrders[key][n]; else allOrders[key][n] = {qty:q, price:p};
-        if(buffer) { if(q <= 0) delete buffer[n]; else buffer[n] = {qty:q}; }
         renderMenu(); tg.HapticFeedback.impactOccurred('light');
     }
 
@@ -189,6 +195,7 @@
             document.getElementById('p1').classList.remove('hidden'); 
             document.getElementById('t1').classList.add('active'); 
             document.getElementById('f').classList.remove('hidden'); 
+            renderMenu();
         } else if (t === 'hist') { 
             document.getElementById('p2').classList.remove('hidden'); 
             document.getElementById('t2').classList.add('active'); 
@@ -243,21 +250,59 @@
         items.forEach(i => buffer[i.name] = {qty: i.qty});
         document.getElementById('copy-text').innerText = "ПОВТОР ЗАКАЗА: " + shopName;
         document.getElementById('copy-notify').style.display = 'block';
-        document.getElementById('shop-select').value = shopName;
-        tab('order'); renderMenu();
+        
+        const shopSelect = document.getElementById('shop-select');
+        if([...shopSelect.options].some(o => o.value === shopName)) shopSelect.value = shopName;
+        
+        tab('order');
     }
 
     function startEdit(u, shop, date, items) {
-        buffer = null; 
         const key = date + "_" + shop;
         allOrders[key] = {}; 
         items.forEach(i => allOrders[key][i.name] = {qty: i.qty, price: i.price});
+        
         editUser = u; isEditMode = true;
         document.getElementById('dt').value = date;
-        document.getElementById('shop-select').value = shop;
+        
+        // Обновляем селект кофеен, если админ правит чужой заказ
+        const shopSelect = document.getElementById('shop-select');
+        if (![...shopSelect.options].some(o => o.value === shop)) {
+            shopSelect.innerHTML += `<option value="${shop}">${shop}</option>`;
+        }
+        shopSelect.value = shop;
+        
         document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + shop;
         document.getElementById('copy-notify').style.display = 'block';
-        tab('order'); renderMenu();
+        tab('order');
+    }
+
+    function showNewOrderModal() {
+        if(!allPartners.length) return tg.showAlert("Список партнеров пуст");
+        let html = '<div style="text-align:left; max-height:300px; overflow-y:auto;">';
+        allPartners.forEach(p => {
+            p.names.forEach(n => {
+                html += `<div onclick="tg.closeEvent(); createNewOrderFor('${p.uid}', '${n}')" style="padding:12px; border-bottom:1px solid #eee; font-weight:bold; color:var(--main);">${n} <small style="color:#aaa;">(${p.uid})</small></div>`;
+            });
+        });
+        html += '</div>';
+        tg.showPopup({title: 'Выберите кофейню', message: 'Для кого создать заказ?', buttons: [{type:'destructive', text:'Закрыть'}]});
+        // Так как стандартный popup не поддерживает кастомный HTML список, используем prompt или просто меняем UI.
+        // Для простоты - используем встроенную логику:
+        let shopName = prompt("Введите точное название кофейни из списка партнеров:");
+        if(!shopName) return;
+        let partner = allPartners.find(p => p.names.includes(shopName));
+        if(partner) createNewOrderFor(partner.uid, shopName); else alert("Кофейня не найдена");
+    }
+
+    function createNewOrderFor(uid, shop) {
+        editUser = uid; isEditMode = true;
+        const shopSelect = document.getElementById('shop-select');
+        shopSelect.innerHTML = `<option value="${shop}">${shop}</option>`;
+        shopSelect.value = shop;
+        document.getElementById('copy-text').innerText = "НОВЫЙ ЗАКАЗ: " + shop;
+        document.getElementById('copy-notify').style.display = 'block';
+        tab('order');
     }
 
     function cancelBuffer() { 
@@ -306,14 +351,16 @@
             if(!data.length) { box.innerHTML += '<div class="card">Заказов пока нет</div>'; return; }
             data.forEach(ord => {
                 const itemsJson = JSON.stringify(ord.items).replace(/"/g, '&quot;');
+                const preview = ord.items.map(i => `${i.name} (${i.qty})`).join(', ');
                 box.innerHTML += `<div class="card">
                     <div class="row">
-                        <div><b>${ord.shopName}</b><br><small>${ord.total} ₽ (Ник: ${ord.user})</small></div>
+                        <div style="flex:1" onclick="alert('СОСТАВ: ${preview}')"><b>${ord.shopName}</b><br><small>${ord.total} ₽ (Ник: ${ord.user})</small></div>
                         <div style="display:flex; align-items:center;">
                             <button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.shopName}', '${sel}', ${itemsJson})">ПРАВИТЬ</button>
                             <span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}','${ord.shopName}')">✖</span>
                         </div>
                     </div>
+                    <div style="font-size:10px; color:#999; margin-top:5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${preview}</div>
                 </div>`;
             });
         } catch(e) { box.innerHTML = '<div class="card">Ошибка загрузки!</div>'; }
