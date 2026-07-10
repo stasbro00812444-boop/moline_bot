@@ -19,7 +19,7 @@
         .m-bar { background: var(--main); color: #fff; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; }
         .btn-m { background: #fff; color: var(--main); border: none; padding: 8px 12px; border-radius: 10px; font-weight: 800; cursor: pointer; }
         .container { padding: 15px; padding-bottom: 160px; }
-        .card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(5px); border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); position: relative; }
+        .card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(5px); border-radius: 18px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); position: relative; overflow: hidden; transition: max-height 0.3s ease; }
         .copy-banner { background: #fff3f9; border: 1.5px dashed var(--main); border-radius: 18px; margin-bottom:12px; padding: 12px; display: none; }
         .btn-cancel { background: #fff; color: #ff4d4d; border: 1px solid #ff4d4d; padding: 4px 10px; border-radius: 8px; font-size: 10px; font-weight: 800; cursor: pointer; margin-top: 8px; }
         .row { display: flex; align-items: center; justify-content: space-between; }
@@ -43,13 +43,26 @@
         .loader-text { font-size: 14px; font-weight: 800; color: var(--main); margin-top: 20px; text-transform: uppercase; letter-spacing: 1px; }
         .spinner { border: 4px solid rgba(243, 119, 198, 0.2); border-top: 4px solid var(--main); border-radius: 50%; width: 45px; height: 45px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Всплывающее окно выбора доставки */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(3px); z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 30px; transition: opacity 0.3s ease; }
+        .delivery-option-btn { background: #eee; color: #777; padding: 16px; border-radius: 12px; font-weight: 800; font-size: 14px; text-align: center; margin-bottom: 10px; cursor: pointer; transition: 0.2s; border: 2px solid transparent; }
+        .delivery-option-btn.active { background: #fff3f9; color: var(--main); border-color: var(--main); }
     </style>
 </head>
 <body>
-    <!-- Блок лоадера -->
     <div id="ui-loader" class="loader-overlay hidden">
         <div class="spinner"></div>
         <div class="loader-text">Обработка заказа...</div>
+    </div>
+
+    <div id="delivery-modal" class="modal-overlay hidden">
+        <div class="card" style="width: 90%; max-width: 400px; padding: 25px 20px;">
+            <div style="font-size: 15px; font-weight: 900; color: #2c2c2c; margin-bottom: 20px; text-align:center;">ВЫБЕРИТЕ СПОСОБ ПОЛУЧЕНИЯ</div>
+            <div class="delivery-option-btn active" id="modal-opt-deliv" onclick="selectDelivery(false)">🚚 ДОСТАВКА ЦЕХА</div>
+            <div class="delivery-option-btn" id="modal-opt-self" onclick="selectDelivery(true)">📦 САМОВЫВОЗ (БЕСПЛАТНО)</div>
+            <button class="btn-cancel" style="width:100%; font-size:14px; margin-top:10px; padding:14px;" onclick="hideDeliveryModal()">ЗАКРЫТЬ</button>
+        </div>
     </div>
 
     <div class="tabs" id="tab-bar">
@@ -66,7 +79,7 @@
             <div id="copy-text" style="font-size:11px; color:var(--main); font-weight:800; text-align:center;"></div>
             <div style="text-align:center;"><button class="btn-cancel" onclick="cancelBuffer()">ОТМЕНИТЬ</button></div>
         </div>
-        
+
         <div class="card" id="shop-selector-box" style="display:none;">
             <div style="font-size: 10px; font-weight: 800; color: #999; margin-bottom: 5px;">ВЫБЕРИТЕ КОФЕЙНЮ</div>
             <select id="shop-select" onchange="onShopChange()"></select>
@@ -97,7 +110,16 @@
         <div id="partners-settings-list"></div>
     </div>
 
-    <div class="footer" id="f"><div class="row"><div><span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br><b id="tot" style="font-size:22px">0 ₽</b></div><button class="btn-send" style="width: auto; padding: 16px 35px;" onclick="send()">ОФОРМИТЬ</button></div></div>
+    <div class="footer" id="f">
+        <div class="row">
+            <div style="flex:1;">
+                <span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br>
+                <b id="tot" style="font-size:22px">0 ₽</b>
+            </div>
+            <button id="delivery-icon-btn" onclick="showDeliveryModal()" style="background:#fff; border:1.5px solid #eee; border-radius:14px; width:48px; height:48px; font-size:20px; display:flex; align-items:center; justify-content:center; margin-right:12px; cursor:pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">🚚</button>
+            <button class="btn-send" style="width: auto; padding: 16px 30px;" onclick="send()">ОФОРМИТЬ</button>
+        </div>
+    </div>
 
 <script>
     const tg = window.Telegram.WebApp;
@@ -105,8 +127,10 @@
     const user = (tg.initDataUnsafe?.user?.username || "id_" + tg.initDataUnsafe?.user?.id).toLowerCase().replace('@', '');
 
     let menuData = [], historyData = [], isAdmin = false, editUser = null, allPartners = [];
-    let allOrders = {}; 
+    
+    let currentCart = {}; 
     let currentDeliveryCost = 300; 
+    let isSelfDelivery = localStorage.getItem('moline_self_delivery') === 'true';
 
     function isLocked(dateStr) {
         if (isAdmin) return false;
@@ -115,6 +139,29 @@
         if (dateStr <= todayStr) return true;
         if (dateStr === tomStr && now.getHours() >= 11) return true; 
         return false;
+    }
+
+    // Логика нового модального окна
+    function showDeliveryModal() {
+        document.getElementById('delivery-modal').classList.remove('hidden');
+        if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+    }
+
+    function hideDeliveryModal() {
+        document.getElementById('delivery-modal').classList.add('hidden');
+    }
+
+    function selectDelivery(isSelf) {
+        isSelfDelivery = isSelf;
+        localStorage.setItem('moline_self_delivery', isSelf);
+        
+        document.getElementById('modal-opt-deliv').classList.toggle('active', !isSelf);
+        document.getElementById('modal-opt-self').classList.toggle('active', isSelf);
+        document.getElementById('delivery-icon-btn').innerHTML = isSelf ? '📦' : '🚚';
+        
+        calc();
+        hideDeliveryModal();
+        if(tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
     }
 
     async function load(quiet = false) {
@@ -130,10 +177,7 @@
                 return;
             }
 
-            menuData = m.menu || []; 
-            historyData = h || []; 
-            isAdmin = m.isAdmin; 
-            allPartners = m.allPartners || [];
+            menuData = m.menu || []; historyData = h || []; isAdmin = m.isAdmin; allPartners = m.allPartners || [];
             currentDeliveryCost = m.deliveryCost !== undefined ? m.deliveryCost : 300;
             
             const shopSelect = document.getElementById('shop-select');
@@ -142,11 +186,20 @@
             document.getElementById('shop-selector-box').style.display = (m.displayNames && m.displayNames.length > 1) ? 'block' : 'none';
 
             const input = document.getElementById('dt');
-            if (!input.value) {
-                const now = new Date();
-                let minD = new Date(); minD.setDate(now.getDate() + (now.getHours() >= 11 ? 2 : 1));
-                input.value = minD.toISOString().split('T')[0];
+            const now = new Date();
+            let minD = new Date(); 
+            minD.setDate(now.getDate() + (now.getHours() >= 11 ? 2 : 1));
+            const minDateStr = minD.toISOString().split('T')[0];
+            
+            input.min = minDateStr;
+            if (!input.value || input.value < minDateStr) {
+                input.value = minDateStr;
             }
+
+            // Восстановление UI кнопок из памяти
+            document.getElementById('modal-opt-deliv').classList.toggle('active', !isSelfDelivery);
+            document.getElementById('modal-opt-self').classList.toggle('active', isSelfDelivery);
+            document.getElementById('delivery-icon-btn').innerHTML = isSelfDelivery ? '📦' : '🚚';
 
             if(isAdmin) {
                 document.getElementById('t1').classList.add('hidden');
@@ -163,7 +216,6 @@
     function renderMenu() {
         const box = document.getElementById('menu'), date = document.getElementById('dt').value;
         const shop = document.getElementById('shop-select').value || user;
-        const key = date + "_" + shop;
 
         if (isLocked(date)) {
             box.innerHTML = `<div class="card" style="text-align:center; color:orange; font-weight:700; padding:20px;">Прием заказов на эту дату закрыт.</div>`;
@@ -175,7 +227,7 @@
         for (let c in groups) {
             box.innerHTML += `<div class="cat">${c}</div>`;
             groups[c].forEach(i => {
-                const q = allOrders[key]?.[i.name]?.qty || 0;
+                const q = currentCart[i.name]?.qty || 0;
                 box.innerHTML += `<div class="card row"><div><b>${i.name}</b><br><small>${i.price} ₽</small></div><div class="stepper"><button class="btn-s" onclick="upd('${i.name}',${i.price},-1)">-</button><input type="number" class="q-input" value="${q}" readonly><button class="btn-s" onclick="upd('${i.name}',${i.price},1)">+</button></div></div>`;
             });
         }
@@ -183,19 +235,22 @@
     }
 
     function upd(n, p, d) {
-        const date = document.getElementById('dt').value, shop = document.getElementById('shop-select').value || user, key = date + "_" + shop;
-        allOrders[key] = allOrders[key] || {};
-        let q = (allOrders[key][n]?.qty || 0) + d;
-        if(q <= 0) delete allOrders[key][n]; else allOrders[key][n] = {qty:q, price:p};
+        let q = (currentCart[n]?.qty || 0) + d;
+        if(q <= 0) delete currentCart[n]; else currentCart[n] = {qty:q, price:p};
         renderMenu(); tg.HapticFeedback.impactOccurred('light');
     }
 
     function calc() {
-        const date = document.getElementById('dt').value, shop = document.getElementById('shop-select').value || user, key = date + "_" + shop;
-        let sub = 0; for (let k in allOrders[key] || {}) sub += (allOrders[key][k].qty * allOrders[key][k].price);
+        let sub = 0; for (let k in currentCart) sub += (currentCart[k].qty * currentCart[k].price);
         
-        let del = sub > 0 ? currentDeliveryCost : 0;
-        document.getElementById('delivery-info').innerText = sub > 0 ? `Доставка: ${currentDeliveryCost} ₽` : "Доставка: 0 ₽";
+        let del = 0;
+        if (!isSelfDelivery) {
+            del = sub > 0 ? currentDeliveryCost : 0;
+            document.getElementById('delivery-info').innerText = sub > 0 ? `Доставка: ${currentDeliveryCost} ₽` : "Доставка: 0 ₽";
+        } else {
+            document.getElementById('delivery-info').innerText = "Самовывоз из цеха: Бесплатно";
+        }
+        
         document.getElementById('tot').innerText = (sub + del) + " ₽";
     }
 
@@ -246,9 +301,8 @@
     }
 
     function startEdit(u, shop, date, items) {
-        const key = date + "_" + shop;
-        allOrders[key] = {}; 
-        items.forEach(i => allOrders[key][i.name] = {qty: i.qty, price: i.price});
+        currentCart = {}; 
+        items.forEach(i => currentCart[i.name] = {qty: i.qty, price: i.price});
         editUser = u; 
         document.getElementById('dt').value = date;
         document.getElementById('shop-select').innerHTML = `<option value="${shop}">${shop}</option>`;
@@ -258,9 +312,8 @@
     }
 
     function copyOrder(items, shopName) {
-        const date = document.getElementById('dt').value, key = date + "_" + shopName;
-        allOrders[key] = {};
-        items.forEach(i => allOrders[key][i.name] = {qty: i.qty, price: i.price});
+        currentCart = {};
+        items.forEach(i => currentCart[i.name] = {qty: i.qty, price: i.price});
         document.getElementById('copy-text').innerText = "ПОВТОР ЗАКАЗА: " + shopName;
         document.getElementById('copy-notify').style.display = 'block';
         document.getElementById('shop-select').innerHTML = `<option value="${shopName}">${shopName}</option>`;
@@ -309,17 +362,21 @@
         tg.MainButton.hideProgress();
     }
 
-    function cancelBuffer() { editUser = null; document.getElementById('copy-notify').style.display = 'none'; load(true); if(isAdmin) tab('admin'); }
+    function cancelBuffer() { 
+        editUser = null; 
+        currentCart = {};
+        document.getElementById('copy-notify').style.display = 'none'; 
+        load(true); 
+        if(isAdmin) tab('admin'); 
+    }
 
     async function send() {
-        const date = document.getElementById('dt').value, shop = document.getElementById('shop-select').value || user, key = date + "_" + shop;
-        if(!allOrders[key] || !Object.keys(allOrders[key]).length) return;
+        const date = document.getElementById('dt').value, shop = document.getElementById('shop-select').value || user;
+        if(!currentCart || !Object.keys(currentCart).length) return;
         
         if (!isAdmin) {
             let totalQty = 0;
-            for (let k in allOrders[key]) {
-                totalQty += allOrders[key][k].qty;
-            }
+            for (let k in currentCart) totalQty += currentCart[k].qty;
             if (totalQty < 10) {
                 tg.showAlert("Минимальное количество для заказа — 10 единиц продукции.");
                 return;
@@ -328,19 +385,25 @@
 
         tg.showConfirm(`Заказать для "${shop}"?`, async (ok) => {
             if (ok) {
-                // Включаем визуальный лоадер
                 document.getElementById('ui-loader').classList.remove('hidden');
                 tg.MainButton.showProgress();
                 
                 try {
-                    await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date: date, shopName: shop, items: allOrders[key]})});
+                    await fetch(API, {method:'POST', body:JSON.stringify({
+                        user: editUser || user, 
+                        date: date, 
+                        shopName: shop, 
+                        items: currentCart,
+                        isSelfDelivery: isSelfDelivery
+                    })});
                     tg.HapticFeedback.notificationOccurred('success');
-                    editUser = null; document.getElementById('copy-notify').style.display = 'none';
+                    editUser = null; 
+                    currentCart = {};
+                    document.getElementById('copy-notify').style.display = 'none';
                     await load(true); if(isAdmin) tab('admin'); else tab('hist');
                 } catch(e) { 
                     tg.showAlert("Ошибка!"); 
                 } finally { 
-                    // Выключаем визуальный лоадер в любом случае
                     document.getElementById('ui-loader').classList.add('hidden');
                     tg.MainButton.hideProgress(); 
                 }
@@ -354,7 +417,8 @@
                 document.getElementById('ui-loader').classList.remove('hidden');
                 tg.MainButton.showProgress();
                 try {
-                    await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, shopName: shop})});
+                    let cleanShop = shop.replace(" [САМОВЫВОЗ]", "");
+                    await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, shopName: cleanShop})});
                     await load(true); if(isAdmin) renderAdmin(); else renderHist();
                 } catch(e) {
                     tg.showAlert("Ошибка!");
@@ -374,7 +438,8 @@
         box.innerHTML = `<div class="cat">Заказы на ${sel.split('-').reverse().join('.')}</div>`;
         if(!data.length) { box.innerHTML += '<div class="card">Пусто</div>'; return; }
         data.forEach(ord => {
-            box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.shopName}</b><br><small>${ord.total} ₽</small></div><div style="display:flex; align-items:center;"><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.shopName}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button><span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}','${ord.shopName}')">✖</span></div></div></div>`;
+            let cleanShop = ord.shopName.replace(" [САМОВЫВОЗ]", "");
+            box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.shopName}</b><br><small>${ord.total} ₽</small></div><div style="display:flex; align-items:center;"><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${cleanShop}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button><span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}','${ord.shopName}')">✖</span></div></div></div>`;
         });
     }
 
