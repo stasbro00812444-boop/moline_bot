@@ -37,9 +37,21 @@
         .admin-select-partner { display: block; width: 100%; padding: 12px; margin-bottom: 5px; background: #fff; border: 1px solid #eee; border-radius: 10px; font-weight: 700; text-align: left; cursor: pointer; font-size: 13px; }
         .block-toggle { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; }
         .block-toggle input { width: 18px; height: 18px; accent-color: #ff4d4d; cursor: pointer; }
+        
+        /* Стили лоадера */
+        .loader-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(253, 250, 253, 0.85); backdrop-filter: blur(8px); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.3s ease; }
+        .loader-text { font-size: 14px; font-weight: 800; color: var(--main); margin-top: 20px; text-transform: uppercase; letter-spacing: 1px; }
+        .spinner { border: 4px solid rgba(243, 119, 198, 0.2); border-top: 4px solid var(--main); border-radius: 50%; width: 45px; height: 45px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
+    <!-- Блок лоадера -->
+    <div id="ui-loader" class="loader-overlay hidden">
+        <div class="spinner"></div>
+        <div class="loader-text">Обработка заказа...</div>
+    </div>
+
     <div class="tabs" id="tab-bar">
         <div id="t1" class="tab active" onclick="tab('order')">ЗАКАЗАТЬ</div>
         <div id="t2" class="tab" onclick="tab('hist')">ИСТОРИЯ</div>
@@ -89,11 +101,12 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbyOtV_aCyLFWBNM9pHVEWz2_cV2Tc0YBUtEQQwkBn7bzGR_SAvE_Wp2lZ1cJxa5ddhl/exec';
+    const API = 'https://script.google.com/macros/s/AKfycbz7z7TqD08g48Dx75zWhU4WuS6eQSdT-fPJCXwnPs0tBhz93mZWHfE8qfLYz9-GvHjB/exec';
     const user = (tg.initDataUnsafe?.user?.username || "id_" + tg.initDataUnsafe?.user?.id).toLowerCase().replace('@', '');
 
     let menuData = [], historyData = [], isAdmin = false, editUser = null, allPartners = [];
     let allOrders = {}; 
+    let currentDeliveryCost = 300; 
 
     function isLocked(dateStr) {
         if (isAdmin) return false;
@@ -117,7 +130,11 @@
                 return;
             }
 
-            menuData = m.menu || []; historyData = h || []; isAdmin = m.isAdmin; allPartners = m.allPartners || [];
+            menuData = m.menu || []; 
+            historyData = h || []; 
+            isAdmin = m.isAdmin; 
+            allPartners = m.allPartners || [];
+            currentDeliveryCost = m.deliveryCost !== undefined ? m.deliveryCost : 300;
             
             const shopSelect = document.getElementById('shop-select');
             shopSelect.innerHTML = '';
@@ -176,8 +193,9 @@
     function calc() {
         const date = document.getElementById('dt').value, shop = document.getElementById('shop-select').value || user, key = date + "_" + shop;
         let sub = 0; for (let k in allOrders[key] || {}) sub += (allOrders[key][k].qty * allOrders[key][k].price);
-        let del = (sub > 0 && sub < 3000) ? 300 : 0;
-        document.getElementById('delivery-info').innerText = sub >= 3000 ? "Доставка: Бесплатно" : (sub > 0 ? "Доставка: 300 ₽" : "Доставка: 0 ₽");
+        
+        let del = sub > 0 ? currentDeliveryCost : 0;
+        document.getElementById('delivery-info').innerText = sub > 0 ? `Доставка: ${currentDeliveryCost} ₽` : "Доставка: 0 ₽";
         document.getElementById('tot').innerText = (sub + del) + " ₽";
     }
 
@@ -310,13 +328,22 @@
 
         tg.showConfirm(`Заказать для "${shop}"?`, async (ok) => {
             if (ok) {
+                // Включаем визуальный лоадер
+                document.getElementById('ui-loader').classList.remove('hidden');
                 tg.MainButton.showProgress();
+                
                 try {
                     await fetch(API, {method:'POST', body:JSON.stringify({user: editUser || user, date: date, shopName: shop, items: allOrders[key]})});
                     tg.HapticFeedback.notificationOccurred('success');
                     editUser = null; document.getElementById('copy-notify').style.display = 'none';
                     await load(true); if(isAdmin) tab('admin'); else tab('hist');
-                } catch(e) { tg.showAlert("Ошибка!"); } finally { tg.MainButton.hideProgress(); }
+                } catch(e) { 
+                    tg.showAlert("Ошибка!"); 
+                } finally { 
+                    // Выключаем визуальный лоадер в любом случае
+                    document.getElementById('ui-loader').classList.add('hidden');
+                    tg.MainButton.hideProgress(); 
+                }
             }
         });
     }
@@ -324,10 +351,17 @@
     async function deleteOrder(u, d, shop) {
         tg.showConfirm(`Удалить заказ "${shop}"?`, async (ok) => {
             if(ok) {
+                document.getElementById('ui-loader').classList.remove('hidden');
                 tg.MainButton.showProgress();
-                await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, shopName: shop})});
-                await load(true); if(isAdmin) renderAdmin(); else renderHist();
-                tg.MainButton.hideProgress();
+                try {
+                    await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, shopName: shop})});
+                    await load(true); if(isAdmin) renderAdmin(); else renderHist();
+                } catch(e) {
+                    tg.showAlert("Ошибка!");
+                } finally {
+                    document.getElementById('ui-loader').classList.add('hidden');
+                    tg.MainButton.hideProgress();
+                }
             }
         });
     }
