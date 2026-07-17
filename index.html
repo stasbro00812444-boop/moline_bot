@@ -38,13 +38,11 @@
         .block-toggle { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; }
         .block-toggle input { width: 18px; height: 18px; accent-color: #ff4d4d; cursor: pointer; }
         
-        /* Стили лоадера */
         .loader-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(253, 250, 253, 0.85); backdrop-filter: blur(8px); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.3s ease; }
         .loader-text { font-size: 14px; font-weight: 800; color: var(--main); margin-top: 20px; text-transform: uppercase; letter-spacing: 1px; }
         .spinner { border: 4px solid rgba(243, 119, 198, 0.2); border-top: 4px solid var(--main); border-radius: 50%; width: 45px; height: 45px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* Всплывающее окно выбора доставки */
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(3px); z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 30px; transition: opacity 0.3s ease; }
         .delivery-option-btn { background: #eee; color: #777; padding: 16px; border-radius: 12px; font-weight: 800; font-size: 14px; text-align: center; margin-bottom: 10px; cursor: pointer; transition: 0.2s; border: 2px solid transparent; }
         .delivery-option-btn.active { background: #fff3f9; color: var(--main); border-color: var(--main); }
@@ -123,7 +121,7 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbwCcBXpGSOO0G_kWmyjgABMiLKLDvCGxp0p90m8zPKUhfa9ibmCvwpIG0QFnxzaUuRG/exec';
+    const API = 'https://script.google.com/macros/s/AKfycbwQJTfKRSLAw_xvHK71fEkN-GsoJGZs_0aR9xGdWAlhJvtDM1MXSGAIMovlFttbrAJK/exec';
     const user = (tg.initDataUnsafe?.user?.username || "id_" + tg.initDataUnsafe?.user?.id).toLowerCase().replace('@', '');
 
     let menuData = [], historyData = [], isAdmin = false, editUser = null, allPartners = [];
@@ -141,7 +139,6 @@
         return false;
     }
 
-    // Логика нового модального окна
     function showDeliveryModal() {
         document.getElementById('delivery-modal').classList.remove('hidden');
         if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
@@ -167,9 +164,10 @@
     async function load(quiet = false) {
         if(!quiet) tg.MainButton.showProgress();
         try {
+            const nocache = '&t=' + new Date().getTime(); // Оставляем защиту от кэша для актуальных цен
             const [m, h] = await Promise.all([
-                fetch(`${API}?type=menu&user=${user}`).then(r => r.json()), 
-                fetch(`${API}?user=${user}`).then(r => r.json())
+                fetch(`${API}?type=menu&user=${user}${nocache}`).then(r => r.json()), 
+                fetch(`${API}?user=${user}${nocache}`).then(r => r.json())
             ]);
             
             if (m.isBlocked) {
@@ -196,7 +194,6 @@
                 input.value = minDateStr;
             }
 
-            // Восстановление UI кнопок из памяти
             document.getElementById('modal-opt-deliv').classList.toggle('active', !isSelfDelivery);
             document.getElementById('modal-opt-self').classList.toggle('active', isSelfDelivery);
             document.getElementById('delivery-icon-btn').innerHTML = isSelfDelivery ? '📦' : '🚚';
@@ -285,38 +282,45 @@
         if(!historyData.length) { box.innerHTML = '<div class="card" style="text-align:center; padding:20px;">История пуста</div>'; return; }
         historyData.sort((a,b) => b.date.localeCompare(a.date)).forEach(h => {
             const locked = isLocked(h.date);
+            let shopClean = h.shopName; // Имя теперь приходит чистое с бэкенда
             let preview = h.items.map(i => `${i.name} (${i.qty})`).join(', ');
             box.innerHTML += `<div class="card">
                 <div class="row">
-                    <div><b>${h.date.split('-').reverse().join('.')}</b><br><small style="color:var(--main)">${h.shopName}</small></div>
+                    <div><b>${h.date.split('-').reverse().join('.')}</b><br><small style="color:var(--main)">${shopClean}</small></div>
                     <div style="display:flex; align-items:center;">
                         <b style="color:var(--main)">${h.total} ₽</b>
-                        ${(!locked || isAdmin) ? `<span class="edit-icon" onclick="startEdit('${user}', '${h.shopName}', '${h.date}', ${JSON.stringify(h.items).replace(/"/g, '&quot;')})">✎</span><span class="del-icon" onclick="deleteOrder('${user}','${h.date}','${h.shopName}')">✖</span>` : ''}
+                        ${(!locked || isAdmin) ? `<span class="edit-icon" onclick="startEdit('${user}', '${shopClean}', '${h.date}', ${JSON.stringify(h.items).replace(/"/g, '&quot;')})">✎</span><span class="del-icon" onclick="deleteOrder('${user}','${h.date}','${shopClean}')">✖</span>` : ''}
                     </div>
                 </div>
                 <div style="font-size:11px; color:#777; margin:8px 0 12px; line-height:1.4;">${preview}</div>
-                <button class="btn-repeat" onclick="copyOrder(${JSON.stringify(h.items).replace(/"/g, '&quot;')}, '${h.shopName}')">Повторить заказ</button>
+                <button class="btn-repeat" onclick="copyOrder(${JSON.stringify(h.items).replace(/"/g, '&quot;')}, '${shopClean}')">Повторить заказ</button>
             </div>`;
         });
     }
 
+    function syncCart(items) {
+        currentCart = {};
+        items.forEach(i => {
+            let actualItem = menuData.find(m => m.name === i.name);
+            currentCart[i.name] = {qty: i.qty, price: actualItem ? actualItem.price : i.price};
+        });
+    }
+
     function startEdit(u, shop, date, items) {
-        currentCart = {}; 
-        items.forEach(i => currentCart[i.name] = {qty: i.qty, price: i.price});
+        syncCart(items);
         editUser = u; 
         document.getElementById('dt').value = date;
-        document.getElementById('shop-select').innerHTML = `<option value="${shop}">${shop}</option>`;
+        document.getElementById('shop-select').value = shop;
         document.getElementById('copy-text').innerText = "РЕДАКТИРОВАНИЕ: " + shop;
         document.getElementById('copy-notify').style.display = 'block';
         tab('order'); renderMenu();
     }
 
     function copyOrder(items, shopName) {
-        currentCart = {};
-        items.forEach(i => currentCart[i.name] = {qty: i.qty, price: i.price});
+        syncCart(items);
+        document.getElementById('shop-select').value = shopName;
         document.getElementById('copy-text').innerText = "ПОВТОР ЗАКАЗА: " + shopName;
         document.getElementById('copy-notify').style.display = 'block';
-        document.getElementById('shop-select').innerHTML = `<option value="${shopName}">${shopName}</option>`;
         tab('order'); renderMenu();
     }
 
@@ -392,7 +396,7 @@
                     await fetch(API, {method:'POST', body:JSON.stringify({
                         user: editUser || user, 
                         date: date, 
-                        shopName: shop, 
+                        shopName: shop, // Отправляем чистую строку
                         items: currentCart,
                         isSelfDelivery: isSelfDelivery
                     })});
@@ -417,8 +421,7 @@
                 document.getElementById('ui-loader').classList.remove('hidden');
                 tg.MainButton.showProgress();
                 try {
-                    let cleanShop = shop.replace(" [САМОВЫВОЗ]", "");
-                    await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, shopName: cleanShop})});
+                    await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, shopName: shop})});
                     await load(true); if(isAdmin) renderAdmin(); else renderHist();
                 } catch(e) {
                     tg.showAlert("Ошибка!");
@@ -434,12 +437,12 @@
         const box = document.getElementById('admin-list'), sel = document.getElementById('dt-admin').value;
         if (!sel) return;
         box.innerHTML = '<div class="card">Загрузка...</div>';
-        const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}`).then(r => r.json());
+        const nocache = '&t=' + new Date().getTime();
+        const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}${nocache}`).then(r => r.json());
         box.innerHTML = `<div class="cat">Заказы на ${sel.split('-').reverse().join('.')}</div>`;
         if(!data.length) { box.innerHTML += '<div class="card">Пусто</div>'; return; }
         data.forEach(ord => {
-            let cleanShop = ord.shopName.replace(" [САМОВЫВОЗ]", "");
-            box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.shopName}</b><br><small>${ord.total} ₽</small></div><div style="display:flex; align-items:center;"><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${cleanShop}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button><span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}','${ord.shopName}')">✖</span></div></div></div>`;
+            box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.shopName}</b><br><small>${ord.total} ₽</small></div><div style="display:flex; align-items:center;"><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.shopName}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button><span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}','${ord.shopName}')">✖</span></div></div></div>`;
         });
     }
 
