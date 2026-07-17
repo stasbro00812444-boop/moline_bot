@@ -47,7 +47,7 @@
         .delivery-option-btn { background: #eee; color: #777; padding: 16px; border-radius: 12px; font-weight: 800; font-size: 14px; text-align: center; margin-bottom: 10px; cursor: pointer; transition: 0.2s; border: 2px solid transparent; }
         .delivery-option-btn.active { background: #fff3f9; color: var(--main); border-color: var(--main); }
 
-        /* === СТИЛИ КАТАЛОГА === */
+        /* === СТИЛИ КАТАЛОГА (НОВОЕ) === */
         .info-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); z-index: 10001; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px; box-sizing: border-box; }
         .info-modal-overlay.active { opacity: 1; pointer-events: auto; }
         .info-card { background: #fff; border-radius: 24px; width: 100%; max-width: 340px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transform: translateY(20px); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 85vh; }
@@ -71,6 +71,7 @@
         <div class="loader-text">Обработка заказа...</div>
     </div>
 
+    <!-- ВЫБОР ДОСТАВКИ -->
     <div id="delivery-modal" class="modal-overlay hidden">
         <div class="card" style="width: 90%; max-width: 400px; padding: 25px 20px;">
             <div style="font-size: 15px; font-weight: 900; color: #2c2c2c; margin-bottom: 20px; text-align:center;">ВЫБЕРИТЕ СПОСОБ ПОЛУЧЕНИЯ</div>
@@ -80,7 +81,7 @@
         </div>
     </div>
 
-    <!-- === МОДАЛЬНОЕ ОКНО ПРОДУКТА === -->
+    <!-- === МОДАЛЬНОЕ ОКНО ПРОДУКТА (КБЖУ) === -->
     <div id="product-info-modal" class="info-modal-overlay" onclick="closeProductInfo(event)">
         <div class="info-card" onclick="event.stopPropagation()">
             <div class="info-img-box" id="pi-img-container">
@@ -199,6 +200,7 @@
 
     // === ФУНКЦИИ ОКНА КБЖУ ===
     function openProductInfo(productName) {
+        // Нормализуем ключ так же, как это сделал сервер
         let normalizedKey = productName.toLowerCase().replace(/[^a-zа-яё0-9]/g, '');
         let info = externalCatalog[normalizedKey];
 
@@ -242,7 +244,7 @@
     async function load(quiet = false) {
         if(!quiet) tg.MainButton.showProgress();
         try {
-            const nocache = '&t=' + new Date().getTime(); // Анти-кэш для свежих прайсов
+            const nocache = '&t=' + new Date().getTime(); // Защита от старых данных
             const [m, h] = await Promise.all([
                 fetch(`${API}?type=menu&user=${user}${nocache}`).then(r => r.json()), 
                 fetch(`${API}?user=${user}${nocache}`).then(r => r.json())
@@ -257,7 +259,7 @@
             historyData = h || []; 
             isAdmin = m.isAdmin; 
             allPartners = m.allPartners || [];
-            externalCatalog = m.catalog || {}; // Сохраняем загруженные карточки КБЖУ
+            externalCatalog = m.catalog || {}; // Сохраняем словарь КБЖУ с сервера
             currentDeliveryCost = m.deliveryCost !== undefined ? m.deliveryCost : 300;
             
             const shopSelect = document.getElementById('shop-select');
@@ -307,7 +309,9 @@
             box.innerHTML += `<div class="cat">${c}</div>`;
             groups[c].forEach(i => {
                 const q = currentCart[i.name]?.qty || 0;
-                let safeName = i.name.replace(/'/g, "\\'"); // Защита от кавычек в названиях
+                let safeName = i.name.replace(/'/g, "\\'"); // Экранирование кавычек для кнопок
+                
+                // --- ГЕНЕРАЦИЯ КАРТОЧКИ С КНОПКОЙ "!" ---
                 box.innerHTML += `
                 <div class="card row">
                     <div style="display:flex; align-items:center; flex:1; padding-right:10px;">
@@ -376,7 +380,7 @@
         if(!historyData.length) { box.innerHTML = '<div class="card" style="text-align:center; padding:20px;">История пуста</div>'; return; }
         historyData.sort((a,b) => b.date.localeCompare(a.date)).forEach(h => {
             const locked = isLocked(h.date);
-            let shopClean = h.shopName; // Получаем чистую строку с бэкенда
+            let shopClean = h.shopName; 
             let preview = h.items.map(i => `${i.name} (${i.qty})`).join(', ');
             box.innerHTML += `<div class="card">
                 <div class="row">
@@ -490,7 +494,7 @@
                     await fetch(API, {method:'POST', body:JSON.stringify({
                         user: editUser || user, 
                         date: date, 
-                        shopName: shop, // Отправляем кристально чистую строку
+                        shopName: shop,
                         items: currentCart,
                         isSelfDelivery: isSelfDelivery
                     })});
