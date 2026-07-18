@@ -47,8 +47,7 @@
         .delivery-option-btn { background: #eee; color: #777; padding: 16px; border-radius: 12px; font-weight: 800; font-size: 14px; text-align: center; margin-bottom: 10px; cursor: pointer; transition: 0.2s; border: 2px solid transparent; }
         .delivery-option-btn.active { background: #fff3f9; color: var(--main); border-color: var(--main); }
 
-        .btn-info { background: #fff3f9; border: 1px solid #f377c666; color: var(--main); width: 28px; height: 28px; border-radius: 50%; font-weight: 900; display: flex; align-items: center; justify-content: center; cursor: pointer; margin-right: 10px; font-size: 14px; flex-shrink: 0; }
-
+        /* ОКНО КБЖУ */
         .info-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); z-index: 10001; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px; box-sizing: border-box; }
         .info-modal-overlay.active { opacity: 1; pointer-events: auto; }
         .info-card { background: #fff; border-radius: 24px; width: 100%; max-width: 340px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transform: translateY(20px); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 85vh; }
@@ -71,7 +70,7 @@
         <div class="loader-text">Обработка заказа...</div>
     </div>
 
-    <!-- ВЫБОР ДОСТАВКИ (ВЕРНУЛИ ЭМОДЗИ И СТАРЫЙ ДИЗАЙН) -->
+    <!-- ВЫБОР ДОСТАВКИ -->
     <div id="delivery-modal" class="modal-overlay hidden">
         <div class="card" style="width: 90%; max-width: 400px; padding: 25px 20px;">
             <div style="font-size: 15px; font-weight: 900; color: #2c2c2c; margin-bottom: 20px; text-align:center;">ВЫБЕРИТЕ СПОСОБ ПОЛУЧЕНИЯ</div>
@@ -149,7 +148,6 @@
                 <span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br>
                 <b id="tot" style="font-size:22px">0 ₽</b>
             </div>
-            <!-- ВЕРНУЛИ ЭМОДЗИ -->
             <button id="delivery-icon-btn" onclick="showDeliveryModal()" style="background:#fff; border:1.5px solid #eee; border-radius:14px; width:48px; height:48px; display:flex; align-items:center; justify-content:center; font-size:20px; margin-right:12px; cursor:pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">🚚</button>
             <button class="btn-send" style="width: auto; padding: 16px 30px;" onclick="send()">ОФОРМИТЬ</button>
         </div>
@@ -157,7 +155,7 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    // Обязательно вставь сюда свой рабочий URL от Google Apps Script!
+    // ВСТАВЬ СВОЙ URL НИЖЕ
     const API = 'https://script.google.com/macros/s/AKfycbwkIcTz3CPYmmfxBpuv5eSAFzYltY5ucFiznP2jy6T4LImYe6AxDvNyAVp87wK154rB/exec';
     const user = (tg.initDataUnsafe?.user?.username || "id_" + tg.initDataUnsafe?.user?.id).toLowerCase().replace('@', '');
 
@@ -193,7 +191,6 @@
         document.getElementById('modal-opt-deliv').classList.toggle('active', !isSelf);
         document.getElementById('modal-opt-self').classList.toggle('active', isSelf);
         
-        // Меняем иконку обратно на текст
         document.getElementById('delivery-icon-btn').innerHTML = isSelf ? '📦' : '🚚';
         
         calc();
@@ -220,14 +217,12 @@
                 imgEl.src = info.img;
                 imgEl.style.display = 'block';
                 imgCont.querySelector('.info-img-placeholder').style.display = 'none';
+                imgCont.style.display = 'flex';
             } else {
                 imgEl.style.display = 'none';
-                imgCont.querySelector('.info-img-placeholder').style.display = 'block';
+                imgCont.style.display = 'none'; // Скрываем серый блок, если фото нет
             }
         }
-        
-        // Показываем блок с фото, даже если там просто заглушка (как было в оригинале)
-        imgCont.style.display = 'flex';
         
         document.getElementById('product-info-modal').classList.add('active');
         if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
@@ -311,19 +306,13 @@
                 
                 let hasInfo = externalCatalog[normKey] ? true : false;
                 
-                // Рендерим знак "!", если есть инфа, иначе ставим пустую заглушку
-                let infoBtnHtml = hasInfo 
-                    ? `<div class="btn-info" onclick="openProductInfo('${safeName}')">!</div>` 
-                    : `<div style="width: 28px; margin-right: 10px; flex-shrink: 0;"></div>`;
-
-                // Делаем текст кликабельным без визуальных отличий (без черточек)
+                // Делаем текст кликабельным (стиль курсора-пальца), если есть инфа
                 let textClickHtml = hasInfo ? `onclick="openProductInfo('${safeName}')" style="cursor:pointer;"` : '';
 
                 box.innerHTML += `
                 <div class="card row">
-                    <div style="display:flex; align-items:center; flex:1; padding-right:10px;">
-                        ${infoBtnHtml}
-                        <div ${textClickHtml}><b>${i.name}</b><br><small>${i.price} ₽</small></div>
+                    <div style="flex:1; padding-right:10px;" ${textClickHtml}>
+                        <div><b>${i.name}</b><br><small>${i.price} ₽</small></div>
                     </div>
                     <div class="stepper">
                         <button class="btn-s" onclick="upd('${safeName}',${i.price},-1)">-</button>
@@ -389,7 +378,6 @@
             const locked = isLocked(h.date);
             let shopClean = h.shopName; 
             
-            // ВЕРНУЛИ СТЕНУ ТЕКСТА ЧЕРЕЗ ЗАПЯТУЮ
             let preview = h.items.map(i => `${i.name} (${i.qty})`).join(', ');
 
             box.innerHTML += `<div class="card">
