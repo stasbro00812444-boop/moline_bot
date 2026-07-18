@@ -44,8 +44,30 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(3px); z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 30px; transition: opacity 0.3s ease; }
-        .delivery-option-btn { background: #eee; color: #777; padding: 16px; border-radius: 12px; font-weight: 800; font-size: 14px; text-align: center; margin-bottom: 10px; cursor: pointer; transition: 0.2s; border: 2px solid transparent; }
+        
+        /* Стили SVG иконок */
+        .deliv-icon { width: 22px; height: 22px; stroke: currentColor; stroke-width: 2; fill: none; flex-shrink: 0; }
+        .delivery-option-btn { background: #eee; color: #777; padding: 16px; border-radius: 12px; font-weight: 800; font-size: 14px; text-align: center; margin-bottom: 10px; cursor: pointer; transition: 0.2s; border: 2px solid transparent; display: flex; align-items: center; justify-content: center; gap: 10px; }
         .delivery-option-btn.active { background: #fff3f9; color: var(--main); border-color: var(--main); }
+
+        .btn-info { background: #fff3f9; border: 1px solid #f377c666; color: var(--main); width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; margin-right: 10px; flex-shrink: 0; }
+        .btn-info svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none; }
+
+        /* Окно КБЖУ */
+        .info-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); z-index: 10001; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px; box-sizing: border-box; }
+        .info-modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .info-card { background: #fff; border-radius: 24px; width: 100%; max-width: 340px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transform: translateY(20px); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 85vh; }
+        .info-modal-overlay.active .info-card { transform: translateY(0); }
+        .info-img-box { width: 100%; height: 200px; background: #f5f5f5; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
+        .info-img-box img { width: 100%; height: 100%; object-fit: cover; }
+        .info-img-placeholder { color: #ccc; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+        .info-content { padding: 20px; overflow-y: auto; }
+        .info-title { font-size: 18px; font-weight: 900; color: #2c2c2c; margin-bottom: 15px; }
+        .info-row { display: flex; flex-direction: column; margin-bottom: 12px; border-bottom: 1px dashed #eee; padding-bottom: 8px; }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { font-size: 10px; font-weight: 800; color: var(--main); text-transform: uppercase; margin-bottom: 4px; }
+        .info-val { font-size: 13px; font-weight: 600; color: #444; line-height: 1.4; }
+        .info-close-btn { background: #fdfafd; border-top: 1px solid #eee; padding: 15px; text-align: center; color: #ff4d4d; font-weight: 800; font-size: 14px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -54,12 +76,37 @@
         <div class="loader-text">Обработка заказа...</div>
     </div>
 
+    <!-- ВЫБОР ДОСТАВКИ С SVG -->
     <div id="delivery-modal" class="modal-overlay hidden">
         <div class="card" style="width: 90%; max-width: 400px; padding: 25px 20px;">
             <div style="font-size: 15px; font-weight: 900; color: #2c2c2c; margin-bottom: 20px; text-align:center;">ВЫБЕРИТЕ СПОСОБ ПОЛУЧЕНИЯ</div>
-            <div class="delivery-option-btn active" id="modal-opt-deliv" onclick="selectDelivery(false)">🚚 ДОСТАВКА ЦЕХА</div>
-            <div class="delivery-option-btn" id="modal-opt-self" onclick="selectDelivery(true)">📦 САМОВЫВОЗ (БЕСПЛАТНО)</div>
+            <div class="delivery-option-btn active" id="modal-opt-deliv" onclick="selectDelivery(false)">
+                <svg class="deliv-icon" viewBox="0 0 24 24"><path d="M1 9l2 2m0 0l4 4m4-4l-4-4m4 4l4 4M21 9l-2 2m0 0l-4 4m4-4l4-4m-4 4l-4 4M3 11h18M3 11v8a2 2 0 002 2h14a2 2 0 002-2v-8m-7 0H7v8m10 0H7"/></svg>
+                ДОСТАВКА ЦЕХА
+            </div>
+            <div class="delivery-option-btn" id="modal-opt-self" onclick="selectDelivery(true)">
+                <svg class="deliv-icon" viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14l-8 4m8 4v10l-8-4"/></svg>
+                САМОВЫВОЗ (БЕСПЛАТНО)
+            </div>
             <button class="btn-cancel" style="width:100%; font-size:14px; margin-top:10px; padding:14px;" onclick="hideDeliveryModal()">ЗАКРЫТЬ</button>
+        </div>
+    </div>
+
+    <!-- ОКНО КБЖУ -->
+    <div id="product-info-modal" class="info-modal-overlay" onclick="closeProductInfo(event)">
+        <div class="info-card" onclick="event.stopPropagation()">
+            <div class="info-img-box" id="pi-img-container">
+                <div class="info-img-placeholder">Нет фото</div>
+                <img id="pi-img" src="" alt="Product" style="display:none;">
+            </div>
+            <div class="info-content">
+                <div class="info-title" id="pi-title">Название</div>
+                <div class="info-row"><span class="info-label">Состав</span><span class="info-val" id="pi-comp">-</span></div>
+                <div class="info-row"><span class="info-label">Вес</span><span class="info-val" id="pi-weight">-</span></div>
+                <div class="info-row"><span class="info-label">КБЖУ</span><span class="info-val" id="pi-kbju">-</span></div>
+                <div class="info-row"><span class="info-label">Срок хранения</span><span class="info-val" id="pi-shelf">-</span></div>
+            </div>
+            <div class="info-close-btn" onclick="closeProductInfo()">ЗАКРЫТЬ</div>
         </div>
     </div>
 
@@ -114,17 +161,20 @@
                 <span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br>
                 <b id="tot" style="font-size:22px">0 ₽</b>
             </div>
-            <button id="delivery-icon-btn" onclick="showDeliveryModal()" style="background:#fff; border:1.5px solid #eee; border-radius:14px; width:48px; height:48px; font-size:20px; display:flex; align-items:center; justify-content:center; margin-right:12px; cursor:pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">🚚</button>
+            <button id="delivery-icon-btn" onclick="showDeliveryModal()" style="background:#fff; border:1.5px solid #eee; border-radius:14px; width:48px; height:48px; display:flex; align-items:center; justify-content:center; margin-right:12px; cursor:pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.02); color:var(--main);">
+                <svg class="deliv-icon" viewBox="0 0 24 24"><path d="M1 9l2 2m0 0l4 4m4-4l-4-4m4 4l4 4M21 9l-2 2m0 0l-4 4m4-4l4-4m-4 4l-4 4M3 11h18M3 11v8a2 2 0 002 2h14a2 2 0 002-2v-8m-7 0H7v8m10 0H7"/></svg>
+            </button>
             <button class="btn-send" style="width: auto; padding: 16px 30px;" onclick="send()">ОФОРМИТЬ</button>
         </div>
     </div>
 
 <script>
     const tg = window.Telegram.WebApp;
-    const API = 'https://script.google.com/macros/s/AKfycbw9HPGMTrjYTXWsJcgKaS1mYPHzvyXTfXJfXxoql6ca1LN9s8I4svjGu1E3t3vzLH6z/exec';
+    const API = 'https://script.google.com/macros/s/AKfycbzX8lCA1eYYFFvCPOu7lrTyiyFVmnvAt5B_WvyAferjgw3UuvZRAyAap3Ai_OCZ-NNU/exec';
     const user = (tg.initDataUnsafe?.user?.username || "id_" + tg.initDataUnsafe?.user?.id).toLowerCase().replace('@', '');
 
     let menuData = [], historyData = [], isAdmin = false, editUser = null, allPartners = [];
+    let externalCatalog = {};
     
     let currentCart = {}; 
     let currentDeliveryCost = 300; 
@@ -154,17 +204,64 @@
         
         document.getElementById('modal-opt-deliv').classList.toggle('active', !isSelf);
         document.getElementById('modal-opt-self').classList.toggle('active', isSelf);
-        document.getElementById('delivery-icon-btn').innerHTML = isSelf ? '📦' : '🚚';
+        
+        // Меняем иконку в футере
+        const iconHtml = isSelf ? 
+            `<svg class="deliv-icon" viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14l-8 4m8 4v10l-8-4"/></svg>` : 
+            `<svg class="deliv-icon" viewBox="0 0 24 24"><path d="M1 9l2 2m0 0l4 4m4-4l-4-4m4 4l4 4M21 9l-2 2m0 0l-4 4m4-4l4-4m-4 4l-4 4M3 11h18M3 11v8a2 2 0 002 2h14a2 2 0 002-2v-8m-7 0H7v8m10 0H7"/></svg>`;
+        document.getElementById('delivery-icon-btn').innerHTML = iconHtml;
         
         calc();
         hideDeliveryModal();
         if(tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
     }
 
+    // === ФУНКЦИИ ОКНА КБЖУ ===
+    function openProductInfo(productName) {
+        let normalizedKey = productName.toLowerCase().replace(/[^a-zа-яё0-9]/g, '');
+        let info = externalCatalog[normalizedKey];
+
+        document.getElementById('pi-title').innerText = productName;
+        
+        if (info) {
+            document.getElementById('pi-comp').innerText = info.comp || "-";
+            document.getElementById('pi-weight').innerText = info.weight || "-";
+            document.getElementById('pi-kbju').innerText = info.kbju || "-";
+            document.getElementById('pi-shelf').innerText = info.shelf || "-";
+            
+            const imgEl = document.getElementById('pi-img');
+            const imgCont = document.getElementById('pi-img-container');
+            if (info.img && info.img.trim() !== "") {
+                imgEl.src = info.img;
+                imgEl.style.display = 'block';
+                imgCont.querySelector('.info-img-placeholder').style.display = 'none';
+            } else {
+                imgEl.style.display = 'none';
+                imgCont.querySelector('.info-img-placeholder').style.display = 'block';
+            }
+        } else {
+            document.getElementById('pi-comp').innerText = "Информация уточняется";
+            document.getElementById('pi-weight').innerText = "-";
+            document.getElementById('pi-kbju').innerText = "-";
+            document.getElementById('pi-shelf').innerText = "-";
+            document.getElementById('pi-img').style.display = 'none';
+            document.getElementById('pi-img-container').querySelector('.info-img-placeholder').style.display = 'block';
+        }
+
+        document.getElementById('product-info-modal').classList.add('active');
+        if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+    }
+
+    function closeProductInfo(e) {
+        if (e && e.target !== document.getElementById('product-info-modal')) return;
+        document.getElementById('product-info-modal').classList.remove('active');
+    }
+    // ===========================
+
     async function load(quiet = false) {
         if(!quiet) tg.MainButton.showProgress();
         try {
-            const nocache = '&t=' + new Date().getTime(); // Оставляем защиту от кэша для актуальных цен
+            const nocache = '&t=' + new Date().getTime(); 
             const [m, h] = await Promise.all([
                 fetch(`${API}?type=menu&user=${user}${nocache}`).then(r => r.json()), 
                 fetch(`${API}?user=${user}${nocache}`).then(r => r.json())
@@ -175,7 +272,11 @@
                 return;
             }
 
-            menuData = m.menu || []; historyData = h || []; isAdmin = m.isAdmin; allPartners = m.allPartners || [];
+            menuData = m.menu || []; 
+            historyData = h || []; 
+            isAdmin = m.isAdmin; 
+            allPartners = m.allPartners || [];
+            externalCatalog = m.catalog || {}; 
             currentDeliveryCost = m.deliveryCost !== undefined ? m.deliveryCost : 300;
             
             const shopSelect = document.getElementById('shop-select');
@@ -196,7 +297,11 @@
 
             document.getElementById('modal-opt-deliv').classList.toggle('active', !isSelfDelivery);
             document.getElementById('modal-opt-self').classList.toggle('active', isSelfDelivery);
-            document.getElementById('delivery-icon-btn').innerHTML = isSelfDelivery ? '📦' : '🚚';
+            
+            const iconHtml = isSelfDelivery ? 
+                `<svg class="deliv-icon" viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14l-8 4m8 4v10l-8-4"/></svg>` : 
+                `<svg class="deliv-icon" viewBox="0 0 24 24"><path d="M1 9l2 2m0 0l4 4m4-4l-4-4m4 4l4 4M21 9l-2 2m0 0l-4 4m4-4l4-4m-4 4l-4 4M3 11h18M3 11v8a2 2 0 002 2h14a2 2 0 002-2v-8m-7 0H7v8m10 0H7"/></svg>`;
+            document.getElementById('delivery-icon-btn').innerHTML = iconHtml;
 
             if(isAdmin) {
                 document.getElementById('t1').classList.add('hidden');
@@ -225,7 +330,23 @@
             box.innerHTML += `<div class="cat">${c}</div>`;
             groups[c].forEach(i => {
                 const q = currentCart[i.name]?.qty || 0;
-                box.innerHTML += `<div class="card row"><div><b>${i.name}</b><br><small>${i.price} ₽</small></div><div class="stepper"><button class="btn-s" onclick="upd('${i.name}',${i.price},-1)">-</button><input type="number" class="q-input" value="${q}" readonly><button class="btn-s" onclick="upd('${i.name}',${i.price},1)">+</button></div></div>`;
+                let safeName = i.name.replace(/'/g, "\\'"); 
+                
+                // SVG Круассан вместо знака восклицания
+                box.innerHTML += `
+                <div class="card row">
+                    <div style="display:flex; align-items:center; flex:1; padding-right:10px;">
+                        <div class="btn-info" onclick="openProductInfo('${safeName}')">
+                            <svg viewBox="0 0 24 24"><path d="M12 20C16.4 20 20 16.4 20 12C20 7.6 16.4 4 12 4C7.6 4 4 7.6 4 12C4 16.4 7.6 20 12 20Z" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 12C4 12 6 8 10 8C14 8 16 12 20 12C20 12 18 16 14 16C10 16 8 12 8 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
+                        <div><b>${i.name}</b><br><small>${i.price} ₽</small></div>
+                    </div>
+                    <div class="stepper">
+                        <button class="btn-s" onclick="upd('${safeName}',${i.price},-1)">-</button>
+                        <input type="number" class="q-input" value="${q}" readonly>
+                        <button class="btn-s" onclick="upd('${safeName}',${i.price},1)">+</button>
+                    </div>
+                </div>`;
             });
         }
         calc();
@@ -282,7 +403,7 @@
         if(!historyData.length) { box.innerHTML = '<div class="card" style="text-align:center; padding:20px;">История пуста</div>'; return; }
         historyData.sort((a,b) => b.date.localeCompare(a.date)).forEach(h => {
             const locked = isLocked(h.date);
-            let shopClean = h.shopName; // Имя теперь приходит чистое с бэкенда
+            let shopClean = h.shopName; 
             let preview = h.items.map(i => `${i.name} (${i.qty})`).join(', ');
             box.innerHTML += `<div class="card">
                 <div class="row">
@@ -396,7 +517,7 @@
                     await fetch(API, {method:'POST', body:JSON.stringify({
                         user: editUser || user, 
                         date: date, 
-                        shopName: shop, // Отправляем чистую строку
+                        shopName: shop,
                         items: currentCart,
                         isSelfDelivery: isSelfDelivery
                     })});
