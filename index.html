@@ -44,37 +44,25 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(3px); z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 30px; transition: opacity 0.3s ease; }
-        
-        /* ОБНОВЛЕННЫЕ СТИЛИ КНОПОК ДОСТАВКИ */
-        .delivery-option-btn { background: #f5f5f5; color: #777; padding: 16px; border-radius: 12px; font-weight: 800; font-size: 14px; text-align: center; margin-bottom: 10px; cursor: pointer; transition: 0.2s; border: none; }
-        .delivery-option-btn.active { background: var(--main); color: #fff; box-shadow: 0 4px 12px rgba(243, 119, 198, 0.3); }
-        .btn-close-modal { background: none; border: none; color: #999; width: 100%; padding: 14px; font-size: 12px; font-weight: 800; cursor: pointer; text-transform: uppercase; }
+        .delivery-option-btn { background: #eee; color: #777; padding: 16px; border-radius: 12px; font-weight: 800; font-size: 14px; text-align: center; margin-bottom: 10px; cursor: pointer; transition: 0.2s; border: 2px solid transparent; }
+        .delivery-option-btn.active { background: #fff3f9; color: var(--main); border-color: var(--main); }
 
-        /* СТИЛЬ КЛИКАБЕЛЬНОГО ИМЕНИ ТОВАРА */
-        .item-name-clickable { cursor: pointer; border-bottom: 1px dashed var(--main); display: inline-block; padding-bottom: 2px; }
-        .item-name-clickable:active { opacity: 0.6; }
+        .btn-info { background: #fff3f9; border: 1px solid #f377c666; color: var(--main); width: 28px; height: 28px; border-radius: 50%; font-weight: 900; display: flex; align-items: center; justify-content: center; cursor: pointer; margin-right: 10px; font-size: 14px; flex-shrink: 0; }
 
-        /* ОКНО КБЖУ */
         .info-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); z-index: 10001; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px; box-sizing: border-box; }
         .info-modal-overlay.active { opacity: 1; pointer-events: auto; }
         .info-card { background: #fff; border-radius: 24px; width: 100%; max-width: 340px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transform: translateY(20px); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 85vh; }
         .info-modal-overlay.active .info-card { transform: translateY(0); }
         .info-img-box { width: 100%; height: 200px; background: #f5f5f5; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
         .info-img-box img { width: 100%; height: 100%; object-fit: cover; }
-        .info-content { padding: 25px 20px 20px 20px; overflow-y: auto; }
+        .info-img-placeholder { color: #ccc; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+        .info-content { padding: 20px; overflow-y: auto; }
         .info-title { font-size: 18px; font-weight: 900; color: #2c2c2c; margin-bottom: 15px; }
         .info-row { display: flex; flex-direction: column; margin-bottom: 12px; border-bottom: 1px dashed #eee; padding-bottom: 8px; }
         .info-row:last-child { border-bottom: none; }
         .info-label { font-size: 10px; font-weight: 800; color: var(--main); text-transform: uppercase; margin-bottom: 4px; }
         .info-val { font-size: 13px; font-weight: 600; color: #444; line-height: 1.4; }
         .info-close-btn { background: #fdfafd; border-top: 1px solid #eee; padding: 15px; text-align: center; color: #ff4d4d; font-weight: 800; font-size: 14px; cursor: pointer; }
-        
-        /* СТРУКТУРИРОВАННАЯ ИСТОРИЯ ЗАКАЗОВ */
-        .history-list { font-size: 12px; color: #555; margin: 12px 0; padding: 10px 12px; background: #fafafa; border-radius: 12px; border: 1px solid #eee; }
-        .history-item { display: flex; justify-content: space-between; margin-bottom: 6px; }
-        .history-item:last-child { margin-bottom: 0; }
-        .history-item-name { flex: 1; padding-right: 10px; line-height: 1.3; }
-        .history-item-qty { font-weight: 800; color: var(--text); }
     </style>
 </head>
 <body>
@@ -83,22 +71,21 @@
         <div class="loader-text">Обработка заказа...</div>
     </div>
 
-    <!-- МОДАЛКА ВЫБОРА ДОСТАВКИ (NEW DESIGN) -->
+    <!-- ВЫБОР ДОСТАВКИ (ВЕРНУЛИ ЭМОДЗИ И СТАРЫЙ ДИЗАЙН) -->
     <div id="delivery-modal" class="modal-overlay hidden">
         <div class="card" style="width: 90%; max-width: 400px; padding: 25px 20px;">
             <div style="font-size: 15px; font-weight: 900; color: #2c2c2c; margin-bottom: 20px; text-align:center;">ВЫБЕРИТЕ СПОСОБ ПОЛУЧЕНИЯ</div>
             <div class="delivery-option-btn active" id="modal-opt-deliv" onclick="selectDelivery(false)">🚚 ДОСТАВКА ЦЕХА</div>
             <div class="delivery-option-btn" id="modal-opt-self" onclick="selectDelivery(true)">📦 САМОВЫВОЗ (БЕСПЛАТНО)</div>
-            <button class="btn-close-modal" onclick="hideDeliveryModal()">ЗАКРЫТЬ</button>
+            <button class="btn-cancel" style="width:100%; font-size:14px; margin-top:10px; padding:14px;" onclick="hideDeliveryModal()">ЗАКРЫТЬ</button>
         </div>
     </div>
 
-    <!-- МОДАЛКА КБЖУ (БЕЗ ПУСТЫХ ФОТО) -->
     <div id="product-info-modal" class="info-modal-overlay" onclick="closeProductInfo(event)">
         <div class="info-card" onclick="event.stopPropagation()">
-            <!-- Блок изображения будет скрыт, если фото нет -->
-            <div class="info-img-box" id="pi-img-container" style="display:none;">
-                <img id="pi-img" src="" alt="Product">
+            <div class="info-img-box" id="pi-img-container">
+                <div class="info-img-placeholder">Нет фото</div>
+                <img id="pi-img" src="" alt="Product" style="display:none;">
             </div>
             <div class="info-content">
                 <div class="info-title" id="pi-title">Название</div>
@@ -162,6 +149,7 @@
                 <span id="delivery-info" style="font-size:10px; color:#f377c6; font-weight:800">Доставка: 0 ₽</span><br>
                 <b id="tot" style="font-size:22px">0 ₽</b>
             </div>
+            <!-- ВЕРНУЛИ ЭМОДЗИ -->
             <button id="delivery-icon-btn" onclick="showDeliveryModal()" style="background:#fff; border:1.5px solid #eee; border-radius:14px; width:48px; height:48px; display:flex; align-items:center; justify-content:center; font-size:20px; margin-right:12px; cursor:pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">🚚</button>
             <button class="btn-send" style="width: auto; padding: 16px 30px;" onclick="send()">ОФОРМИТЬ</button>
         </div>
@@ -202,9 +190,10 @@
         isSelfDelivery = isSelf;
         localStorage.setItem('moline_self_delivery', isSelf);
         
-        document.getElementById('modal-opt-deliv').className = !isSelf ? 'delivery-option-btn active' : 'delivery-option-btn';
-        document.getElementById('modal-opt-self').className = isSelf ? 'delivery-option-btn active' : 'delivery-option-btn';
+        document.getElementById('modal-opt-deliv').classList.toggle('active', !isSelf);
+        document.getElementById('modal-opt-self').classList.toggle('active', isSelf);
         
+        // Меняем иконку обратно на текст
         document.getElementById('delivery-icon-btn').innerHTML = isSelf ? '📦' : '🚚';
         
         calc();
@@ -229,17 +218,16 @@
             
             if (info.img && info.img.trim() !== "") {
                 imgEl.src = info.img;
-                imgCont.style.display = 'flex'; // Показываем блок
+                imgEl.style.display = 'block';
+                imgCont.querySelector('.info-img-placeholder').style.display = 'none';
             } else {
-                imgCont.style.display = 'none'; // Скрываем блок полностью
+                imgEl.style.display = 'none';
+                imgCont.querySelector('.info-img-placeholder').style.display = 'block';
             }
-        } else {
-            document.getElementById('pi-comp').innerText = "Информация уточняется";
-            document.getElementById('pi-weight').innerText = "-";
-            document.getElementById('pi-kbju').innerText = "-";
-            document.getElementById('pi-shelf').innerText = "-";
-            imgCont.style.display = 'none'; // Скрываем блок полностью
         }
+        
+        // Показываем блок с фото, даже если там просто заглушка (как было в оригинале)
+        imgCont.style.display = 'flex';
         
         document.getElementById('product-info-modal').classList.add('active');
         if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
@@ -287,8 +275,8 @@
                 input.value = minDateStr;
             }
 
-            document.getElementById('modal-opt-deliv').className = !isSelfDelivery ? 'delivery-option-btn active' : 'delivery-option-btn';
-            document.getElementById('modal-opt-self').className = isSelfDelivery ? 'delivery-option-btn active' : 'delivery-option-btn';
+            document.getElementById('modal-opt-deliv').classList.toggle('active', !isSelfDelivery);
+            document.getElementById('modal-opt-self').classList.toggle('active', isSelfDelivery);
             document.getElementById('delivery-icon-btn').innerHTML = isSelfDelivery ? '📦' : '🚚';
 
             if(isAdmin) {
@@ -323,16 +311,19 @@
                 
                 let hasInfo = externalCatalog[normKey] ? true : false;
                 
-                // Формируем кликабельное название или обычное, если данных нет
-                let nameHtml = hasInfo 
-                    ? `<div class="item-name-clickable" onclick="openProductInfo('${safeName}')"><b>${i.name}</b> <span style="color:var(--main); font-size:11px;">ⓘ</span></div>` 
-                    : `<div><b>${i.name}</b></div>`;
+                // Рендерим знак "!", если есть инфа, иначе ставим пустую заглушку
+                let infoBtnHtml = hasInfo 
+                    ? `<div class="btn-info" onclick="openProductInfo('${safeName}')">!</div>` 
+                    : `<div style="width: 28px; margin-right: 10px; flex-shrink: 0;"></div>`;
+
+                // Делаем текст кликабельным без визуальных отличий (без черточек)
+                let textClickHtml = hasInfo ? `onclick="openProductInfo('${safeName}')" style="cursor:pointer;"` : '';
 
                 box.innerHTML += `
                 <div class="card row">
-                    <div style="flex:1; padding-right:10px;">
-                        ${nameHtml}
-                        <div style="color:#777; font-size: 11px; margin-top:4px;">${i.price} ₽</div>
+                    <div style="display:flex; align-items:center; flex:1; padding-right:10px;">
+                        ${infoBtnHtml}
+                        <div ${textClickHtml}><b>${i.name}</b><br><small>${i.price} ₽</small></div>
                     </div>
                     <div class="stepper">
                         <button class="btn-s" onclick="upd('${safeName}',${i.price},-1)">-</button>
@@ -398,17 +389,10 @@
             const locked = isLocked(h.date);
             let shopClean = h.shopName; 
             
-            // НОВАЯ СТРУКТУРИРОВАННАЯ ИСТОРИЯ
-            let itemsHtml = h.items.map(i => `
-                <div class="history-item">
-                    <div class="history-item-name">${i.name}</div>
-                    <div class="history-item-qty">${i.qty} шт.</div>
-                </div>
-            `).join('');
-            
-            let preview = `<div class="history-list">${itemsHtml}</div>`;
+            // ВЕРНУЛИ СТЕНУ ТЕКСТА ЧЕРЕЗ ЗАПЯТУЮ
+            let preview = h.items.map(i => `${i.name} (${i.qty})`).join(', ');
 
-            box.innerHTML += `<div class="card" style="flex-direction:column; align-items:stretch;">
+            box.innerHTML += `<div class="card">
                 <div class="row">
                     <div><b>${h.date.split('-').reverse().join('.')}</b><br><small style="color:var(--main)">${shopClean}</small></div>
                     <div style="display:flex; align-items:center;">
@@ -416,7 +400,7 @@
                         ${(!locked || isAdmin) ? `<span class="edit-icon" onclick="startEdit('${user}', '${shopClean}', '${h.date}', ${JSON.stringify(h.items).replace(/"/g, '&quot;')})">✎</span><span class="del-icon" onclick="deleteOrder('${user}','${h.date}','${shopClean}')">✖</span>` : ''}
                     </div>
                 </div>
-                ${preview}
+                <div style="font-size:11px; color:#777; margin:8px 0 12px; line-height:1.4;">${preview}</div>
                 <button class="btn-repeat" onclick="copyOrder(${JSON.stringify(h.items).replace(/"/g, '&quot;')}, '${shopClean}')">Повторить заказ</button>
             </div>`;
         });
