@@ -430,8 +430,8 @@
                 <div style="text-align:right;">
                     <b style="color:var(--main); font-size:16px;">${inv.amount} ₽</b><br>
                     <div style="margin-top:8px;">
-                        <a href="${inv.pdf}" target="_blank" style="display:inline-block; font-size:10px; padding:6px 8px; background:#fff3f9; color:var(--main); border-radius:8px; text-decoration:none; font-weight:800; border:1px solid var(--main);">PDF</a>
-                        <a href="${inv.pay}" target="_blank" style="display:inline-block; font-size:10px; padding:6px 8px; background:var(--main); color:#fff; border-radius:8px; text-decoration:none; font-weight:800; margin-left:4px;">ОПЛАТИТЬ</a>
+                        <button onclick="tg.openLink('${inv.pdf}')" style="font-size:10px; padding:6px 8px; background:#fff3f9; color:var(--main); border-radius:8px; border:1px solid var(--main); font-weight:800; cursor:pointer;">PDF</button>
+                        <button onclick="tg.openLink('${inv.pay}')" style="font-size:10px; padding:6px 8px; background:var(--main); color:#fff; border-radius:8px; border:none; font-weight:800; margin-left:4px; cursor:pointer;">ОПЛАТИТЬ</button>
                     </div>
                 </div>
             </div>`;
