@@ -438,7 +438,7 @@
         });
     }
 
-    function generateTestInvoice() {
+    async function generateTestInvoice() {
         tg.showConfirm("Выставить тестовый счет на 100 ₽?", async (ok) => {
             if(ok) {
                 document.getElementById('ui-loader').classList.remove('hidden');
@@ -452,17 +452,28 @@
                             amount: 100,
                             shopName: document.getElementById('shop-select').value || user
                         })
-                    }).then(r => r.json());
-
-                    if(res.success) {
-                        tg.showAlert("Счет успешно выставлен!");
-                        await load(true);
-                        renderBilling();
-                    } else {
-                        tg.showAlert("Ошибка банка: " + res.error);
+                    });
+                    
+                    // Читаем сырой ответ сервера как текст
+                    let rawText = await res.text();
+                    
+                    try {
+                        // Пытаемся превратить его в JSON
+                        let data = JSON.parse(rawText);
+                        if(data.success) {
+                            tg.showAlert("Счет успешно выставлен!");
+                            await load(true);
+                            renderBilling();
+                        } else {
+                            tg.showAlert("Ошибка банка: " + data.error);
+                        }
+                    } catch(parseErr) {
+                        // Если это не JSON, выводим на экран, что именно прислал Google!
+                        tg.showAlert("Ошибка сервера! Он прислал текст: " + rawText.substring(0, 100));
                     }
+
                 } catch(e) {
-                    tg.showAlert("Сетевая ошибка!");
+                    tg.showAlert("Реальная сетевая ошибка: " + e.message);
                 } finally {
                     document.getElementById('ui-loader').classList.add('hidden');
                     tg.MainButton.hideProgress();
