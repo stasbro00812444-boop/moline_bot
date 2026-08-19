@@ -15,7 +15,7 @@
             src: url('https://raw.githubusercontent.com/stasbro00812444-boop/moline_bot/refs/heads/main/fonts/GeistMono-Medium.woff2') format('woff2');
             font-weight: 600; font-display: swap;
         }
-        :root { --main: #e8afb8; --bg: #fdfafd; --text: #2c2c2c; }
+        :root { --main: #e8a4c4; --bg: #fdfafd; --text: #2c2c2c; }
         body { 
             font-family: 'GeistMono', monospace; background-color: var(--bg);
             background-image: url('https://raw.githubusercontent.com/stasbro00812444-boop/moline_bot/refs/heads/main/LOGO.png');
@@ -34,7 +34,7 @@
         .btn-cancel { background: #fff; color: #ff4d4d; border: 1px solid #ff4d4d; padding: 4px 10px; border-radius: 8px; font-size: 10px; font-weight: 800; cursor: pointer; margin-top: 8px; }
         .row { display: flex; align-items: center; justify-content: space-between; }
         .cat { font-size: 11px; font-weight: 900; color: var(--main); margin: 15px 0 8px 5px; text-transform: uppercase; }
-        .stepper { display: flex; align-items: center; background: #fff; border-radius: 12px; padding: 4px; border: 1.5px solid #e8afb866; }
+        .stepper { display: flex; align-items: center; background: #fff; border-radius: 12px; padding: 4px; border: 1.5px solid #e8a4c466; }
         .btn-s { border: none; color: var(--main); font-size: 22px; font-weight: 800; background: none; width: 34px; cursor: pointer; }
         .q-input { width: 40px; border: none; background: none; text-align: center; font-weight: 800; font-size: 16px; outline: none; }
         .btn-repeat { background: #eee; border: none; width: 100%; padding: 8px; border-radius: 10px; font-weight: 800; font-size: 10px; text-transform: uppercase; cursor: pointer; margin-top: 10px; color: #777; }
@@ -83,11 +83,7 @@
         .info-close-btn { background: var(--bg); border-top: 1px solid #eee; padding: 15px; text-align: center; color: #ff4d4d; font-weight: 800; font-size: 14px; cursor: pointer; }
 
         /* --- НОВОЕ: баннер статуса связи --- */
-        .conn-banner { position: sticky; top: 50px; z-index: 90; padding: 8px 14px; font-size: 11px; font-weight: 800; text-align: center; display: none; }
-        .conn-banner.show { display: block; }
-        .conn-banner.warn { background: #fff3cd; color: #8a6d00; }
-        .conn-banner.error { background: #ffe1e1; color: #b30000; }
-        .conn-banner.pending { background: #fff3f9; color: var(--main); }
+        /* уведомления о связи убраны по просьбе — вместо них просто блюр + спиннер */
     </style>
 </head>
 <body>
@@ -134,9 +130,6 @@
         <div id="t4" class="tab hidden" onclick="tab('partners_list')">ПАРТНЕРЫ 👥</div>
     </div>
 
-    <!-- НОВОЕ: баннер статуса связи (сеть плохая / показаны старые данные / заказы ждут отправки) -->
-    <div id="conn-banner" class="conn-banner"></div>
-    
     <div id="m-bar" class="m-bar hidden"><span>Изменить после 11:00?</span><button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button></div>
     
     <div id="p1" class="container">
@@ -211,15 +204,11 @@
     // НОВОЕ: устойчивость к плохой связи
     // =====================================================================
 
-    // Баннер сверху экрана — показывает честный статус, а не тишину
-    function showConnBanner(text, type) {
-        const b = document.getElementById('conn-banner');
-        b.textContent = text;
-        b.className = 'conn-banner show ' + (type || 'warn');
-    }
-    function hideConnBanner() {
-        document.getElementById('conn-banner').classList.remove('show');
-    }
+    // Уведомления о статусе связи убраны по просьбе — вместо текста просто крутится
+    // общий индикатор загрузки (блюр + спиннер), без каких-либо сообщений на экране.
+    // Функции-пустышки оставлены, чтобы не переписывать все места вызова ниже.
+    function showConnBanner() {}
+    function hideConnBanner() {}
 
     // fetch с таймаутом и автоповтором. Если сеть плохая — пробует ещё раз (до `tries` попыток)
     // вместо того чтобы просто зависнуть или молча упасть.
@@ -418,16 +407,13 @@
     }
 
     async function load(quiet = false) {
-        if(!quiet) tg.MainButton.showProgress();
-        hideConnBanner();
+        if(!quiet) { tg.MainButton.showProgress(); document.getElementById('ui-loader').classList.remove('hidden'); }
         try {
             const nocache = '&t=' + new Date().getTime();
 
-            const onRetry = (attempt, tries) => showConnBanner(`Плохая связь, повтор ${attempt}/${tries}...`, 'warn');
-
             const [mRes, hRes] = await Promise.all([
-                fetchWithRetry(`${API}?type=menu&user=${user}${nocache}`, {}, 3, 15000, onRetry),
-                fetchWithRetry(`${API}?user=${user}${nocache}`, {}, 3, 15000, onRetry)
+                fetchWithRetry(`${API}?type=menu&user=${user}${nocache}`, {}, 3, 15000),
+                fetchWithRetry(`${API}?user=${user}${nocache}`, {}, 3, 15000)
             ]);
             const m = await mRes.json();
             const h = await hRes.json();
@@ -439,23 +425,18 @@
 
             applyLoadedData(m, h);
             saveMenuCache({ m, h }); // запоминаем последнюю успешную загрузку
-            hideConnBanner();
 
             // если за время без связи накопились неотправленные заказы — пробуем отправить их сейчас
             flushPendingOrders();
 
-            if(!quiet) tg.MainButton.hideProgress();
+            if(!quiet) { tg.MainButton.hideProgress(); document.getElementById('ui-loader').classList.add('hidden'); }
         } catch(e) {
-            // Сеть так и не ответила после всех попыток — пробуем показать то, что сохранено локально
+            // Сеть так и не ответила после всех попыток — тихо показываем то, что сохранено локально
             const cached = loadMenuCache();
             if (cached && cached.m) {
                 applyLoadedData(cached.m, cached.h);
-                const ageMin = Math.round((Date.now() - cached.ts) / 60000);
-                showConnBanner(`Нет связи с сервером — показано меню от ${ageMin} мин. назад`, 'error');
-            } else {
-                showConnBanner('Нет связи с сервером и нет сохранённых данных. Проверьте интернет и откройте бота заново.', 'error');
             }
-            if(!quiet) tg.MainButton.hideProgress();
+            if(!quiet) { tg.MainButton.hideProgress(); document.getElementById('ui-loader').classList.add('hidden'); }
         }
     }
 
@@ -606,7 +587,7 @@
                             amount: 100,
                             shopName: document.getElementById('shop-select').value || user
                         })
-                    }, 2, 20000, (a,t) => { document.getElementById('ui-loader-text').innerText = `Плохая связь, попытка ${a}/${t}...`; });
+                    }, 2, 20000, null);
                     
                     let rawText = await res.text();
                     
@@ -627,7 +608,6 @@
                     tg.showAlert("Не удалось связаться с сервером после нескольких попыток. Проверьте интернет и попробуйте ещё раз.");
                 } finally {
                     document.getElementById('ui-loader').classList.add('hidden');
-                    document.getElementById('ui-loader-text').innerText = 'Обработка...';
                     tg.MainButton.hideProgress();
                 }
             }
@@ -743,7 +723,7 @@
                 
                 try {
                     await fetchWithRetry(API, {method:'POST', body: JSON.stringify(payload)}, 3, 20000,
-                        (a,t) => { document.getElementById('ui-loader-text').innerText = `Плохая связь, попытка ${a}/${t}...`; });
+                        null);
 
                     // Заказ реально подтверждён сервером — только теперь честно говорим "успех"
                     tg.HapticFeedback.notificationOccurred('success');
@@ -764,7 +744,6 @@
                     renderMenu();
                 } finally { 
                     document.getElementById('ui-loader').classList.add('hidden');
-                    document.getElementById('ui-loader-text').innerText = 'Обработка...';
                     tg.MainButton.hideProgress(); 
                 }
             }
@@ -812,7 +791,7 @@
     // не всегда дают красить шапку произвольным hex) — если не сработает, останется
     // дефолтный цвет из настроек бота в BotFather.
     try {
-        if (tg.setHeaderColor) tg.setHeaderColor('#e8afb8');
+        if (tg.setHeaderColor) tg.setHeaderColor('#e8a4c4');
         if (tg.setBackgroundColor) tg.setBackgroundColor('#fdfafd');
     } catch (e) {}
 
