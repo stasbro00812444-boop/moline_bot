@@ -210,6 +210,25 @@
     function showConnBanner() {}
     function hideConnBanner() {}
 
+    // Анимированные точки в тексте загрузки — создают ощущение процесса, а не зависания.
+    // Текст остаётся общим ("Загрузка"), никаких упоминаний сети/ошибок.
+    let loaderDotsInterval = null;
+    function showLoader() {
+        document.getElementById('ui-loader').classList.remove('hidden');
+        const el = document.getElementById('ui-loader-text');
+        let step = 0;
+        el.innerText = 'Загрузка';
+        if (loaderDotsInterval) clearInterval(loaderDotsInterval);
+        loaderDotsInterval = setInterval(() => {
+            step = (step + 1) % 4;
+            el.innerText = 'Загрузка' + '.'.repeat(step);
+        }, 400);
+    }
+    function hideLoader() {
+        document.getElementById('ui-loader').classList.add('hidden');
+        if (loaderDotsInterval) { clearInterval(loaderDotsInterval); loaderDotsInterval = null; }
+    }
+
     // fetch с таймаутом и автоповтором. Если сеть плохая — пробует ещё раз (до `tries` попыток)
     // вместо того чтобы просто зависнуть или молча упасть.
     async function fetchWithRetry(url, options = {}, tries = 3, timeoutMs = 15000, onRetry = null) {
@@ -407,7 +426,7 @@
     }
 
     async function load(quiet = false) {
-        if(!quiet) { tg.MainButton.showProgress(); document.getElementById('ui-loader').classList.remove('hidden'); }
+        if(!quiet) { tg.MainButton.showProgress(); showLoader(); }
         try {
             const nocache = '&t=' + new Date().getTime();
 
@@ -429,14 +448,14 @@
             // если за время без связи накопились неотправленные заказы — пробуем отправить их сейчас
             flushPendingOrders();
 
-            if(!quiet) { tg.MainButton.hideProgress(); document.getElementById('ui-loader').classList.add('hidden'); }
+            if(!quiet) { tg.MainButton.hideProgress(); hideLoader(); }
         } catch(e) {
             // Сеть так и не ответила после всех попыток — тихо показываем то, что сохранено локально
             const cached = loadMenuCache();
             if (cached && cached.m) {
                 applyLoadedData(cached.m, cached.h);
             }
-            if(!quiet) { tg.MainButton.hideProgress(); document.getElementById('ui-loader').classList.add('hidden'); }
+            if(!quiet) { tg.MainButton.hideProgress(); hideLoader(); }
         }
     }
 
@@ -576,7 +595,7 @@
     async function generateTestInvoice() {
         tg.showConfirm("Выставить тестовый счет на 100 ₽?", async (ok) => {
             if(ok) {
-                document.getElementById('ui-loader').classList.remove('hidden');
+                showLoader();
                 tg.MainButton.showProgress();
                 try {
                     let res = await fetchWithRetry(API, {
@@ -607,7 +626,7 @@
                 } catch(e) {
                     tg.showAlert("Не удалось связаться с сервером после нескольких попыток. Проверьте интернет и попробуйте ещё раз.");
                 } finally {
-                    document.getElementById('ui-loader').classList.add('hidden');
+                    hideLoader();
                     tg.MainButton.hideProgress();
                 }
             }
@@ -710,7 +729,7 @@
 
         tg.showConfirm(`Заказать для "${shop}"?`, async (ok) => {
             if (ok) {
-                document.getElementById('ui-loader').classList.remove('hidden');
+                showLoader();
                 tg.MainButton.showProgress();
 
                 const payload = {
@@ -743,7 +762,7 @@
                     tg.showAlert("Плохая связь с сервером. Заказ сохранён на телефоне и отправится сам, как только появится интернет — не нужно оформлять его повторно.");
                     renderMenu();
                 } finally { 
-                    document.getElementById('ui-loader').classList.add('hidden');
+                    hideLoader();
                     tg.MainButton.hideProgress(); 
                 }
             }
@@ -753,7 +772,7 @@
     async function deleteOrder(u, d, shop) {
         tg.showConfirm(`Удалить заказ "${shop}"?`, async (ok) => {
             if(ok) {
-                document.getElementById('ui-loader').classList.remove('hidden');
+                showLoader();
                 tg.MainButton.showProgress();
                 try {
                     await fetchWithRetry(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, shopName: shop})}, 3, 15000);
@@ -761,7 +780,7 @@
                 } catch(e) {
                     tg.showAlert("Не удалось удалить заказ — нет связи с сервером. Попробуйте ещё раз чуть позже.");
                 } finally {
-                    document.getElementById('ui-loader').classList.add('hidden');
+                    hideLoader();
                     tg.MainButton.hideProgress();
                 }
             }
