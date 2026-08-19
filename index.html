@@ -5,9 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root { --main: #f377c6; --bg: #fdfafd; --text: #2c2c2c; }
+        @font-face {
+            font-family: 'GeistMono';
+            src: url('https://raw.githubusercontent.com/stasbro00812444-boop/moline_bot/refs/heads/main/fonts/GeistMono-Regular.woff2') format('woff2');
+            font-weight: 400; font-display: swap;
+        }
+        @font-face {
+            font-family: 'GeistMono';
+            src: url('https://raw.githubusercontent.com/stasbro00812444-boop/moline_bot/refs/heads/main/fonts/GeistMono-Medium.woff2') format('woff2');
+            font-weight: 600; font-display: swap;
+        }
+        :root { --main: #e8a4c4; --bg: #fdfafd; --text: #2c2c2c; }
         body { 
-            font-family: -apple-system, sans-serif; background-color: var(--bg);
+            font-family: 'GeistMono', monospace; background-color: var(--bg);
             background-image: url('https://raw.githubusercontent.com/stasbro00812444-boop/moline_bot/refs/heads/main/LOGO.png');
             background-repeat: repeat; background-size: 100px; background-attachment: fixed;
             margin: 0; padding: 0; color: var(--text); -webkit-tap-highlight-color: transparent; 
@@ -49,23 +59,31 @@
 
         .info-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); z-index: 10001; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px; box-sizing: border-box; }
         .info-modal-overlay.active { opacity: 1; pointer-events: auto; }
-        .info-card { background: #fff; border-radius: 24px; width: 100%; max-width: 340px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transform: translateY(20px); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 85vh; }
-        .info-img-box { width: 100%; height: 200px; background: #f5f5f5; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
-        .info-img-box img { width: 100%; height: 100%; object-fit: cover; }
+        .info-card { background: var(--bg); border-radius: 24px; width: 100%; max-width: 340px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transform: translateY(20px); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 85vh; }
+        .info-img-box { width: 100%; height: 300px; background: #f5f5f5; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; flex-shrink: 0; }
+        .info-img-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .info-img-box::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 90px; background: linear-gradient(to bottom, rgba(253,250,253,0) 0%, var(--bg) 100%); pointer-events: none; }
         .info-img-placeholder { color: #ccc; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
-        .info-content { padding: 20px; overflow-y: auto; }
-        .info-title { font-size: 18px; font-weight: 900; color: #2c2c2c; margin-bottom: 15px; }
+        .info-content { padding: 4px 20px 20px; overflow-y: auto; background: var(--bg); }
+        .info-title { font-family: 'GeistMono', monospace; font-size: 19px; font-weight: 600; color: #2c2c2c; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.3px; }
         .info-row { display: flex; flex-direction: column; margin-bottom: 12px; border-bottom: 1px dashed #eee; padding-bottom: 8px; }
         .info-row:last-child { border-bottom: none; }
-        .info-label { font-size: 10px; font-weight: 800; color: var(--main); text-transform: uppercase; margin-bottom: 4px; }
-        .info-val { font-size: 13px; font-weight: 600; color: #444; line-height: 1.4; }
-        .info-close-btn { background: #fdfafd; border-top: 1px solid #eee; padding: 15px; text-align: center; color: #ff4d4d; font-weight: 800; font-size: 14px; cursor: pointer; }
+        .info-label { font-family: 'GeistMono', monospace; font-size: 10px; font-weight: 600; color: var(--main); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px; }
+        .info-val { font-family: 'GeistMono', monospace; font-size: 13px; font-weight: 400; color: #444; line-height: 1.4; }
+        .info-close-btn { background: var(--bg); border-top: 1px solid #eee; padding: 15px; text-align: center; color: #ff4d4d; font-weight: 800; font-size: 14px; cursor: pointer; }
+
+        /* --- НОВОЕ: баннер статуса связи --- */
+        .conn-banner { position: sticky; top: 50px; z-index: 90; padding: 8px 14px; font-size: 11px; font-weight: 800; text-align: center; display: none; }
+        .conn-banner.show { display: block; }
+        .conn-banner.warn { background: #fff3cd; color: #8a6d00; }
+        .conn-banner.error { background: #ffe1e1; color: #b30000; }
+        .conn-banner.pending { background: #fff3f9; color: var(--main); }
     </style>
 </head>
 <body>
     <div id="ui-loader" class="loader-overlay hidden">
         <div class="spinner"></div>
-        <div class="loader-text">Обработка...</div>
+        <div class="loader-text" id="ui-loader-text">Обработка...</div>
     </div>
 
     <!-- ВЫБОР ДОСТАВКИ -->
@@ -103,6 +121,9 @@
         <div id="t3" class="tab hidden" onclick="tab('admin')">АДМИН ⚡️</div>
         <div id="t4" class="tab hidden" onclick="tab('partners_list')">ПАРТНЕРЫ 👥</div>
     </div>
+
+    <!-- НОВОЕ: баннер статуса связи (сеть плохая / показаны старые данные / заказы ждут отправки) -->
+    <div id="conn-banner" class="conn-banner"></div>
     
     <div id="m-bar" class="m-bar hidden"><span>Изменить после 11:00?</span><button class="btn-m" onclick="tg.openTelegramLink('https://t.me/molinebymonk')">МЕНЕДЖЕР</button></div>
     
@@ -162,7 +183,6 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    // ТВОЙ РАБОЧИЙ URL
     const API = 'https://moline-proxy.duckdns.org/gas-proxy';
     const user = (tg.initDataUnsafe?.user?.username || "id_" + tg.initDataUnsafe?.user?.id).toLowerCase().replace('@', '');
 
@@ -174,6 +194,101 @@
     let currentCart = {}; 
     let currentDeliveryCost = 300; 
     let isSelfDelivery = localStorage.getItem('moline_self_delivery') === 'true';
+
+    // =====================================================================
+    // НОВОЕ: устойчивость к плохой связи
+    // =====================================================================
+
+    // Баннер сверху экрана — показывает честный статус, а не тишину
+    function showConnBanner(text, type) {
+        const b = document.getElementById('conn-banner');
+        b.textContent = text;
+        b.className = 'conn-banner show ' + (type || 'warn');
+    }
+    function hideConnBanner() {
+        document.getElementById('conn-banner').classList.remove('show');
+    }
+
+    // fetch с таймаутом и автоповтором. Если сеть плохая — пробует ещё раз (до `tries` попыток)
+    // вместо того чтобы просто зависнуть или молча упасть.
+    async function fetchWithRetry(url, options = {}, tries = 3, timeoutMs = 15000, onRetry = null) {
+        let lastErr = null;
+        for (let attempt = 1; attempt <= tries; attempt++) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const res = await fetch(url, { ...options, signal: controller.signal });
+                clearTimeout(timer);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res;
+            } catch (err) {
+                clearTimeout(timer);
+                lastErr = err;
+                if (attempt < tries) {
+                    if (onRetry) onRetry(attempt, tries);
+                    await new Promise(r => setTimeout(r, 1200 * attempt));
+                }
+            }
+        }
+        throw lastErr;
+    }
+
+    // --- Кэш последнего успешно загруженного меню (чтобы было что показать без связи) ---
+    function saveMenuCache(payload) {
+        try {
+            localStorage.setItem('moline_menu_cache_' + user, JSON.stringify({ data: payload, ts: Date.now() }));
+        } catch (e) {}
+    }
+    function loadMenuCache() {
+        try {
+            const raw = localStorage.getItem('moline_menu_cache_' + user);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch (e) { return null; }
+    }
+
+    // --- Очередь заказов, которые не удалось отправить сразу (плохая связь) ---
+    function getPendingOrders() {
+        try { return JSON.parse(localStorage.getItem('moline_pending_orders') || '[]'); }
+        catch (e) { return []; }
+    }
+    function setPendingOrders(arr) {
+        try { localStorage.setItem('moline_pending_orders', JSON.stringify(arr)); } catch (e) {}
+    }
+    function queueOrder(payload) {
+        const q = getPendingOrders();
+        q.push({ payload, ts: Date.now() });
+        setPendingOrders(q);
+    }
+
+    // Пытается доотправить всё, что скопилось в очереди. Вызывается при каждом открытии
+    // и периодически по таймеру — как только связь появится, заказы уйдут сами.
+    async function flushPendingOrders() {
+        let q = getPendingOrders();
+        if (!q.length) return;
+
+        showConnBanner(`Отправляем отложенные заказы (${q.length})...`, 'pending');
+        const stillPending = [];
+        for (const entry of q) {
+            try {
+                await fetchWithRetry(API, { method: 'POST', body: JSON.stringify(entry.payload) }, 2, 12000);
+            } catch (e) {
+                stillPending.push(entry);
+            }
+        }
+        setPendingOrders(stillPending);
+
+        if (stillPending.length) {
+            showConnBanner(`Не удалось отправить ${stillPending.length} заказ(ов) — ждём связь`, 'error');
+        } else {
+            hideConnBanner();
+        }
+    }
+
+    // Каждые 30 секунд пробуем доотправить очередь, пока приложение открыто
+    setInterval(flushPendingOrders, 30000);
+
+    // =====================================================================
 
     function isLocked(dateStr) {
         if (isAdmin) return false;
@@ -242,67 +357,94 @@
         document.getElementById('product-info-modal').classList.remove('active');
     }
 
+    // Применяет данные меню/истории к интерфейсу (общая часть для "живой" загрузки и кэша)
+    function applyLoadedData(m, h) {
+        menuData = m.menu || []; 
+        historyData = h || []; 
+        isAdmin = m.isAdmin; 
+        allPartners = m.allPartners || [];
+        externalCatalog = m.catalog || {}; 
+        currentDeliveryCost = m.deliveryCost !== undefined ? m.deliveryCost : 300;
+        
+        hasInn = m.hasInn || false;
+        invoicesData = m.invoices || [];
+        
+        if (hasInn) {
+            document.getElementById('t5').classList.remove('hidden');
+        } else {
+            document.getElementById('t5').classList.add('hidden');
+        }
+        
+        const shopSelect = document.getElementById('shop-select');
+        shopSelect.innerHTML = '';
+        (m.displayNames || [user]).forEach(name => shopSelect.innerHTML += `<option value="${name}">${name}</option>`);
+        document.getElementById('shop-selector-box').style.display = (m.displayNames && m.displayNames.length > 1) ? 'block' : 'none';
+
+        const input = document.getElementById('dt');
+        const now = new Date();
+        let minD = new Date(); 
+        minD.setDate(now.getDate() + (now.getHours() >= 11 ? 2 : 1));
+        const minDateStr = minD.toISOString().split('T')[0];
+        
+        input.min = minDateStr;
+        if (!input.value || input.value < minDateStr) {
+            input.value = minDateStr;
+        }
+
+        document.getElementById('modal-opt-deliv').classList.toggle('active', !isSelfDelivery);
+        document.getElementById('modal-opt-self').classList.toggle('active', isSelfDelivery);
+        document.getElementById('delivery-icon-btn').innerHTML = isSelfDelivery ? '📦' : '🚚';
+
+        if(isAdmin) {
+            document.getElementById('t1').classList.add('hidden');
+            document.getElementById('t2').classList.add('hidden');
+            document.getElementById('t3').classList.remove('hidden');
+            document.getElementById('t4').classList.remove('hidden');
+            document.getElementById('dt-admin').value = new Date().toISOString().split('T')[0];
+            tab('admin');
+        } else { renderMenu(); }
+    }
+
     async function load(quiet = false) {
         if(!quiet) tg.MainButton.showProgress();
+        hideConnBanner();
         try {
-            const nocache = '&t=' + new Date().getTime(); 
-            const [m, h] = await Promise.all([
-                fetch(`${API}?type=menu&user=${user}${nocache}`).then(r => r.json()), 
-                fetch(`${API}?user=${user}${nocache}`).then(r => r.json())
+            const nocache = '&t=' + new Date().getTime();
+
+            const onRetry = (attempt, tries) => showConnBanner(`Плохая связь, повтор ${attempt}/${tries}...`, 'warn');
+
+            const [mRes, hRes] = await Promise.all([
+                fetchWithRetry(`${API}?type=menu&user=${user}${nocache}`, {}, 3, 15000, onRetry),
+                fetchWithRetry(`${API}?user=${user}${nocache}`, {}, 3, 15000, onRetry)
             ]);
+            const m = await mRes.json();
+            const h = await hRes.json();
             
             if (m.isBlocked) {
                 document.body.innerHTML = '<div style="text-align:center; padding:100px 20px; color:var(--main); font-weight:800;">Ваш доступ ограничен администратором.</div>';
                 return;
             }
 
-            menuData = m.menu || []; 
-            historyData = h || []; 
-            isAdmin = m.isAdmin; 
-            allPartners = m.allPartners || [];
-            externalCatalog = m.catalog || {}; 
-            currentDeliveryCost = m.deliveryCost !== undefined ? m.deliveryCost : 300;
-            
-            hasInn = m.hasInn || false;
-            invoicesData = m.invoices || [];
-            
-            // Если ИНН есть, показываем вкладку счетов
-            if (hasInn) {
-                document.getElementById('t5').classList.remove('hidden');
-            } else {
-                document.getElementById('t5').classList.add('hidden');
-            }
-            
-            const shopSelect = document.getElementById('shop-select');
-            shopSelect.innerHTML = '';
-            (m.displayNames || [user]).forEach(name => shopSelect.innerHTML += `<option value="${name}">${name}</option>`);
-            document.getElementById('shop-selector-box').style.display = (m.displayNames && m.displayNames.length > 1) ? 'block' : 'none';
+            applyLoadedData(m, h);
+            saveMenuCache({ m, h }); // запоминаем последнюю успешную загрузку
+            hideConnBanner();
 
-            const input = document.getElementById('dt');
-            const now = new Date();
-            let minD = new Date(); 
-            minD.setDate(now.getDate() + (now.getHours() >= 11 ? 2 : 1));
-            const minDateStr = minD.toISOString().split('T')[0];
-            
-            input.min = minDateStr;
-            if (!input.value || input.value < minDateStr) {
-                input.value = minDateStr;
-            }
+            // если за время без связи накопились неотправленные заказы — пробуем отправить их сейчас
+            flushPendingOrders();
 
-            document.getElementById('modal-opt-deliv').classList.toggle('active', !isSelfDelivery);
-            document.getElementById('modal-opt-self').classList.toggle('active', isSelfDelivery);
-            document.getElementById('delivery-icon-btn').innerHTML = isSelfDelivery ? '📦' : '🚚';
-
-            if(isAdmin) {
-                document.getElementById('t1').classList.add('hidden');
-                document.getElementById('t2').classList.add('hidden');
-                document.getElementById('t3').classList.remove('hidden');
-                document.getElementById('t4').classList.remove('hidden');
-                document.getElementById('dt-admin').value = new Date().toISOString().split('T')[0];
-                tab('admin');
-            } else { renderMenu(); }
             if(!quiet) tg.MainButton.hideProgress();
-        } catch(e) { tg.MainButton.hideProgress(); }
+        } catch(e) {
+            // Сеть так и не ответила после всех попыток — пробуем показать то, что сохранено локально
+            const cached = loadMenuCache();
+            if (cached && cached.m) {
+                applyLoadedData(cached.m, cached.h);
+                const ageMin = Math.round((Date.now() - cached.ts) / 60000);
+                showConnBanner(`Нет связи с сервером — показано меню от ${ageMin} мин. назад`, 'error');
+            } else {
+                showConnBanner('Нет связи с сервером и нет сохранённых данных. Проверьте интернет и откройте бота заново.', 'error');
+            }
+            if(!quiet) tg.MainButton.hideProgress();
+        }
     }
 
     function renderMenu() {
@@ -444,7 +586,7 @@
                 document.getElementById('ui-loader').classList.remove('hidden');
                 tg.MainButton.showProgress();
                 try {
-                    let res = await fetch(API, {
+                    let res = await fetchWithRetry(API, {
                         method: 'POST', 
                         body: JSON.stringify({
                             type: 'create_invoice',
@@ -452,13 +594,11 @@
                             amount: 100,
                             shopName: document.getElementById('shop-select').value || user
                         })
-                    });
+                    }, 2, 20000, (a,t) => { document.getElementById('ui-loader-text').innerText = `Плохая связь, попытка ${a}/${t}...`; });
                     
-                    // Читаем сырой ответ сервера как текст
                     let rawText = await res.text();
                     
                     try {
-                        // Пытаемся превратить его в JSON
                         let data = JSON.parse(rawText);
                         if(data.success) {
                             tg.showAlert("Счет успешно выставлен!");
@@ -468,14 +608,14 @@
                             tg.showAlert("Ошибка банка: " + data.error);
                         }
                     } catch(parseErr) {
-                        // Если это не JSON, выводим на экран, что именно прислал Google!
                         tg.showAlert("Ошибка сервера! Он прислал текст: " + rawText.substring(0, 100));
                     }
 
                 } catch(e) {
-                    tg.showAlert("Реальная сетевая ошибка: " + e.message);
+                    tg.showAlert("Не удалось связаться с сервером после нескольких попыток. Проверьте интернет и попробуйте ещё раз.");
                 } finally {
                     document.getElementById('ui-loader').classList.add('hidden');
+                    document.getElementById('ui-loader-text').innerText = 'Обработка...';
                     tg.MainButton.hideProgress();
                 }
             }
@@ -544,10 +684,15 @@
 
     async function toggleBlock(u, status) {
         tg.MainButton.showProgress();
-        await fetch(API, {method:'POST', body: JSON.stringify({type:'toggle_block', user:u, block: status})});
-        await load(true);
-        renderPartnersList();
-        tg.MainButton.hideProgress();
+        try {
+            await fetchWithRetry(API, {method:'POST', body: JSON.stringify({type:'toggle_block', user:u, block: status})}, 3, 15000);
+            await load(true);
+            renderPartnersList();
+        } catch (e) {
+            tg.showAlert("Не удалось применить изменение — проверьте связь и попробуйте снова.");
+        } finally {
+            tg.MainButton.hideProgress();
+        }
     }
 
     function cancelBuffer() { 
@@ -575,24 +720,39 @@
             if (ok) {
                 document.getElementById('ui-loader').classList.remove('hidden');
                 tg.MainButton.showProgress();
+
+                const payload = {
+                    user: editUser || user, 
+                    date: date, 
+                    shopName: shop,
+                    items: currentCart,
+                    isSelfDelivery: isSelfDelivery
+                };
                 
                 try {
-                    await fetch(API, {method:'POST', body:JSON.stringify({
-                        user: editUser || user, 
-                        date: date, 
-                        shopName: shop,
-                        items: currentCart,
-                        isSelfDelivery: isSelfDelivery
-                    })});
+                    await fetchWithRetry(API, {method:'POST', body: JSON.stringify(payload)}, 3, 20000,
+                        (a,t) => { document.getElementById('ui-loader-text').innerText = `Плохая связь, попытка ${a}/${t}...`; });
+
+                    // Заказ реально подтверждён сервером — только теперь честно говорим "успех"
                     tg.HapticFeedback.notificationOccurred('success');
                     editUser = null; 
                     currentCart = {};
                     document.getElementById('copy-notify').style.display = 'none';
                     await load(true); if(isAdmin) tab('admin'); else tab('hist');
+
                 } catch(e) { 
-                    tg.showAlert("Ошибка!"); 
+                    // Сервер так и не ответил после всех попыток — не теряем заказ, а откладываем его
+                    queueOrder(payload);
+                    tg.HapticFeedback.notificationOccurred('warning');
+                    editUser = null;
+                    currentCart = {};
+                    document.getElementById('copy-notify').style.display = 'none';
+                    showConnBanner('Нет связи — заказ сохранён и отправится автоматически', 'pending');
+                    tg.showAlert("Плохая связь с сервером. Заказ сохранён на телефоне и отправится сам, как только появится интернет — не нужно оформлять его повторно.");
+                    renderMenu();
                 } finally { 
                     document.getElementById('ui-loader').classList.add('hidden');
+                    document.getElementById('ui-loader-text').innerText = 'Обработка...';
                     tg.MainButton.hideProgress(); 
                 }
             }
@@ -605,10 +765,10 @@
                 document.getElementById('ui-loader').classList.remove('hidden');
                 tg.MainButton.showProgress();
                 try {
-                    await fetch(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, shopName: shop})});
+                    await fetchWithRetry(API, {method:'POST', body: JSON.stringify({deleteOrder:true, user:u, date:d, shopName: shop})}, 3, 15000);
                     await load(true); if(isAdmin) renderAdmin(); else renderHist();
                 } catch(e) {
-                    tg.showAlert("Ошибка!");
+                    tg.showAlert("Не удалось удалить заказ — нет связи с сервером. Попробуйте ещё раз чуть позже.");
                 } finally {
                     document.getElementById('ui-loader').classList.add('hidden');
                     tg.MainButton.hideProgress();
@@ -621,13 +781,18 @@
         const box = document.getElementById('admin-list'), sel = document.getElementById('dt-admin').value;
         if (!sel) return;
         box.innerHTML = '<div class="card">Загрузка...</div>';
-        const nocache = '&t=' + new Date().getTime();
-        const data = await fetch(`${API}?type=admin_all&date=${sel}&user=${user}${nocache}`).then(r => r.json());
-        box.innerHTML = `<div class="cat">Заказы на ${sel.split('-').reverse().join('.')}</div>`;
-        if(!data.length) { box.innerHTML += '<div class="card">Пусто</div>'; return; }
-        data.forEach(ord => {
-            box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.shopName}</b><br><small>${ord.total} ₽</small></div><div style="display:flex; align-items:center;"><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.shopName}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button><span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}','${ord.shopName}')">✖</span></div></div></div>`;
-        });
+        try {
+            const nocache = '&t=' + new Date().getTime();
+            const res = await fetchWithRetry(`${API}?type=admin_all&date=${sel}&user=${user}${nocache}`, {}, 3, 15000);
+            const data = await res.json();
+            box.innerHTML = `<div class="cat">Заказы на ${sel.split('-').reverse().join('.')}</div>`;
+            if(!data.length) { box.innerHTML += '<div class="card">Пусто</div>'; return; }
+            data.forEach(ord => {
+                box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.shopName}</b><br><small>${ord.total} ₽</small></div><div style="display:flex; align-items:center;"><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.shopName}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button><span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}','${ord.shopName}')">✖</span></div></div></div>`;
+            });
+        } catch (e) {
+            box.innerHTML = '<div class="card" style="text-align:center; color:#b30000;">Нет связи с сервером. Потяните вниз/откройте вкладку заново, чтобы повторить попытку.</div>';
+        }
     }
 
     function onDateChange() { renderMenu(); }
