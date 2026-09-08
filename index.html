@@ -343,7 +343,7 @@
     }
 
     function openProductInfo(productName) {
-        let normalizedKey = productName.toLowerCase().replace(/[^a-zа-яё0-9]/g, '');
+        let normalizedKey = productName.toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]/g, '');
         let info = externalCatalog[normalizedKey];
 
         document.getElementById('pi-title').innerText = productName;
@@ -470,12 +470,21 @@
 
         box.innerHTML = ''; let groups = {};
         menuData.forEach(i => { groups[i.cat] = groups[i.cat] || []; groups[i.cat].push(i); });
-        for (let c in groups) {
+
+        // Категории с "десерт" в названии (Десерты, Десерты NEW и т.п.) всегда уходят
+        // после всех остальных (Выпечка и т.п.) — независимо от порядка строк в таблице.
+        // Сортировка стабильная, так что порядок ВНУТРИ каждой из двух групп не меняется.
+        const catOrder = Object.keys(groups).sort((a, b) => {
+            const rank = c => /десерт/i.test(c) ? 1 : 0;
+            return rank(a) - rank(b);
+        });
+
+        for (const c of catOrder) {
             box.innerHTML += `<div class="cat">${c}</div>`;
             groups[c].forEach(i => {
                 const q = currentCart[i.name]?.qty || 0;
                 let safeName = i.name.replace(/'/g, "\\'"); 
-                let normKey = i.name.toLowerCase().replace(/[^a-zа-яё0-9]/g, '');
+                let normKey = i.name.toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]/g, '');
                 
                 let hasInfo = externalCatalog[normKey] ? true : false;
                 let textClickHtml = hasInfo ? `onclick="openProductInfo('${safeName}')" style="cursor:pointer;"` : '';
