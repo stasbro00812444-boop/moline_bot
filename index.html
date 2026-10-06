@@ -188,8 +188,29 @@
     traceLoad('Запущен код приложения');
     function showLoadTrace() {
         const report = 'MOLINE: замер загрузки\nВремя от начала открытия страницы\n\n' + loadTrace.join('\n');
-        if (tg.showAlert) tg.showAlert(report);
-        else window.alert(report);
+        const previous = document.getElementById('load-trace-panel');
+        if (previous) previous.remove();
+        const panel = document.createElement('div');
+        panel.id = 'load-trace-panel';
+        panel.style.cssText = 'position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;';
+        panel.innerHTML = '<div style="width:100%;max-width:480px;background:#fff;border-radius:18px;padding:18px;box-sizing:border-box;"><b style="font-size:14px;">ЗАМЕР ЗАГРУЗКИ · V2</b><textarea class="trace-text" readonly style="display:block;width:100%;height:60vh;box-sizing:border-box;margin:12px 0;padding:10px;border:1px solid #ddd;border-radius:8px;font:12px monospace;line-height:1.5;color:#222;background:#fafafa;"></textarea><div style="display:flex;gap:8px;"><button class="trace-copy" style="flex:1;padding:12px;border:0;border-radius:8px;background:#e8a4c4;color:#222;">КОПИРОВАТЬ</button><button class="trace-close" style="flex:1;padding:12px;border:1px solid #ddd;border-radius:8px;background:#fff;">ЗАКРЫТЬ</button></div></div>';
+        const text = panel.querySelector('.trace-text');
+        text.value = report;
+        panel.querySelector('.trace-close').onclick = () => panel.remove();
+        const copy = panel.querySelector('.trace-copy');
+        copy.onclick = async () => {
+            try {
+                await navigator.clipboard.writeText(text.value);
+                copy.textContent = 'СКОПИРОВАНО';
+            } catch (e) {
+                text.focus();
+                text.select();
+                text.setSelectionRange(0, text.value.length);
+                copy.textContent = 'ТЕКСТ ВЫДЕЛЕН';
+            }
+        };
+        panel.onclick = event => { if (event.target === panel) panel.remove(); };
+        document.body.appendChild(panel);
     }
 
     const user = (tg.initDataUnsafe?.user?.username || "id_" + tg.initDataUnsafe?.user?.id).toLowerCase().replace('@', '');
