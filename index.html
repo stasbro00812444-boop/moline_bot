@@ -173,7 +173,35 @@
 <script>
     const tg = window.Telegram.WebApp;
     const API = 'https://moline-proxy.duckdns.org/gas-proxy';
+    // Временный замер загрузки. Не содержит товаров, заказов или токенов.
+    const loadTrace = [];
+    function traceLoad(message) {
+        loadTrace.push((performance.now() / 1000).toFixed(1) + ' с — ' + message);
+        if (loadTrace.length > 35) loadTrace.shift();
+    }
+    function requestLabel(url, options) {
+        if (options.method === 'POST') return 'Запись';
+        if (url.includes('type=menu')) return 'Меню';
+        if (url.includes('type=admin_all')) return 'Админ';
+        return 'История';
+    }
+    traceLoad('Запущен код приложения');
+    function showLoadTrace() {
+        const report = 'MOLINE: замер загрузки\nВремя от начала открытия страницы\n\n' + loadTrace.join('\n');
+        if (tg.showAlert) tg.showAlert(report);
+        else window.alert(report);
+    }
+
     const user = (tg.initDataUnsafe?.user?.username || "id_" + tg.initDataUnsafe?.user?.id).toLowerCase().replace('@', '');
+
+    // Кнопка замера доступна только аккаунту разработчика из истории проекта.
+    if (user === 'cvetkamoloko') {
+        const traceButton = document.createElement('button');
+        traceButton.textContent = 'ЗАМЕР ЗАГРУЗКИ';
+        traceButton.style.cssText = 'position:fixed;top:54px;right:8px;z-index:10005;border:1px solid #ccc;border-radius:8px;padding:8px;background:#fff;color:#444;font-size:10px;';
+        traceButton.onclick = showLoadTrace;
+        document.body.appendChild(traceButton);
+    }
 
     let menuData = [], historyData = [], isAdmin = false, editUser = null, allPartners = [];
     let externalCatalog = {};
@@ -218,17 +246,21 @@
     // вместо того чтобы просто зависнуть или молча упасть.
     async function fetchWithRetry(url, options = {}, tries = 3, timeoutMs = 15000, onRetry = null) {
         let lastErr = null;
+        const label = requestLabel(url, options);
         for (let attempt = 1; attempt <= tries; attempt++) {
+            traceLoad(label + ': попытка ' + attempt);
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), timeoutMs);
             try {
                 const res = await fetch(url, { ...options, signal: controller.signal });
                 clearTimeout(timer);
+                traceLoad(label + ': HTTP ' + res.status + ', ' + (res.headers.get('content-type') || 'без типа'));
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 return res;
             } catch (err) {
                 clearTimeout(timer);
                 lastErr = err;
+                traceLoad(label + ': ' + err.name + ' — ' + err.message);
                 if (attempt < tries) {
                     if (onRetry) onRetry(attempt, tries);
                     await new Promise(r => setTimeout(r, 1200 * attempt));
@@ -399,9 +431,11 @@
             if (loaderVisible) {
                 tg.MainButton.hideProgress();
                 hideLoader();
+                traceLoad('Общий экран загрузки закрыт');
                 loaderVisible = false;
             }
         };
+        traceLoad(quiet ? 'Фоновое обновление' : 'Начало загрузки');
         if (!quiet) { tg.MainButton.showProgress(); showLoader(); }
         historyLoading = true;
         const nocache = '&t=' + Date.now();
@@ -411,6 +445,7 @@
             .then(res => res.json())
             .then(h => {
                 if (!Array.isArray(h)) throw new Error('Некорректный ответ истории');
+                traceLoad('История: данные разобраны');
                 return { ok: true, data: h };
             }, () => ({ ok: false }))
             .catch(() => ({ ok: false }));
@@ -418,6 +453,7 @@
         try {
             const mRes = await fetchWithRetry(`${API}?type=menu&user=${user}${nocache}`, {}, 3, 15000);
             m = await mRes.json();
+            traceLoad('Меню: данные разобраны');
             if (m && m.isBlocked) {
                 stopLoader();
                 document.body.innerHTML = '<div style="text-align:center; padding:100px 20px; color:var(--main); font-weight:800;">Ваш доступ ограничен администратором.</div>';
@@ -425,13 +461,20 @@
             }
             if (!m || !Array.isArray(m.menu)) throw new Error('Некорректный ответ меню');
             applyLoadedData(m, historyData);
+            traceLoad('Меню показано из ответа сервера');
             saveMenuCache({ m, h: historyData });
             stopLoader(); // меню доступно сразу, не ждём историю
             flushPendingOrders();
         } catch (e) {
             m = null;
+            traceLoad('Загрузка меню: ' + e.name + ' — ' + e.message);
             const cached = loadMenuCache();
-            if (cached && cached.m) applyLoadedData(cached.m, cached.h);
+            if (cached && cached.m) {
+                applyLoadedData(cached.m, cached.h);
+                traceLoad('Показано меню из локального кэша');
+            } else {
+                traceLoad('Сохранённого меню нет');
+            }
             stopLoader();
         } finally {
             stopLoader();
