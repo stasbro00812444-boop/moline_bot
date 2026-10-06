@@ -60,19 +60,7 @@
         .info-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); z-index: 10001; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px; box-sizing: border-box; }
         .info-modal-overlay.active { opacity: 1; pointer-events: auto; }
         .info-card { background: var(--bg); border-radius: 24px; width: 100%; max-width: 340px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transform: translateY(20px); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 85vh; }
-        .info-img-box { width: 100%; height: 42vh; max-height: 320px; min-height: 220px; background: #f5f5f5; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; flex-shrink: 0; }
-        .info-img-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .info-img-box::after {
-            content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 38%; pointer-events: none;
-            background: linear-gradient(to bottom,
-                rgba(253,250,253,0) 0%,
-                rgba(253,250,253,0.05) 30%,
-                rgba(253,250,253,0.25) 55%,
-                rgba(253,250,253,0.6) 75%,
-                var(--bg) 100%);
-        }
-        .info-img-placeholder { color: #ccc; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
-        .info-content { padding: 4px 20px 20px; overflow-y: auto; background: var(--bg); }
+        .info-content { padding: 24px 20px 20px; overflow-y: auto; background: var(--bg); }
         .info-title { font-family: 'GeistMono', monospace; font-size: 19px; font-weight: 600; color: #2c2c2c; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.3px; }
         .info-row { display: flex; flex-direction: column; margin-bottom: 12px; border-bottom: 1px dashed #eee; padding-bottom: 8px; }
         .info-row:last-child { border-bottom: none; }
@@ -104,10 +92,6 @@
 
     <div id="product-info-modal" class="info-modal-overlay" onclick="closeProductInfo(event)">
         <div class="info-card" onclick="event.stopPropagation()">
-            <div class="info-img-box" id="pi-img-container">
-                <div class="info-img-placeholder">Нет фото</div>
-                <img id="pi-img" src="" alt="Product" style="display:none;">
-            </div>
             <div class="info-content">
                 <div class="info-title" id="pi-title">Название</div>
                 <div class="info-row"><span class="info-label">Состав</span><span class="info-val" id="pi-comp">-</span></div>
@@ -193,6 +177,7 @@
 
     let menuData = [], historyData = [], isAdmin = false, editUser = null, allPartners = [];
     let externalCatalog = {};
+    let historyLoading = false;
     let invoicesData = []; 
     let hasInn = false; 
     
@@ -263,7 +248,8 @@
         try {
             const raw = localStorage.getItem('moline_menu_cache_' + user);
             if (!raw) return null;
-            return JSON.parse(raw);
+            const parsed = JSON.parse(raw);
+            return parsed.data || parsed; // saveMenuCache сохраняет данные внутри data
         } catch (e) { return null; }
     }
 
@@ -343,31 +329,13 @@
     }
 
     function openProductInfo(productName) {
-        let normalizedKey = productName.toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]/g, '');
-        let info = externalCatalog[normalizedKey];
-
+        const normalizedKey = productName.toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]/g, '');
+        const info = externalCatalog[normalizedKey] || {};
         document.getElementById('pi-title').innerText = productName;
-        
-        const imgEl = document.getElementById('pi-img');
-        const imgCont = document.getElementById('pi-img-container');
-
-        if (info) {
-            document.getElementById('pi-comp').innerText = info.comp || "-";
-            document.getElementById('pi-weight').innerText = info.weight || "-";
-            document.getElementById('pi-kbju').innerText = info.kbju || "-";
-            document.getElementById('pi-shelf').innerText = info.shelf || "-";
-            
-            if (info.img && info.img.trim() !== "") {
-                imgEl.src = info.img;
-                imgEl.style.display = 'block';
-                imgCont.querySelector('.info-img-placeholder').style.display = 'none';
-                imgCont.style.display = 'flex';
-            } else {
-                imgEl.style.display = 'none';
-                imgCont.style.display = 'none';
-            }
-        }
-        
+        document.getElementById('pi-comp').innerText = info.comp || "-";
+        document.getElementById('pi-weight').innerText = info.weight || "-";
+        document.getElementById('pi-kbju').innerText = info.kbju || "-";
+        document.getElementById('pi-shelf').innerText = info.shelf || "-";
         document.getElementById('product-info-modal').classList.add('active');
         if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
     }
@@ -426,37 +394,58 @@
     }
 
     async function load(quiet = false) {
-        if(!quiet) { tg.MainButton.showProgress(); showLoader(); }
+        let loaderVisible = !quiet;
+        const stopLoader = () => {
+            if (loaderVisible) {
+                tg.MainButton.hideProgress();
+                hideLoader();
+                loaderVisible = false;
+            }
+        };
+        if (!quiet) { tg.MainButton.showProgress(); showLoader(); }
+        historyLoading = true;
+        const nocache = '&t=' + Date.now();
+        // Оба запроса идут параллельно, но история больше не задерживает меню.
+        // Ошибка истории обработана сразу, даже если она придёт раньше меню.
+        const historyResult = fetchWithRetry(`${API}?user=${user}${nocache}`, {}, 3, 15000)
+            .then(res => res.json())
+            .then(h => {
+                if (!Array.isArray(h)) throw new Error('Некорректный ответ истории');
+                return { ok: true, data: h };
+            }, () => ({ ok: false }))
+            .catch(() => ({ ok: false }));
+        let m = null;
         try {
-            const nocache = '&t=' + new Date().getTime();
-
-            const [mRes, hRes] = await Promise.all([
-                fetchWithRetry(`${API}?type=menu&user=${user}${nocache}`, {}, 3, 15000),
-                fetchWithRetry(`${API}?user=${user}${nocache}`, {}, 3, 15000)
-            ]);
-            const m = await mRes.json();
-            const h = await hRes.json();
-            
-            if (m.isBlocked) {
+            const mRes = await fetchWithRetry(`${API}?type=menu&user=${user}${nocache}`, {}, 3, 15000);
+            m = await mRes.json();
+            if (m && m.isBlocked) {
+                stopLoader();
                 document.body.innerHTML = '<div style="text-align:center; padding:100px 20px; color:var(--main); font-weight:800;">Ваш доступ ограничен администратором.</div>';
                 return;
             }
-
-            applyLoadedData(m, h);
-            saveMenuCache({ m, h }); // запоминаем последнюю успешную загрузку
-
-            // если за время без связи накопились неотправленные заказы — пробуем отправить их сейчас
+            if (!m || !Array.isArray(m.menu)) throw new Error('Некорректный ответ меню');
+            applyLoadedData(m, historyData);
+            saveMenuCache({ m, h: historyData });
+            stopLoader(); // меню доступно сразу, не ждём историю
             flushPendingOrders();
-
-            if(!quiet) { tg.MainButton.hideProgress(); hideLoader(); }
-        } catch(e) {
-            // Сеть так и не ответила после всех попыток — тихо показываем то, что сохранено локально
+        } catch (e) {
+            m = null;
             const cached = loadMenuCache();
-            if (cached && cached.m) {
-                applyLoadedData(cached.m, cached.h);
-            }
-            if(!quiet) { tg.MainButton.hideProgress(); hideLoader(); }
+            if (cached && cached.m) applyLoadedData(cached.m, cached.h);
+            stopLoader();
+        } finally {
+            stopLoader();
         }
+
+        // load() всё ещё ожидает историю перед возвратом: обновления после
+        // оформления/удаления заказа сохраняют прежний порядок выполнения.
+        const history = await historyResult;
+        historyLoading = false;
+        if (history.ok) {
+            historyData = history.data;
+            if (m) saveMenuCache({ m, h: historyData });
+        }
+        if (document.getElementById('t2').classList.contains('active')) renderHist();
     }
 
     function renderMenu() {
@@ -558,6 +547,10 @@
 
     function renderHist() {
         const box = document.getElementById('p2'); box.innerHTML = '';
+        if (historyLoading && !historyData.length) {
+            box.innerHTML = '<div class="card" style="text-align:center; padding:20px;">Загрузка истории...</div>';
+            return;
+        }
         if(!historyData.length) { box.innerHTML = '<div class="card" style="text-align:center; padding:20px;">История пуста</div>'; return; }
         historyData.sort((a,b) => b.date.localeCompare(a.date)).forEach(h => {
             const locked = isLocked(h.date);
