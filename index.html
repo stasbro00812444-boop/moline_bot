@@ -227,6 +227,13 @@
     let menuData = [], historyData = [], isAdmin = false, editUser = null, allPartners = [];
     let externalCatalog = {};
     let historyLoading = false;
+    let menuVerified = false;
+    let menuLoading = false;
+    let menuRefreshPromise = null;
+    let menuLoadVersion = 0;
+    const menuIdentity = { uid: String(tg.initDataUnsafe?.user?.id || ''), user, api: API };
+    const MENU_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+    const menuCacheKey = 'moline_menu_cache_v2_' + menuIdentity.uid + '_' + user;
     let invoicesData = []; 
     let hasInn = false; 
     
@@ -293,17 +300,60 @@
 
     // --- Кэш последнего успешно загруженного меню (чтобы было что показать без связи) ---
     function saveMenuCache(payload) {
+        if (!menuIdentity.uid || user === 'id_undefined' || !payload?.m ||
+            payload.m.isBlocked || !Array.isArray(payload.m.menu)) return;
+        // Persist only a customer catalog preview, without history, invoices or admin privileges.
+        const m = payload.m;
+        const preview = { menu: m.menu, catalog: m.catalog || {},
+            displayNames: m.displayNames || [user], deliveryCost: m.deliveryCost,
+            isAdmin: false, hasInn: false, invoices: [], allPartners: [] };
         try {
-            localStorage.setItem('moline_menu_cache_' + user, JSON.stringify({ data: payload, ts: Date.now() }));
+            localStorage.setItem(menuCacheKey, JSON.stringify({ version: 2, identity: menuIdentity,
+                ts: Date.now(), wasAdmin: m.isAdmin === true, data: { m: preview, h: [] } }));
         } catch (e) {}
+    }
+    function clearMenuCache() {
+        try { localStorage.removeItem(menuCacheKey); localStorage.removeItem('moline_menu_cache_' + user); } catch (e) {}
     }
     function loadMenuCache() {
         try {
-            const raw = localStorage.getItem('moline_menu_cache_' + user);
+            if (!menuIdentity.uid || user === 'id_undefined') return null;
+            const raw = localStorage.getItem(menuCacheKey);
             if (!raw) return null;
-            const parsed = JSON.parse(raw);
-            return parsed.data || parsed; // saveMenuCache сохраняет данные внутри data
+            const entry = JSON.parse(raw);
+            const age = Date.now() - entry.ts;
+            if (entry.version !== 2 || entry.identity?.uid !== menuIdentity.uid ||
+                entry.identity?.user !== user || entry.identity?.api !== API ||
+                !Number.isFinite(entry.ts) || age < 0 || age > MENU_CACHE_MAX_AGE_MS ||
+                entry.wasAdmin || !Array.isArray(entry.data?.m?.menu) || entry.data.m.isBlocked) return null;
+            // Cached state never enables privileged tabs, even if storage was edited.
+            return { m: { ...entry.data.m, isAdmin: false, hasInn: false,
+                allPartners: [], invoices: [] }, h: [] };
         } catch (e) { return null; }
+    }
+    function syncCartPrices() {
+        for (const name of Object.keys(currentCart)) {
+            const item = menuData.find(m => m.name === name);
+            if (!item) delete currentCart[name];
+            else currentCart[name] = { ...currentCart[name], price: item.price };
+        }
+    }
+    async function ensureMenuReady() {
+        if (menuVerified) return true;
+        showLoader();
+        tg.MainButton.showProgress();
+        try {
+            if (!menuLoading) load(true).catch(() => {});
+            await menuRefreshPromise;
+            if (!menuVerified) {
+                tg.showAlert('Не удалось обновить меню. Попробуйте оформить заказ ещё раз после восстановления связи.');
+                return false;
+            }
+            return true;
+        } finally {
+            hideLoader();
+            tg.MainButton.hideProgress();
+        }
     }
 
     // --- Очередь заказов, которые не удалось отправить сразу (плохая связь) ---
@@ -323,6 +373,7 @@
     // Пытается доотправить всё, что скопилось в очереди. Вызывается при каждом открытии
     // и периодически по таймеру — как только связь появится, заказы уйдут сами.
     async function flushPendingOrders() {
+        if (!menuVerified) return;
         let q = getPendingOrders();
         if (!q.length) return;
 
@@ -402,7 +453,7 @@
     function applyLoadedData(m, h) {
         menuData = m.menu || []; 
         historyData = h || []; 
-        isAdmin = m.isAdmin; 
+        isAdmin = m.isAdmin === true; 
         allPartners = m.allPartners || [];
         externalCatalog = m.catalog || {}; 
         currentDeliveryCost = m.deliveryCost !== undefined ? m.deliveryCost : 300;
@@ -417,8 +468,10 @@
         }
         
         const shopSelect = document.getElementById('shop-select');
+        const selectedShop = shopSelect.value;
         shopSelect.innerHTML = '';
         (m.displayNames || [user]).forEach(name => shopSelect.innerHTML += `<option value="${name}">${name}</option>`);
+        if ((m.displayNames || [user]).includes(selectedShop)) shopSelect.value = selectedShop;
         document.getElementById('shop-selector-box').style.display = (m.displayNames && m.displayNames.length > 1) ? 'block' : 'none';
 
         const input = document.getElementById('dt');
@@ -443,10 +496,24 @@
             document.getElementById('t4').classList.remove('hidden');
             document.getElementById('dt-admin').value = new Date().toISOString().split('T')[0];
             tab('admin');
-        } else { renderMenu(); }
+        } else {
+            document.getElementById('t1').classList.remove('hidden');
+            document.getElementById('t2').classList.remove('hidden');
+            document.getElementById('t3').classList.add('hidden');
+            document.getElementById('t4').classList.add('hidden');
+            if (document.getElementById('t3').classList.contains('active') ||
+                document.getElementById('t4').classList.contains('active')) tab('order');
+            syncCartPrices();
+            renderMenu();
+        }
     }
 
     async function load(quiet = false) {
+        const loadVersion = ++menuLoadVersion;
+        menuVerified = false;
+        menuLoading = true;
+        let finishMenu;
+        menuRefreshPromise = new Promise(resolve => { finishMenu = resolve; });
         let loaderVisible = !quiet;
         const stopLoader = () => {
             if (loaderVisible) {
@@ -458,6 +525,12 @@
         };
         traceLoad(quiet ? 'Фоновое обновление' : 'Начало загрузки');
         if (!quiet) { tg.MainButton.showProgress(); showLoader(); }
+        const cached = !quiet ? loadMenuCache() : null;
+        if (cached) {
+            applyLoadedData(cached.m, historyData);
+            traceLoad('Сохранённое меню показано сразу; обновление в фоне');
+            stopLoader();
+        }
         historyLoading = true;
         const nocache = '&t=' + Date.now();
         // Оба запроса идут параллельно, но история больше не задерживает меню.
@@ -475,12 +548,16 @@
             const mRes = await fetchWithRetry(`${API}?type=menu&user=${user}${nocache}`, {}, 3, 15000);
             m = await mRes.json();
             traceLoad('Меню: данные разобраны');
+            if (loadVersion !== menuLoadVersion) return;
             if (m && m.isBlocked) {
+                clearMenuCache();
+                historyLoading = false;
                 stopLoader();
                 document.body.innerHTML = '<div style="text-align:center; padding:100px 20px; color:var(--main); font-weight:800;">Ваш доступ ограничен администратором.</div>';
                 return;
             }
             if (!m || !Array.isArray(m.menu)) throw new Error('Некорректный ответ меню');
+            menuVerified = true;
             applyLoadedData(m, historyData);
             traceLoad('Меню показано из ответа сервера');
             saveMenuCache({ m, h: historyData });
@@ -489,21 +566,18 @@
         } catch (e) {
             m = null;
             traceLoad('Загрузка меню: ' + e.name + ' — ' + e.message);
-            const cached = loadMenuCache();
-            if (cached && cached.m) {
-                applyLoadedData(cached.m, cached.h);
-                traceLoad('Показано меню из локального кэша');
-            } else {
-                traceLoad('Сохранённого меню нет');
-            }
+            if (!cached) traceLoad('Сохранённого меню для быстрого показа нет');
             stopLoader();
         } finally {
+            if (loadVersion === menuLoadVersion) menuLoading = false;
+            finishMenu();
             stopLoader();
         }
 
         // load() всё ещё ожидает историю перед возвратом: обновления после
         // оформления/удаления заказа сохраняют прежний порядок выполнения.
         const history = await historyResult;
+        if (loadVersion !== menuLoadVersion) return;
         historyLoading = false;
         if (history.ok) {
             historyData = history.data;
@@ -781,6 +855,7 @@
     }
 
     async function send() {
+        if (!await ensureMenuReady()) return;
         const date = document.getElementById('dt').value, shop = document.getElementById('shop-select').value || user;
         if(!currentCart || !Object.keys(currentCart).length) return;
         
@@ -795,6 +870,8 @@
 
         tg.showConfirm(`Заказать для "${shop}"?`, async (ok) => {
             if (ok) {
+                if (!await ensureMenuReady()) return;
+                if (!Object.keys(currentCart).length) return;
                 showLoader();
                 tg.MainButton.showProgress();
 
