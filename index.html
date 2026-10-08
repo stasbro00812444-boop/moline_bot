@@ -356,47 +356,93 @@
         }
     }
 
-    // --- Очередь заказов, которые не удалось отправить сразу (плохая связь) ---
-    function getPendingOrders() {
-        try { return JSON.parse(localStorage.getItem('moline_pending_orders') || '[]'); }
-        catch (e) { return []; }
+    const receiptStorageKey = 'moline_order_receipts_v5_' + user;
+    let checkingReceipts = false, sendingOrder = false;
+    function readReceipts() { try { return JSON.parse(localStorage.getItem(receiptStorageKey) || '[]'); } catch(e) { return []; } }
+    function saveReceipt(entry) {
+        const entries=readReceipts().filter(r=>r.payload.requestId!==entry.payload.requestId);
+        entries.push(entry); localStorage.setItem(receiptStorageKey,JSON.stringify(entries));
     }
-    function setPendingOrders(arr) {
-        try { localStorage.setItem('moline_pending_orders', JSON.stringify(arr)); } catch (e) {}
+    function newRequestId() {
+        if (crypto.randomUUID) return crypto.randomUUID();
+        return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g,c=>(Number(c)^crypto.getRandomValues(new Uint8Array(1))[0]&15>>Number(c)/4).toString(16));
     }
-    function queueOrder(payload) {
-        const q = getPendingOrders();
-        q.push({ payload, ts: Date.now() });
-        setPendingOrders(q);
-    }
-
-    // Пытается доотправить всё, что скопилось в очереди. Вызывается при каждом открытии
-    // и периодически по таймеру — как только связь появится, заказы уйдут сами.
-    async function flushPendingOrders() {
-        if (!menuVerified) return;
-        let q = getPendingOrders();
-        if (!q.length) return;
-
-        showConnBanner(`Отправляем отложенные заказы (${q.length})...`, 'pending');
-        const stillPending = [];
-        for (const entry of q) {
-            try {
-                await fetchWithRetry(API, { method: 'POST', body: JSON.stringify(entry.payload) }, 2, 12000);
-            } catch (e) {
-                stillPending.push(entry);
+    function renderOrderReceipts() {
+        let box=document.getElementById('order-receipts-v5');
+        if (!box) {
+            box=document.createElement('div');box.id='order-receipts-v5';
+            box.style.cssText='position:relative;background:#fff4dc;border:1px solid #dec89c;padding:12px;margin:10px;border-radius:10px;color:#333;font-size:12px;';
+            const target=document.getElementById('p2') || document.body; target.before(box);
+        }
+        box.replaceChildren();
+        const unresolved=readReceipts().filter(r=>r.status!=='synced');
+        box.hidden=!unresolved.length;
+        for (const entry of unresolved) {
+            const line=document.createElement('div');
+            const p=entry.payload;
+            line.textContent=p.shopName+' · '+p.date+' — '+(entry.status==='queued' ? 'сохранён на сервере; ожидает записи в таблицу' : entry.status==='rejected' ? 'не принят: '+(entry.code||'ошибка проверки') : 'нет подтверждения приёма; требуется проверка');
+            box.appendChild(line);
+            if (entry.status==='unknown') {
+                const button=document.createElement('button');button.textContent='Проверить и повторить отправку';
+                button.onclick=()=>tg.showConfirm('Повторить именно этот заказ для '+p.shopName+' на '+p.date+'? Сначала убедитесь, что его не заменяли другим заказом.',async yes=>{
+                    if(!yes || sendingOrder)return;
+                    sendingOrder=true;
+                    try { const r=await transmitOrder(p); saveReceipt({payload:p,status:r.status,code:r.code}); renderOrderReceipts(); await load(true); }
+                    catch(e){tg.showAlert('Подтверждения нет. Заказ не отмечен как принятый. Свяжитесь с менеджером.');}
+                    finally{sendingOrder=false;}
+                });box.appendChild(button);
             }
         }
-        setPendingOrders(stillPending);
-
-        if (stillPending.length) {
-            showConnBanner(`Не удалось отправить ${stillPending.length} заказ(ов) — ждём связь`, 'error');
-        } else {
-            hideConnBanner();
-        }
     }
+    async function orderRequest(payload) {
+        const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),10000);
+        try {
+            const res=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
+            const result=await res.json();
+            if(!res.ok && res.status!==422) throw new Error(result.error||'HTTP '+res.status);
+            return result;
+        } finally { clearTimeout(timer); }
+    }
+    async function transmitOrder(payload) {
+        // Retry only the same immutable request ID; server/GAS deduplicate it.
+        let last;
+        for(let i=0;i<2;i++) {
+            try {
+                const receipt=await orderRequest(payload);
+                if(receipt.orderProtocol!==5 || receipt.requestId!==payload.requestId || receipt.durable!==true ||
+                   !['queued','synced','rejected'].includes(receipt.status)) throw new Error('invalid_receipt');
+                return receipt;
+            } catch(e){last=e;}
+        }
+        throw last;
+    }
+    async function flushPendingOrders() {
+        // Status checks only. Never silently send a phone draft hours later.
+        if(checkingReceipts)return; checkingReceipts=true;
+        try {
+            for(const entry of readReceipts().filter(r=>r.status==='queued'||r.status==='unknown')) {
+                try {
+                    const r=await orderRequest({type:'order_receipt',requestId:entry.payload.requestId});
+                    if(r.orderProtocol===5 && r.requestId===entry.payload.requestId && r.durable===true && ['queued','synced','rejected'].includes(r.status)) {
+                        saveReceipt({payload:entry.payload,status:r.status,code:r.code});
+                        if(entry.status!=='synced' && r.status==='synced') load(true);
+                    }
+                } catch(e) {} // no receipt is not success; retain the original request.
+            }
+            renderOrderReceipts();
+        } finally {checkingReceipts=false;}
+    }
+    // Preserve old phone queue for investigation; never auto-send its stale orders.
+    try {
+        const oldQueue=JSON.parse(localStorage.getItem('moline_pending_orders')||'[]');
+        if(oldQueue.length) {
+            localStorage.setItem('moline_legacy_orders_archive_'+Date.now(),JSON.stringify(oldQueue));
+            localStorage.removeItem('moline_pending_orders');
+            setTimeout(()=>tg.showAlert('Найдены старые заказы без подтверждения отправки. Они сохранены на телефоне для проверки и не отправляются автоматически. Свяжитесь с менеджером, прежде чем оформлять их заново.'),1500);
+        }
+    } catch(e) {}
+    setInterval(flushPendingOrders,15000);
 
-    // Каждые 30 секунд пробуем доотправить очередь, пока приложение открыто
-    setInterval(flushPendingOrders, 30000);
 
     // =====================================================================
 
@@ -855,6 +901,8 @@
     }
 
     async function send() {
+        if(sendingOrder)return;
+        if(readReceipts().some(r=>r.status==='unknown')) { tg.showAlert('Сначала проверьте предыдущий заказ без подтверждения в разделе истории.'); tab('hist'); renderOrderReceipts(); return; }
         if (!await ensureMenuReady()) return;
         const date = document.getElementById('dt').value, shop = document.getElementById('shop-select').value || user;
         if(!currentCart || !Object.keys(currentCart).length) return;
@@ -876,6 +924,7 @@
                 tg.MainButton.showProgress();
 
                 const payload = {
+                    orderProtocol: 5, requestId: newRequestId(), clientCreatedAt: new Date().toISOString(),
                     user: editUser || user, 
                     date: date, 
                     shopName: shop,
@@ -883,30 +932,30 @@
                     isSelfDelivery: isSelfDelivery
                 };
                 
+                if(sendingOrder) { hideLoader(); tg.MainButton.hideProgress(); return; }
+                sendingOrder=true;
                 try {
-                    await fetchWithRetry(API, {method:'POST', body: JSON.stringify(payload)}, 3, 20000,
-                        null);
-
-                    // Заказ реально подтверждён сервером — только теперь честно говорим "успех"
+                    // Save request identity before transmission, so a lost reply can be checked later.
+                    saveReceipt({payload,status:'unknown'});
+                    const receipt=await transmitOrder(payload);
+                    saveReceipt({payload,status:receipt.status,code:receipt.code});
+                    if(receipt.status==='rejected') {
+                        tg.showAlert('Заказ не принят: '+receipt.code+'. Корзина сохранена.');
+                        return;
+                    }
                     tg.HapticFeedback.notificationOccurred('success');
-                    editUser = null; 
-                    currentCart = {};
-                    document.getElementById('copy-notify').style.display = 'none';
+                    editUser=null;currentCart={};
+                    document.getElementById('copy-notify').style.display='none';
+                    renderOrderReceipts();
+                    if(receipt.status==='queued') tg.showAlert('Заказ сохранён на сервере. Запись в таблицу ещё ожидает подтверждения. Повторно оформлять его не нужно; приложение можно закрыть.');
+                    else tg.showAlert('Заказ записан в таблицу.');
                     await load(true); if(isAdmin) tab('admin'); else tab('hist');
-
-                } catch(e) { 
-                    // Сервер так и не ответил после всех попыток — не теряем заказ, а откладываем его
-                    queueOrder(payload);
+                } catch(e) {
                     tg.HapticFeedback.notificationOccurred('warning');
-                    editUser = null;
-                    currentCart = {};
-                    document.getElementById('copy-notify').style.display = 'none';
-                    showConnBanner('Нет связи — заказ сохранён и отправится автоматически', 'pending');
-                    tg.showAlert("Плохая связь с сервером. Заказ сохранён на телефоне и отправится сам, как только появится интернет — не нужно оформлять его повторно.");
-                    renderMenu();
-                } finally { 
-                    hideLoader();
-                    tg.MainButton.hideProgress(); 
+                    tg.showAlert('Нет подтверждения приёма заказа. Корзина сохранена. Проверьте статус в истории или свяжитесь с менеджером. Автоматической отправки с телефона позже не будет.');
+                    renderOrderReceipts();
+                } finally {
+                    sendingOrder=false;hideLoader();tg.MainButton.hideProgress();
                 }
             }
         });
