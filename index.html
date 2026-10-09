@@ -368,36 +368,14 @@
         return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g,c=>(Number(c)^crypto.getRandomValues(new Uint8Array(1))[0]&15>>Number(c)/4).toString(16));
     }
     function renderOrderReceipts() {
-        let box=document.getElementById('order-receipts-v5');
-        if (!box) {
-            box=document.createElement('div');box.id='order-receipts-v5';
-            box.style.cssText='position:relative;background:#fff4dc;border:1px solid #dec89c;padding:12px;margin:10px;border-radius:10px;color:#333;font-size:12px;';
-            const target=document.getElementById('p2') || document.body; target.before(box);
-        }
-        box.replaceChildren();
-        const unresolved=readReceipts().filter(r=>r.status!=='synced');
-        box.hidden=!unresolved.length;
-        for (const entry of unresolved) {
-            const line=document.createElement('div');
-            const p=entry.payload;
-            line.textContent=p.shopName+' · '+p.date+' — '+(entry.status==='queued' ? 'сохранён на сервере; ожидает записи в таблицу' : entry.status==='rejected' ? 'не принят: '+(entry.code||'ошибка проверки') : 'нет подтверждения приёма; требуется проверка');
-            box.appendChild(line);
-            if (entry.status==='unknown') {
-                const button=document.createElement('button');button.textContent='Проверить и повторить отправку';
-                button.onclick=()=>tg.showConfirm('Повторить именно этот заказ для '+p.shopName+' на '+p.date+'? Сначала убедитесь, что его не заменяли другим заказом.',async yes=>{
-                    if(!yes || sendingOrder)return;
-                    sendingOrder=true;
-                    try { const r=await transmitOrder(p); saveReceipt({payload:p,status:r.status,code:r.code}); renderOrderReceipts(); await load(true); }
-                    catch(e){tg.showAlert('Подтверждения нет. Заказ не отмечен как принятый. Свяжитесь с менеджером.');}
-                    finally{sendingOrder=false;}
-                });box.appendChild(button);
-            }
-        }
+        // Receipt checks continue in the background; no persistent technical banner.
+        const box=document.getElementById('order-receipts-v5');
+        if(box)box.remove();
     }
     async function orderRequest(payload) {
         const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),10000);
         try {
-            const res=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
+            const res=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(payload),signal:controller.signal});
             const result=await res.json();
             if(!res.ok && res.status!==422) throw new Error(result.error||'HTTP '+res.status);
             return result;
@@ -902,7 +880,7 @@
 
     async function send() {
         if(sendingOrder)return;
-        if(readReceipts().some(r=>r.status==='unknown')) { tg.showAlert('Сначала проверьте предыдущий заказ без подтверждения в разделе истории.'); tab('hist'); renderOrderReceipts(); return; }
+        if(readReceipts().some(r=>r.status==='unknown')) { flushPendingOrders(); tg.showAlert('Не удалось подтвердить предыдущую отправку. Если заказ уже виден в истории, не оформляйте его повторно. Свяжитесь с менеджером для проверки.'); return; }
         if (!await ensureMenuReady()) return;
         const date = document.getElementById('dt').value, shop = document.getElementById('shop-select').value || user;
         if(!currentCart || !Object.keys(currentCart).length) return;
@@ -952,7 +930,7 @@
                     await load(true); if(isAdmin) tab('admin'); else tab('hist');
                 } catch(e) {
                     tg.HapticFeedback.notificationOccurred('warning');
-                    tg.showAlert('Нет подтверждения приёма заказа. Корзина сохранена. Проверьте статус в истории или свяжитесь с менеджером. Автоматической отправки с телефона позже не будет.');
+                    tg.showAlert('Нет подтверждения приёма заказа. Корзина сохранена. Свяжитесь с менеджером для проверки. Автоматической отправки с телефона позже не будет.');
                     renderOrderReceipts();
                 } finally {
                     sendingOrder=false;hideLoader();tg.MainButton.hideProgress();
