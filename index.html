@@ -346,7 +346,7 @@
             if (!menuLoading) load(true).catch(() => {});
             await menuRefreshPromise;
             if (!menuVerified) {
-                tg.showAlert('Не удалось обновить меню. Попробуйте оформить заказ ещё раз после восстановления связи.');
+                tg.showAlert('Сервер пока не подтвердил меню. Корзина сохранена. Попробуйте ещё раз или передайте заказ менеджеру.');
                 return false;
             }
             return true;
@@ -534,7 +534,7 @@
 
     async function load(quiet = false) {
         const loadVersion = ++menuLoadVersion;
-        menuVerified = false;
+        // A failed refresh does not invalidate a menu received in this session.
         menuLoading = true;
         let finishMenu;
         menuRefreshPromise = new Promise(resolve => { finishMenu = resolve; });
@@ -574,6 +574,7 @@
             traceLoad('Меню: данные разобраны');
             if (loadVersion !== menuLoadVersion) return;
             if (m && m.isBlocked) {
+                menuVerified = false;
                 clearMenuCache();
                 historyLoading = false;
                 stopLoader();
