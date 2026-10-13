@@ -338,22 +338,65 @@
             else currentCart[name] = { ...currentCart[name], price: item.price };
         }
     }
+    // v5.3: explicit inline status; a failed refresh is never an order receipt.
+    function orderStatus(message) {
+        let box=document.getElementById('order-status-v53');
+        if(!box) {
+            box=document.createElement('div'); box.id='order-status-v53';
+            box.setAttribute('role','status'); box.setAttribute('aria-live','polite');
+            box.style.cssText='margin:12px;padding:14px;border-radius:16px;background:#fff2f7;color:#583744;line-height:1.5;';
+            document.body.prepend(box);
+        }
+        box.textContent=message;
+        box.hidden=!message;
+        if(message) box.scrollIntoView({block:'nearest',behavior:'smooth'});
+    }
+    function orderItemsKey(items) {
+        const rows=Array.isArray(items)?items:Object.entries(items||{}).map(([name,v])=>({name,...v}));
+        return JSON.stringify(rows.map(i=>[String(i.name),Number(i.qty),Number(i.price)])
+            .sort((a,b)=>a[0].localeCompare(b[0])));
+    }
+    function cartSnapshot() {
+        return {user:editUser||user,date:document.getElementById('dt').value,
+            shopName:document.getElementById('shop-select').value||user,
+            items:JSON.parse(JSON.stringify(currentCart)),isSelfDelivery:isSelfDelivery===true};
+    }
+    function sameOrder(a,b) {
+        return a.user===b.user && a.date===b.date && a.shopName===b.shopName &&
+            (a.isSelfDelivery===true)===(b.isSelfDelivery===true) && orderItemsKey(a.items)===orderItemsKey(b.items);
+    }
+    async function existingOrder(snapshot) {
+        // Use a fresh history read, never a cached total or an old local receipt.
+        const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),10000);
+        try {
+            const response=await fetch(API+'?user='+encodeURIComponent(snapshot.user)+'&t='+Date.now(),{signal:controller.signal,cache:'no-store'});
+            if(!response.ok)return false;
+            const rows=await response.json();
+            if(!Array.isArray(rows))return false;
+            const delivery=snapshot.isSelfDelivery?0:Number(currentDeliveryCost);
+            const match=rows.some(r=>r.date===snapshot.date && r.shopName===snapshot.shopName &&
+                Number(r.delivery)===delivery && orderItemsKey(r.items)===orderItemsKey(snapshot.items));
+            if(!match || !sameOrder(snapshot,cartSnapshot()))return false;
+            if(snapshot.user===user) {historyData=rows;historyLoading=false;}
+            orderStatus('Заказ с этим составом на '+snapshot.date.split('-').reverse().join('.')+' уже есть в истории. Повторно отправлять его не нужно.');
+            if(snapshot.user===user)tab('hist');
+            return true;
+        } catch(e) {return false;} finally {clearTimeout(timer);}
+    }
     async function ensureMenuReady() {
         if (menuVerified) return true;
-        showLoader();
+        orderStatus('Обновляем меню перед оформлением…');
         tg.MainButton.showProgress();
         try {
             if (!menuLoading) load(true).catch(() => {});
             await menuRefreshPromise;
             if (!menuVerified) {
-                tg.showAlert('Сервер пока не подтвердил меню. Корзина сохранена. Попробуйте ещё раз или передайте заказ менеджеру.');
+                orderStatus('Новый заказ пока не отправлен. Выбранные товары остались в корзине. Нажмите «Оформить» ещё раз или свяжитесь с менеджером.');
                 return false;
             }
+            orderStatus('');
             return true;
-        } finally {
-            hideLoader();
-            tg.MainButton.hideProgress();
-        }
+        } finally { tg.MainButton.hideProgress(); }
     }
 
     const receiptStorageKey = 'moline_order_receipts_v5_' + user;
@@ -403,7 +446,9 @@
                     const r=await orderRequest({type:'order_receipt',requestId:entry.payload.requestId});
                     if(r.orderProtocol===5 && r.requestId===entry.payload.requestId && r.durable===true && ['queued','synced','rejected'].includes(r.status)) {
                         saveReceipt({payload:entry.payload,status:r.status,code:r.code});
-                        if(entry.status!=='synced' && r.status==='synced') load(true);
+                        if(entry.status!=='synced' && r.status==='synced') { orderStatus('Заказ записан в таблицу.'); load(true); }
+                        else if(entry.status==='unknown' && r.status==='queued') orderStatus('Заказ сохранён. Повторно отправлять его не нужно.');
+                        else if(r.status==='rejected') orderStatus('Предыдущий заказ не принят. Свяжитесь с менеджером.');
                     }
                 } catch(e) {} // no receipt is not success; retain the original request.
             }
@@ -881,7 +926,19 @@
 
     async function send() {
         if(sendingOrder)return;
-        if(readReceipts().some(r=>r.status==='unknown')) { flushPendingOrders(); tg.showAlert('Не удалось подтвердить предыдущую отправку. Если заказ уже виден в истории, не оформляйте его повторно. Свяжитесь с менеджером для проверки.'); return; }
+        if(!currentCart || !Object.keys(currentCart).length) return;
+        sendingOrder=true;
+        try {
+            const snapshot=cartSnapshot();
+            orderStatus('Проверяем заказ…');
+            if(await existingOrder(snapshot))return;
+            if(!sameOrder(snapshot,cartSnapshot())) {orderStatus('Корзина изменилась. Нажмите «Оформить» ещё раз.');return;}
+            await flushPendingOrders();
+            if(readReceipts().some(r=>r.status==='unknown')) {
+                orderStatus('Проверяем предыдущую отправку. Пока подтверждения нет, повторный заказ не отправляем. Корзина осталась на экране.'); return;
+            }
+            orderStatus('');
+        } finally {sendingOrder=false;}
         if (!await ensureMenuReady()) return;
         const date = document.getElementById('dt').value, shop = document.getElementById('shop-select').value || user;
         if(!currentCart || !Object.keys(currentCart).length) return;
@@ -907,7 +964,7 @@
                     user: editUser || user, 
                     date: date, 
                     shopName: shop,
-                    items: currentCart,
+                    items: JSON.parse(JSON.stringify(currentCart)),
                     isSelfDelivery: isSelfDelivery
                 };
                 
@@ -919,19 +976,19 @@
                     const receipt=await transmitOrder(payload);
                     saveReceipt({payload,status:receipt.status,code:receipt.code});
                     if(receipt.status==='rejected') {
-                        tg.showAlert('Заказ не принят: '+receipt.code+'. Корзина сохранена.');
+                        orderStatus('Заказ не принят. Выбранные товары остались в корзине. Свяжитесь с менеджером.');
                         return;
                     }
                     tg.HapticFeedback.notificationOccurred('success');
                     editUser=null;currentCart={};
                     document.getElementById('copy-notify').style.display='none';
                     renderOrderReceipts();
-                    if(receipt.status==='queued') tg.showAlert('Заказ сохранён на сервере. Запись в таблицу ещё ожидает подтверждения. Повторно оформлять его не нужно; приложение можно закрыть.');
-                    else tg.showAlert('Заказ записан в таблицу.');
+                    orderStatus(receipt.status==='queued' ? 'Заказ сохранён. Повторно отправлять его не нужно.' : 'Заказ записан в таблицу.');
                     await load(true); if(isAdmin) tab('admin'); else tab('hist');
                 } catch(e) {
                     tg.HapticFeedback.notificationOccurred('warning');
-                    tg.showAlert('Нет подтверждения приёма заказа. Корзина сохранена. Свяжитесь с менеджером для проверки. Автоматической отправки с телефона позже не будет.');
+                    orderStatus('Проверяем отправку заказа. Пока подтверждения нет. Выбранные товары остались в корзине; повторно отправлять их не нужно.');
+                    flushPendingOrders();
                     renderOrderReceipts();
                 } finally {
                     sendingOrder=false;hideLoader();tg.MainButton.hideProgress();
