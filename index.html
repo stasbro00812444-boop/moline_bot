@@ -420,7 +420,7 @@
         try {
             const res=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(payload),signal:controller.signal});
             const result=await res.json();
-            if(!res.ok && res.status!==422) throw new Error(result.error||'HTTP '+res.status);
+            if(!res.ok && res.status!==422) { const error=new Error(result.error||'HTTP '+res.status); error.definitive=res.status===400; error.serverMessage=result.message; throw error; }
             return result;
         } finally { clearTimeout(timer); }
     }
@@ -433,7 +433,7 @@
                 if(receipt.orderProtocol!==5 || receipt.requestId!==payload.requestId || receipt.durable!==true ||
                    !['queued','synced','rejected'].includes(receipt.status)) throw new Error('invalid_receipt');
                 return receipt;
-            } catch(e){last=e;}
+            } catch(e){if(e.definitive)throw e;last=e;}
         }
         throw last;
     }
@@ -934,7 +934,7 @@
             if(await existingOrder(snapshot))return;
             if(!sameOrder(snapshot,cartSnapshot())) {orderStatus('Корзина изменилась. Нажмите «Оформить» ещё раз.');return;}
             await flushPendingOrders();
-            if(readReceipts().some(r=>r.status==='unknown')) {
+            if(readReceipts().some(r=>r.status==='unknown' && !sameOrder(r.payload,snapshot))) {
                 orderStatus('Проверяем предыдущую отправку. Пока подтверждения нет, повторный заказ не отправляем. Корзина осталась на экране.'); return;
             }
             orderStatus('');
@@ -959,7 +959,8 @@
                 showLoader();
                 tg.MainButton.showProgress();
 
-                const payload = {
+                const retryEntry=readReceipts().find(r=>r.status==='unknown' && sameOrder(r.payload,cartSnapshot()));
+                const payload = retryEntry ? JSON.parse(JSON.stringify(retryEntry.payload)) : {
                     orderProtocol: 5, requestId: newRequestId(), clientCreatedAt: new Date().toISOString(),
                     user: editUser || user, 
                     date: date, 
@@ -987,8 +988,14 @@
                     await load(true); if(isAdmin) tab('admin'); else tab('hist');
                 } catch(e) {
                     tg.HapticFeedback.notificationOccurred('warning');
-                    orderStatus('Проверяем отправку заказа. Пока подтверждения нет. Выбранные товары остались в корзине; повторно отправлять их не нужно.');
-                    flushPendingOrders();
+                    if(e.definitive) {
+                        saveReceipt({payload,status:'not_sent',code:e.serverMessage||e.message});
+                        orderStatus('Заказ пока не отправлен. Обновляем меню; выбранные товары остались в корзине. После обновления нажмите «Оформить».');
+                        menuVerified=false;load(true);
+                    } else {
+                        orderStatus('Проверяем отправку заказа. Пока подтверждения нет. Выбранные товары остались в корзине; можно повторить проверку кнопкой «Оформить».');
+                        flushPendingOrders();
+                    }
                     renderOrderReceipts();
                 } finally {
                     sendingOrder=false;hideLoader();tg.MainButton.hideProgress();
