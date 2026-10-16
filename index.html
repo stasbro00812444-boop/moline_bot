@@ -446,8 +446,8 @@
                     const r=await orderRequest({type:'order_receipt',requestId:entry.payload.requestId});
                     if(r.orderProtocol===5 && r.requestId===entry.payload.requestId && r.durable===true && ['queued','synced','rejected'].includes(r.status)) {
                         saveReceipt({payload:entry.payload,status:r.status,code:r.code});
-                        if(entry.status!=='synced' && r.status==='synced') { orderStatus('Заказ записан в таблицу.'); load(true); }
-                        else if(entry.status==='unknown' && r.status==='queued') orderStatus('Заказ сохранён. Повторно отправлять его не нужно.');
+                        if(entry.status!=='synced' && r.status==='synced') { orderStatus('Заказ оформлен.'); load(true); }
+                        else if(entry.status==='unknown' && r.status==='queued') orderStatus('Заказ оформлен.');
                         else if(r.status==='rejected') orderStatus('Предыдущий заказ не принят. Свяжитесь с менеджером.');
                     }
                 } catch(e) {} // no receipt is not success; retain the original request.
@@ -984,7 +984,7 @@
                     editUser=null;currentCart={};
                     document.getElementById('copy-notify').style.display='none';
                     renderOrderReceipts();
-                    orderStatus(receipt.status==='queued' ? 'Заказ сохранён. Повторно отправлять его не нужно.' : 'Заказ записан в таблицу.');
+                    orderStatus(receipt.status==='queued' ? 'Заказ оформлен.' : 'Заказ оформлен.');
                     await load(true); if(isAdmin) tab('admin'); else tab('hist');
                 } catch(e) {
                     tg.HapticFeedback.notificationOccurred('warning');
