@@ -224,6 +224,104 @@
         document.body.appendChild(traceButton);
     }
 
+    // Support v6.2. Telemetry is best effort and never blocks ordering.
+    let supportIdentity=null, customerMode=false, supportLastMenu=null, supportLastHistory=[];
+    let supportEvents=[], supportFlushing=false, supportPanel=null, supportClients=[];
+    const supportSession=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
+    function supportEvent(kind,details={}) {
+        supportEvents.push({kind,...details,session:supportSession,clientTime:Date.now()});
+        if(supportEvents.length>100)supportEvents.shift();
+    }
+    async function supportCall(type,extra={}) {
+        if(!tg.initData)throw new Error('Откройте приложение из Telegram.');
+        const c=new AbortController(),timer=setTimeout(()=>c.abort(),15000);
+        try{
+            const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({type,initData:tg.initData,...extra}),signal:c.signal});
+            const data=await r.json();if(!r.ok){const e=new Error(data.error||'Диагностика временно недоступна.');e.status=r.status;throw e;}return data;
+        }finally{clearTimeout(timer);}
+    }
+    async function flushSupportEvents() {
+        if(supportFlushing||!supportEvents.length||!tg.initData)return;
+        supportFlushing=true;const batch=supportEvents.splice(0,20);
+        try{await supportCall('support_events',{events:batch});}
+        catch(e){supportEvents=[...batch,...supportEvents].slice(-100);}
+        finally{supportFlushing=false;}
+    }
+    function supportButton(label,fn){const b=document.createElement('button');b.type='button';b.textContent=label;b.className='btn-repeat';b.style.cssText='padding:12px;margin:4px 0;';b.onclick=fn;return b;}
+    function supportText(parent,text,tag='div'){const el=document.createElement(tag);el.textContent=text;el.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0;';parent.appendChild(el);return el;}
+    function supportToolbar(){
+        let bar=document.getElementById('support-toolbar');
+        if(!supportIdentity?.canDiagnose){if(bar)bar.remove();return;}
+        if(!bar){bar=document.createElement('div');bar.id='support-toolbar';bar.style.cssText='padding:8px 16px;display:flex;gap:8px;background:#fff2f7;';document.getElementById('tab-bar').after(bar);}
+        bar.replaceChildren();
+        bar.appendChild(supportButton(customerMode?'Вернуться в админку':'Режим клиента',()=>{
+            if(editUser||sendingOrder){orderStatus('Сначала завершите редактирование заказа.');return;}
+            if(Object.keys(currentCart).length){orderStatus('Сначала завершите работу с корзиной.');return;}
+            customerMode=!customerMode;supportEvent('view_mode',{status:customerMode?'customer':'admin'});
+            if(supportLastMenu)applyLoadedData(supportLastMenu,historyData);
+            supportToolbar();
+        }));
+        bar.appendChild(supportButton('Клиенты · диагностика',openSupport));
+    }
+    function supportTime(value){if(!value)return '—';return new Date(typeof value==='number'&&value<100000000000?value*1000:value).toLocaleString('ru-RU');}
+    async function initSupport(){
+        try{
+            const next=await supportCall('support_identity');
+            const changed=!supportIdentity||next.canDiagnose!==supportIdentity.canDiagnose||next.role!==supportIdentity.role;
+            supportIdentity=next;supportToolbar();
+            if(changed&&supportLastMenu)applyLoadedData(supportLastMenu,historyData);
+        }catch(e){if(e.status===401||e.status===403){supportIdentity={canDiagnose:false};customerMode=false;supportToolbar();if(supportLastMenu)applyLoadedData(supportLastMenu,historyData);}} // failure of support never hides the order interface
+    }
+    async function openSupport(){
+        if(!supportIdentity?.canDiagnose)return;
+        if(supportPanel)supportPanel.remove();
+        supportPanel=document.createElement('div');supportPanel.style.cssText='position:fixed;inset:0;background:#fdfafd;z-index:20000;overflow:auto;padding:20px;box-sizing:border-box;';
+        const panel=supportPanel;document.body.appendChild(panel);
+        panel.appendChild(supportButton('Закрыть',()=>{panel.remove();if(supportPanel===panel)supportPanel=null;}));
+        supportText(panel,'Клиенты · диагностика','h2');
+        supportText(panel,'Просмотр данных клиента. Оформление и изменение заказов здесь отключены.');
+        const search=document.createElement('input');search.placeholder='Имя, точка или аккаунт';search.style.cssText='width:100%;padding:12px;box-sizing:border-box;';panel.appendChild(search);
+        const list=document.createElement('div'),details=document.createElement('div');panel.append(list,details);
+        const draw=()=>{list.replaceChildren();const q=search.value.toLowerCase();for(const p of supportClients.filter(p=>(p.uid+' '+p.names.join(' ')).toLowerCase().includes(q))){list.appendChild(supportButton(p.names.join(', ')+' · '+p.uid,()=>showSupportClient(p,details)));}};
+        search.oninput=draw;
+        try{list.textContent='Загрузка…';supportClients=(await supportCall('support_clients')).clients;draw();}
+        catch(e){list.textContent='Не удалось открыть диагностику. Закройте и откройте её ещё раз. Доступ определяется ролью admin в таблице.';}
+    }
+    async function showSupportClient(client,box){
+        box.replaceChildren();supportText(box,'Загрузка '+client.names.join(', ')+'…');
+        const target=client.uid;box.dataset.target=target;
+        try{
+            const data=await supportCall('support_client',{target});if(box.dataset.target!==target)return;box.replaceChildren();
+            supportText(box,client.names.join(', '),'h3');supportText(box,'Роль: '+data.client.role+' · '+(data.client.blocked?'Доступ ограничен':'Доступ открыт'));
+            box.appendChild(supportButton('Обновить',()=>showSupportClient(client,box)));
+            if(data.snapshot){
+                supportText(box,'Меню обновлено: '+supportTime(data.snapshot.menuAt)+'\nИстория обновлена: '+supportTime(data.snapshot.historyAt));
+                const menu=document.createElement('details');supportText(menu,'Меню и цены','summary');supportText(menu,data.snapshot.menu.map(p=>p.name+' — '+p.price+' ₽').join('\n'));box.appendChild(menu);
+                const hist=document.createElement('details');supportText(hist,'История из серверной копии ('+data.snapshot.history.length+')','summary');
+                for(const h of data.snapshot.history.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30))supportText(hist,h.date+' · '+h.shopName+' · '+h.total+' ₽\n'+h.items.map(i=>i.name+' × '+i.qty).join(', '));box.appendChild(hist);
+            }else supportText(box,'Серверная копия ещё не загружена.');
+            supportText(box,'Сохранённые отправки','h3');
+            if(!data.orders.length)supportText(box,'В журнале сервера отправок не найдено.');
+            const states={queued:'Сохранён на сервере, ожидает синхронизации',synced:'Google подтвердил обработку',rejected:'Получен отказ'};
+            for(const r of data.orders.slice().reverse()){
+                const card=document.createElement('div');card.className='card';
+                supportText(card,r.date+' · '+r.shopName,'b');
+                supportText(card,(states[r.status]||r.status)+'\nОформление: '+supportTime(r.acceptedAt)+'\nПопыток: '+r.attempts+'\nID: '+r.id+(r.error?'\nПричина: '+r.error:''));
+                supportText(card,Object.entries(r.items).map(([name,i])=>name+' × '+i.qty).join(', '));box.appendChild(card);
+            }
+            supportText(box,'События на устройстве','h3');
+            supportText(box,'Сбор начинается после установки этой версии. Если связь отсутствовала, последние события могут ещё не поступить.');
+            const names={app_open:'Открытие приложения',read_start:'Начало загрузки',read_result:'Ответ при загрузке',read_error:'Ошибка загрузки',order_start:'Начало оформления',order_result:'Ответ на оформление',order_error:'Ошибка оформления',receipt_result:'Проверка прежней отправки',menu_gate:'Проверка меню',runtime_error:'Ошибка интерфейса',view_mode:'Смена режима'};
+            for(const row of data.events){const e=row.event;supportText(box,supportTime(row.receivedAt)+' · '+(names[e.kind]||e.kind)+'\n'+['stage','http','status','code','date','shopName','requestId','attempt','elapsedMs'].filter(k=>e[k]!==undefined).map(k=>k+': '+e[k]).join(' · '));}
+            if(!data.events.length)supportText(box,'Событий пока нет.');
+        }catch(e){if(box.dataset.target===target){box.replaceChildren();supportText(box,'Не удалось загрузить данные. Проверьте доступ и повторите.');}}
+    }
+    supportEvent('app_open');
+    setInterval(flushSupportEvents,15000);
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushSupportEvents();});
+    window.addEventListener('error',()=>supportEvent('runtime_error',{code:'window_error'}));
+    window.addEventListener('unhandledrejection',()=>supportEvent('runtime_error',{code:'unhandled_rejection'}));
+
     let menuData = [], historyData = [], isAdmin = false, editUser = null, allPartners = [];
     let externalCatalog = {};
     let historyLoading = false;
@@ -276,6 +374,7 @@
         let lastErr = null;
         const label = requestLabel(url, options);
         for (let attempt = 1; attempt <= tries; attempt++) {
+            supportEvent('read_start',{stage:label,attempt});
             traceLoad(label + ': попытка ' + attempt);
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -283,11 +382,12 @@
                 const res = await fetch(url, { ...options, signal: controller.signal });
                 clearTimeout(timer);
                 traceLoad(label + ': HTTP ' + res.status + ', ' + (res.headers.get('content-type') || 'без типа'));
+                supportEvent('read_result',{stage:label,http:res.status,attempt});
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 return res;
             } catch (err) {
                 clearTimeout(timer);
-                lastErr = err;
+                lastErr = err;supportEvent('read_error',{stage:label,code:err.name,attempt});
                 traceLoad(label + ': ' + err.name + ' — ' + err.message);
                 if (attempt < tries) {
                     if (onRetry) onRetry(attempt, tries);
@@ -391,6 +491,7 @@
             if (!menuLoading) load(true).catch(() => {});
             await menuRefreshPromise;
             if (!menuVerified) {
+                supportEvent('menu_gate',{status:'not_ready'});
                 orderStatus('Новый заказ пока не отправлен. Выбранные товары остались в корзине. Нажмите «Оформить» ещё раз или свяжитесь с менеджером.');
                 return false;
             }
@@ -446,8 +547,8 @@
                     const r=await orderRequest({type:'order_receipt',requestId:entry.payload.requestId});
                     if(r.orderProtocol===5 && r.requestId===entry.payload.requestId && r.durable===true && ['queued','synced','rejected'].includes(r.status)) {
                         saveReceipt({payload:entry.payload,status:r.status,code:r.code});
-                        if(entry.status!=='synced' && r.status==='synced') { orderStatus('Заказ оформлен.'); load(true); }
-                        else if(entry.status==='unknown' && r.status==='queued') orderStatus('Заказ оформлен.');
+                        supportEvent('receipt_result',{requestId:r.requestId,date:entry.payload.date,shopName:entry.payload.shopName,status:r.status,code:r.code||''});
+                        if(entry.status!=='synced' && r.status==='synced') { load(true); }
                         else if(r.status==='rejected') orderStatus('Предыдущий заказ не принят. Свяжитесь с менеджером.');
                     }
                 } catch(e) {} // no receipt is not success; retain the original request.
@@ -520,9 +621,10 @@
 
     // Применяет данные меню/истории к интерфейсу (общая часть для "живой" загрузки и кэша)
     function applyLoadedData(m, h) {
+        supportLastMenu=m;supportLastHistory=h||[];
         menuData = m.menu || []; 
         historyData = h || []; 
-        isAdmin = m.isAdmin === true; 
+        isAdmin = (supportIdentity ? supportIdentity.canDiagnose===true : m.isAdmin===true) && !customerMode; 
         allPartners = m.allPartners || [];
         externalCatalog = m.catalog || {}; 
         currentDeliveryCost = m.deliveryCost !== undefined ? m.deliveryCost : 300;
@@ -973,9 +1075,11 @@
                 sendingOrder=true;
                 try {
                     // Save request identity before transmission, so a lost reply can be checked later.
+                    supportEvent('order_start',{requestId:payload.requestId,date:payload.date,shopName:payload.shopName,products:Object.keys(payload.items).length});flushSupportEvents();
                     saveReceipt({payload,status:'unknown'});
                     const receipt=await transmitOrder(payload);
                     saveReceipt({payload,status:receipt.status,code:receipt.code});
+                    supportEvent('order_result',{requestId:payload.requestId,date:payload.date,shopName:payload.shopName,status:receipt.status,code:receipt.code||''});flushSupportEvents();
                     if(receipt.status==='rejected') {
                         orderStatus('Заказ не принят. Выбранные товары остались в корзине. Свяжитесь с менеджером.');
                         return;
@@ -987,6 +1091,7 @@
                     orderStatus(receipt.status==='queued' ? 'Заказ оформлен.' : 'Заказ оформлен.');
                     await load(true); if(isAdmin) tab('admin'); else tab('hist');
                 } catch(e) {
+                    supportEvent('order_error',{requestId:payload.requestId,date:payload.date,shopName:payload.shopName,code:e.definitive?(e.serverMessage||'not_accepted'):e.name});flushSupportEvents();
                     tg.HapticFeedback.notificationOccurred('warning');
                     if(e.definitive) {
                         saveReceipt({payload,status:'not_sent',code:e.serverMessage||e.message});
@@ -1052,6 +1157,8 @@
     function onDateChange() { renderMenu(); }
     function onShopChange() { renderMenu(); }
     load();
+    initSupport();
+    setInterval(initSupport,60000);
 </script>
 </body>
 </html>
