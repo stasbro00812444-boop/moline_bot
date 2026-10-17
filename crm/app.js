@@ -12,9 +12,36 @@ function demoSnapshot(){const s=CRMCore.reduce(demoEvents);data={employee:{id:'d
 function currentShift(){return data.shifts.find(x=>x.location_id===locationId&&x.status==='open');}
 function available(p){return p.stock_tracked?(data.stock[CRMCore.key(locationId,p.id)]||0):null;}
 function notify(message){$('#toast').textContent=message;$('#toast').style.display='block';clearTimeout(notify.timer);notify.timer=setTimeout(()=>$('#toast').style.display='none',4500);}
+
+function mobileMenu(){return !!window.matchMedia?.('(max-width:760px)').matches;}
+function setMenu(open,restoreFocus=true){
+ const mobile=mobileMenu();open=!!open&&mobile;
+ document.body.classList.toggle('menu-open',open);
+ $('#menu-toggle').setAttribute('aria-expanded',String(open));
+ $('#menu-backdrop').hidden=!open;
+ $('#sidebar').inert=mobile&&!open;
+ $('#sidebar').setAttribute('aria-hidden',String(mobile&&!open));
+ $('#workspace').inert=open;
+ if(open)$('#menu-close').focus();
+ else if(restoreFocus&&mobile)$('#menu-toggle').focus();
+}
+$('#menu-toggle').onclick=()=>setMenu(!document.body.classList.contains('menu-open'));
+$('#menu-close').onclick=()=>setMenu(false);
+$('#menu-backdrop').onclick=()=>setMenu(false);
+window.addEventListener('keydown',e=>{
+ if(e.key==='Escape'&&document.body.classList.contains('menu-open'))setMenu(false);
+ if(e.key==='Tab'&&document.body.classList.contains('menu-open')){
+  const controls=[...$('#sidebar').querySelectorAll('a[href],button:not(:disabled)')];
+  const first=controls[0],last=controls[controls.length-1];
+  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+  else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+ }
+});
+window.matchMedia?.('(max-width:760px)').addEventListener('change',()=>setMenu(false,false));
+
 function render(){
   $('#nav').innerHTML=Object.entries(labels).map(([id,name])=>`<button data-page="${id}" class="${page===id?'active':''}">${name}</button>`).join('');
-  $('#nav').querySelectorAll('button').forEach(b=>{b.disabled=busy||(!live&&!demoMode&&b.dataset.page!=='settings');b.onclick=()=>{if(busy)return;page=b.dataset.page;render();};});
+  $('#nav').querySelectorAll('button').forEach(b=>{b.disabled=busy||(!live&&!demoMode&&b.dataset.page!=='settings');b.onclick=()=>{if(busy)return;page=b.dataset.page;setMenu(false,false);render();};});
   $('#title').textContent=labels[page];$('#identity').textContent=data.employee.name+' · '+data.employee.role;
   $('#location').innerHTML=data.locations.map(l=>`<option value="${esc(l.id)}" ${l.id===locationId?'selected':''}>${esc(l.name)}</option>`).join('');
   $('#location').disabled=busy;$('#shiftButton').disabled=busy||(!live&&!demoMode);$('#shiftButton').textContent=currentShift()?'Закрыть смену':'Открыть смену';
@@ -91,3 +118,4 @@ window.addEventListener('beforeunload',e=>{if(pending||busy){e.preventDefault();
 window.Telegram?.WebApp?.ready();window.Telegram?.WebApp?.expand();
 data={employee:{name:'Вход не выполнен',role:'—'},locations:[{id:'CAFE',name:'Кофейня'},{id:'WORKSHOP',name:'Цех'}],products:[],partners:[],sales:[],shifts:[],stock:{}};
 render();
+if(window.matchMedia)setMenu(false,false);
