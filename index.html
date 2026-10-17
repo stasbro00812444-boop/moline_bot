@@ -219,9 +219,25 @@
     let supportIdentity=null, customerMode=false, supportLastMenu=null, supportLastHistory=[];
     let supportEvents=[], supportFlushing=false, supportPanel=null, supportClients=[];
     const supportSession=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
+    const supportStorageKey=/^\d+$/.test(String(tg.initDataUnsafe?.user?.id||''))?'moline_support_events_v64_'+tg.initDataUnsafe.user.id:null;
+    let supportSequence=0;
+    try{const entries=JSON.parse(supportStorageKey?localStorage.getItem(supportStorageKey)||'[]':'[]');
+        if(Array.isArray(entries))supportEvents=entries.filter(e=>e&&typeof e.kind==='string'&&typeof e.eventId==='string'&&Number.isFinite(e.clientTime)&&Date.now()-e.clientTime<7*86400000&&e.clientTime<Date.now()+60000).slice(-200);
+    }catch(e){}
+    function persistSupportEvents(){
+        try{
+            if(!supportStorageKey)return;
+            let raw=JSON.stringify(supportEvents);
+            while(supportEvents.length>1&&new TextEncoder().encode(raw).length>256*1024){
+                const noise=supportEvents.findIndex(e=>['read_start','read_result'].includes(e.kind));supportEvents.splice(noise>=0?noise:0,1);raw=JSON.stringify(supportEvents);
+            }
+            localStorage.setItem(supportStorageKey,raw);
+        }catch(e){try{if(supportStorageKey)localStorage.removeItem(supportStorageKey);}catch(ignore){}}
+    }
     function supportEvent(kind,details={}) {
-        supportEvents.push({kind,...details,session:supportSession,clientTime:Date.now()});
-        if(supportEvents.length>100)supportEvents.shift();
+        supportEvents.push({kind,...details,eventId:supportSession+'-'+(++supportSequence),session:supportSession,clientTime:Date.now()});
+        while(supportEvents.length>200){const noise=supportEvents.findIndex(e=>['read_start','read_result'].includes(e.kind));supportEvents.splice(noise>=0?noise:0,1);}
+        persistSupportEvents();
     }
     async function supportCall(type,extra={}) {
         if(!tg.initData)throw new Error('Откройте приложение из Telegram.');
@@ -233,10 +249,11 @@
     }
     async function flushSupportEvents() {
         if(supportFlushing||!supportEvents.length||!tg.initData)return;
-        supportFlushing=true;const batch=supportEvents.splice(0,20);
-        try{await supportCall('support_events',{events:batch});}
-        catch(e){supportEvents=[...batch,...supportEvents].slice(-100);}
-        finally{supportFlushing=false;}
+        supportFlushing=true;const batch=supportEvents.slice(0,20);
+        try{await supportCall('support_events',{events:batch});
+            const ids=new Set(batch.map(e=>e.eventId));supportEvents=supportEvents.filter(e=>!ids.has(e.eventId));persistSupportEvents();
+            if(supportEvents.length)setTimeout(flushSupportEvents,1000);
+        }catch(e){} finally{supportFlushing=false;}
     }
     function supportButton(label,fn){const b=document.createElement('button');b.type='button';b.textContent=label;b.className='btn-repeat';b.style.cssText='padding:12px;margin:4px 0;';b.onclick=fn;return b;}
     function supportText(parent,text,tag='div'){const el=document.createElement(tag);el.textContent=text;el.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0;';parent.appendChild(el);return el;}
@@ -290,8 +307,8 @@
             if(supportPanel!==panel)return;draw();box.replaceChildren();supportText(box,'После выбора клиента здесь появятся его данные.');
         }catch(e){box.replaceChildren();supportText(box,'Не удалось открыть список. Расширенный доступ требует роли sis-admin в таблице.');box.appendChild(supportButton('Повторить',openSupport));}
     }
-    function supportError(code){return ({upstream_timeout:'Google не ответил вовремя',AbortError:'Истекло время ожидания',TypeError:'Не удалось выполнить сетевой запрос',menu_refresh_required:'Нужно обновить меню',menu_prices_changed:'Цены в корзине отличаются от текущего меню',partner_blocked:'Клиент заблокирован',invalid_order_shop:'Точка не соответствует аккаунту',invalid_ack:'Не получено корректное подтверждение',window_error:'Ошибка в интерфейсе',unhandled_rejection:'Незавершённая операция в интерфейсе'})[code]||code||'Причина не указана';}
-    function supportIsError(row){const e=row.event;return ['read_error','order_error','runtime_error'].includes(e.kind)||e.http>=400||e.status==='rejected'||(e.kind==='menu_gate'&&e.status==='not_ready');}
+    function supportError(code){return ({empty_cart:'Корзина пустая',empty_cart_after_refresh:'После обновления в корзине не осталось товаров',minimum_quantity:'Не набрано минимальное количество — 10 единиц',menu_not_ready:'Не удалось подтвердить меню',previous_unconfirmed:'Предыдущая отправка ещё не подтверждена',cart_changed:'Корзина изменилась во время проверки',cart_changed_after_confirmation:'После подтверждения изменились состав, цена или дата',already_sending:'Повторное нажатие во время текущей операции',existing_order:'Такой заказ уже найден в истории',receipt_storage_failed:'Не удалось сохранить подтверждение на устройстве',invalid_receipt:'Ответ не содержит корректного подтверждения сохранения',upstream_timeout:'Google не ответил вовремя',AbortError:'Истекло время ожидания',TypeError:'Не удалось выполнить сетевой запрос',menu_refresh_required:'Нужно обновить меню',menu_prices_changed:'Цены в корзине отличаются от текущего меню',partner_blocked:'Клиент заблокирован',invalid_order_shop:'Точка не соответствует аккаунту',invalid_ack:'Не получено корректное подтверждение',window_error:'Ошибка в интерфейсе',unhandled_rejection:'Незавершённая операция в интерфейсе'})[code]||code||'Причина не указана';}
+    function supportIsError(row){const e=row.event;return ['read_error','order_error','runtime_error','order_transport_error','order_refresh_error','order_local_warning'].includes(e.kind)||(e.kind==='order_stop'&&!['existing_order','already_sending'].includes(e.code))||e.http>=400||e.status==='rejected'||(e.kind==='menu_gate'&&e.status==='not_ready');}
     function supportOrderCard(parent,r){
         const card=document.createElement('div');card.className='card';parent.appendChild(card);
         supportText(card,r.date.split('-').reverse().join('.')+' · '+r.shopName,'b');
@@ -329,20 +346,30 @@
                 'Ошибки':()=>{
                     supportText(content,'Ошибки, полученные с устройства','h3');
                     if(!errors.length)supportText(content,'Ошибок не получено. Это не гарантирует, что их не было: старые версии приложения и устройства без связи могли не передать события.');
-                    for(const row of errors){const e=row.event;const card=document.createElement('div');card.className='card';content.appendChild(card);supportText(card,supportTime(row.receivedAt),'b');
+                    for(const row of errors){const e=row.event;const card=document.createElement('div');card.className='card';content.appendChild(card);supportText(card,supportTime(row.event.clientTime||row.receivedAt),'b');
                         supportText(card,(e.stage?e.stage+': ':'')+supportError(e.code||((e.http>=400)?'HTTP '+e.http:e.status==='rejected'?'Получен отказ':'Меню не подтверждено')));
                         if(e.date||e.shopName)supportText(card,[e.date,e.shopName].filter(Boolean).join(' · '));
                         if(e.requestId)supportText(card,'ID заказа: '+e.requestId);
+                        if(e.attemptId)supportText(card,'Попытка оформления: '+e.attemptId);
+                        if(Number.isFinite(e.quantity))supportText(card,'Количество единиц: '+e.quantity);
+                        if(e.items?.length){const cart=document.createElement('details');supportText(cart,'Корзина при нажатии (не подтверждение заказа)','summary');supportText(cart,e.items.map(i=>i.name+' × '+i.qty+' · '+i.price+' ₽').join('\n'));card.appendChild(cart);}
+                        if(e.line)supportText(card,'Строка интерфейса: '+e.line+(e.column?':'+e.column:''));
+                        supportText(card,'Получено сервером: '+supportTime(row.receivedAt));
                     }
                 },
                 'События':()=>{
-                    supportText(content,'Последние действия и ответы','h3');
-                    const names={app_open:'Приложение открыто',read_start:'Началась загрузка',read_result:'Получен ответ',read_error:'Ошибка загрузки',order_start:'Нажато оформление',order_result:'Получен результат оформления',order_error:'Ошибка оформления',receipt_result:'Проверена прежняя отправка',menu_gate:'Проверено меню',runtime_error:'Ошибка интерфейса',view_mode:'Изменён режим'};
+                    supportText(content,'Последние действия и ответы','h3');supportText(content,'Основное время — часы устройства. Время получения сервером указано отдельно.');
+                    const names={app_open:'Приложение открыто',read_start:'Началась загрузка',read_result:'Получен ответ',read_error:'Ошибка загрузки',order_start:'Началась отправка заказа',order_result:'Получен результат оформления',order_error:'Ошибка оформления',receipt_result:'Проверена прежняя отправка',menu_gate:'Проверено меню',runtime_error:'Ошибка интерфейса',view_mode:'Изменён режим',order_click:'Нажато «Оформить»',order_check:'Проверка перед оформлением',order_stop:'Оформление остановлено',order_confirmation:'Подтверждение заказа',order_confirmed:'Клиент подтвердил заказ',order_cancel:'Клиент отменил оформление',order_request_prepared:'Подготовлена отправка',order_send_attempt:'Попытка отправки',order_ack:'Получен ответ сервера',order_transport_error:'Ошибка отправки',order_success_shown:'Показано «Заказ оформлен»',order_refresh_error:'Заказ принят, история не обновилась',order_local_warning:'Не сохранено локальное подтверждение',order_http:'HTTP-ответ на отправку',receipt_http:'HTTP-ответ при проверке отправки'};
                     if(!data.events.length)supportText(content,'Событий пока нет. Сбор начинается после обновления приложения у клиента.');
                     for(const row of data.events){const e=row.event;const card=document.createElement('div');card.className='card';content.appendChild(card);
-                        supportText(card,supportTime(row.receivedAt)+' · '+(names[e.kind]||e.kind),'b');
-                        supportText(card,[e.stage,e.http?'HTTP '+e.http:'',e.status?({queued:'Сохранён на сервере',synced:'Обработка подтверждена',rejected:'Получен отказ',not_ready:'Меню не подтверждено'})[e.status]||e.status:'',e.code?supportError(e.code):'',e.date,e.shopName].filter(Boolean).join(' · '));
+                        supportText(card,supportTime(row.event.clientTime||row.receivedAt)+' · '+(names[e.kind]||e.kind),'b');
+                        supportText(card,[({click:'Нажатие',history_lookup:'Поиск прежнего заказа',previous_receipts:'Проверка прежней отправки',menu_before_confirmation:'Меню до подтверждения',menu_after_confirmation:'Меню после подтверждения',quantity:'Количество товаров',confirmation:'Окно подтверждения',prepare_request:'Подготовка заказа',local_receipt:'Сохранение номера отправки',transmit:'Отправка',refresh_history:'Обновление истории'})[e.stage]||e.stage,e.http?'HTTP '+e.http:'',e.status?({queued:'Сохранён на сервере',synced:'Обработка подтверждена',rejected:'Получен отказ',not_ready:'Меню не подтверждено',started:'Начато',complete:'Завершено',parsing:'Читается ответ',parsed:'Данные разобраны',requested:'Запрошено окно',opened:'Окно показано',confirmed:'Подтверждено',cancelled:'Отменено',new_request:'Новая отправка',same_id_retry:'Повтор с прежним ID',accepted:'Заказ принят',unconfirmed:'Подтверждения нет',not_sent:'Не отправлено'})[e.status]||e.status:'',e.code?supportError(e.code):'',e.date,e.shopName].filter(Boolean).join(' · '));
                         if(e.requestId)supportText(card,'ID заказа: '+e.requestId);
+                        if(e.attemptId)supportText(card,'Попытка оформления: '+e.attemptId);
+                        if(Number.isFinite(e.quantity))supportText(card,'Количество единиц: '+e.quantity);
+                        if(e.items?.length){const cart=document.createElement('details');supportText(cart,'Корзина при нажатии (не подтверждение заказа)','summary');supportText(cart,e.items.map(i=>i.name+' × '+i.qty+' · '+i.price+' ₽').join('\n'));card.appendChild(cart);}
+                        if(e.line)supportText(card,'Строка интерфейса: '+e.line+(e.column?':'+e.column:''));
+                        supportText(card,'Получено сервером: '+supportTime(row.receivedAt));
                     }
                 },
                 'Меню':()=>{
@@ -362,8 +389,8 @@
     supportEvent('app_open');
     setInterval(flushSupportEvents,15000);
     document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushSupportEvents();});
-    window.addEventListener('error',()=>supportEvent('runtime_error',{code:'window_error'}));
-    window.addEventListener('unhandledrejection',()=>supportEvent('runtime_error',{code:'unhandled_rejection'}));
+    window.addEventListener('error',e=>supportEvent('runtime_error',{code:e.error?.name||'window_error',line:Number(e.lineno)||0,column:Number(e.colno)||0}));
+    window.addEventListener('unhandledrejection',e=>supportEvent('runtime_error',{code:e.reason?.name||'unhandled_rejection'}));
 
     let menuData = [], historyData = [], isAdmin = false, editUser = null, allPartners = [];
     let externalCatalog = {};
@@ -513,7 +540,7 @@
         const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),10000);
         try {
             const response=await fetch(API+'?user='+encodeURIComponent(snapshot.user)+'&t='+Date.now(),{signal:controller.signal,cache:'no-store'});
-            if(!response.ok)return false;
+            if(!response.ok){supportEvent('read_error',{stage:'Проверка прежнего заказа',http:response.status});return false;}
             const rows=await response.json();
             if(!Array.isArray(rows))return false;
             const delivery=snapshot.isSelfDelivery?0:Number(currentDeliveryCost);
@@ -524,7 +551,7 @@
             orderStatus('Заказ с этим составом на '+snapshot.date.split('-').reverse().join('.')+' уже есть в истории. Повторно отправлять его не нужно.');
             if(snapshot.user===user)tab('hist');
             return true;
-        } catch(e) {return false;} finally {clearTimeout(timer);}
+        } catch(e) {supportEvent('read_error',{stage:'Проверка прежнего заказа',code:e.name});return false;} finally {clearTimeout(timer);}
     }
     async function ensureMenuReady() {
         if (menuVerified) return true;
@@ -559,25 +586,28 @@
         const box=document.getElementById('order-receipts-v5');
         if(box)box.remove();
     }
-    async function orderRequest(payload) {
+    async function orderRequest(payload,attemptId) {
         const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),10000);
         try {
             const res=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(payload),signal:controller.signal});
+            supportEvent(payload.type==='order_receipt'?'receipt_http':'order_http',{attemptId,requestId:payload.requestId,http:res.status});
             const result=await res.json();
             if(!res.ok && res.status!==422) { const error=new Error(result.error||'HTTP '+res.status); error.definitive=res.status===400; error.serverMessage=result.message; throw error; }
             return result;
         } finally { clearTimeout(timer); }
     }
-    async function transmitOrder(payload) {
+    async function transmitOrder(payload,attemptId) {
         // Retry only the same immutable request ID; server/GAS deduplicate it.
         let last;
         for(let i=0;i<2;i++) {
             try {
-                const receipt=await orderRequest(payload);
+                supportEvent('order_send_attempt',{attemptId,requestId:payload.requestId,date:payload.date,shopName:payload.shopName,attempt:i+1});
+                const receipt=await orderRequest(payload,attemptId);
+                supportEvent('order_ack',{attemptId,requestId:payload.requestId,date:payload.date,shopName:payload.shopName,status:receipt.status,attempt:i+1});
                 if(receipt.orderProtocol!==5 || receipt.requestId!==payload.requestId || receipt.durable!==true ||
-                   !['queued','synced','rejected'].includes(receipt.status)) throw new Error('invalid_receipt');
+                   !['queued','synced','rejected'].includes(receipt.status)) throw Object.assign(new Error('invalid_receipt'),{proxyCode:'invalid_receipt'});
                 return receipt;
-            } catch(e){if(e.definitive)throw e;last=e;}
+            } catch(e){supportEvent('order_transport_error',{attemptId,requestId:payload.requestId,attempt:i+1,code:e.definitive?(e.serverMessage||'not_accepted'):(e.proxyCode||e.name)});if(e.definitive)throw e;last=e;}
         }
         throw last;
     }
@@ -750,17 +780,20 @@
         // Оба запроса идут параллельно, но история больше не задерживает меню.
         // Ошибка истории обработана сразу, даже если она придёт раньше меню.
         const historyResult = fetchWithRetry(`${API}?user=${user}${nocache}`, {}, 3, 15000)
-            .then(res => res.json())
+            .then(res => {supportEvent('read_result',{stage:'История',status:'parsing'});return res.json();})
             .then(h => {
                 if (!Array.isArray(h)) throw new Error('Некорректный ответ истории');
+                supportEvent('read_result',{stage:'История',status:'parsed'});
                 traceLoad('История: данные разобраны');
                 return { ok: true, data: h };
             }, () => ({ ok: false }))
-            .catch(() => ({ ok: false }));
+            .catch(e => {supportEvent('read_error',{stage:'История: разбор',code:e.name});return {ok:false};});
         let m = null;
         try {
             const mRes = await fetchWithRetry(`${API}?type=menu&user=${user}${nocache}`, {}, 3, 15000);
+            supportEvent('read_result',{stage:'Меню',status:'parsing'});
             m = await mRes.json();
+            supportEvent('read_result',{stage:'Меню',status:'parsed'});
             traceLoad('Меню: данные разобраны');
             if (loadVersion !== menuLoadVersion) return;
             if (m && m.isBlocked) {
@@ -780,6 +813,7 @@
             flushPendingOrders();
         } catch (e) {
             m = null;
+            supportEvent('read_error',{stage:'Меню: разбор или применение',code:e.name});
             traceLoad('Загрузка меню: ' + e.name + ' — ' + e.message);
             if (!cached) traceLoad('Сохранённого меню для быстрого показа нет');
             stopLoader();
@@ -1069,87 +1103,85 @@
         if(isAdmin) tab('admin'); 
     }
 
+    let confirmationPending=false;
     async function send() {
-        if(sendingOrder)return;
-        if(!currentCart || !Object.keys(currentCart).length) return;
-        sendingOrder=true;
+        const attemptId=newRequestId();let payload=null,phase='click',accepted=false,ownsPreflight=false;
+        const details=()=>{
+            const cart=payload?.items||currentCart||{};
+            return {attemptId,date:payload?.date||document.getElementById('dt')?.value||'',shopName:payload?.shopName||document.getElementById('shop-select')?.value||user,
+                products:Object.keys(cart).length,quantity:Object.values(cart).reduce((n,i)=>n+(Number(i.qty)||0),0)};
+        };
+        const record=(kind,extra={})=>{supportEvent(kind,{...details(),...extra});flushSupportEvents();};
+        const stop=code=>record('order_stop',{stage:phase,code});
+        record('order_click',{items:Object.entries(currentCart||{}).slice(0,100).map(([name,i])=>({name,qty:Number(i.qty),price:Number(i.price)}))});
+        if(sendingOrder||confirmationPending){stop('already_sending');return;}
+        sendingOrder=true;ownsPreflight=true;
         try {
-            const snapshot=cartSnapshot();
-            orderStatus('Проверяем заказ…');
-            if(await existingOrder(snapshot))return;
-            if(!sameOrder(snapshot,cartSnapshot())) {orderStatus('Корзина изменилась. Нажмите «Оформить» ещё раз.');return;}
+            if(!currentCart||!Object.keys(currentCart).length){stop('empty_cart');return;}
+            const snapshot=cartSnapshot();phase='history_lookup';
+            record('order_check',{stage:phase,status:'started'});orderStatus('Проверяем заказ…');
+            if(await existingOrder(snapshot)){stop('existing_order');return;}
+            record('order_check',{stage:phase,status:'complete'});
+            if(!sameOrder(snapshot,cartSnapshot())){stop('cart_changed');orderStatus('Корзина изменилась. Нажмите «Оформить» ещё раз.');return;}
+            phase='previous_receipts';record('order_check',{stage:phase,status:'started'});
             await flushPendingOrders();
-            if(readReceipts().some(r=>r.status==='unknown' && !sameOrder(r.payload,snapshot))) {
-                orderStatus('Проверяем предыдущую отправку. Пока подтверждения нет, повторный заказ не отправляем. Корзина осталась на экране.'); return;
-            }
+            if(readReceipts().some(r=>r.status==='unknown'&&!sameOrder(r.payload,snapshot))){stop('previous_unconfirmed');orderStatus('Проверяем предыдущую отправку. Пока подтверждения нет, повторный заказ не отправляем. Корзина осталась на экране.');return;}
+            phase='menu_before_confirmation';record('order_check',{stage:phase,status:'started'});
+            if(!await ensureMenuReady()){stop('menu_not_ready');return;}
+            if(!Object.keys(currentCart).length){stop('empty_cart_after_refresh');return;}
+            phase='quantity';record('order_check',{stage:phase,status:'started'});
+            if(!isAdmin&&Object.values(currentCart).reduce((n,i)=>n+Number(i.qty),0)<10){stop('minimum_quantity');tg.showAlert('Минимальное количество для заказа — 10 единиц продукции.');return;}
             orderStatus('');
-        } finally {sendingOrder=false;}
-        if (!await ensureMenuReady()) return;
-        const date = document.getElementById('dt').value, shop = document.getElementById('shop-select').value || user;
-        if(!currentCart || !Object.keys(currentCart).length) return;
-        
-        if (!isAdmin) {
-            let totalQty = 0;
-            for (let k in currentCart) totalQty += currentCart[k].qty;
-            if (totalQty < 10) {
-                tg.showAlert("Минимальное количество для заказа — 10 единиц продукции.");
-                return;
-            }
-        }
-
-        tg.showConfirm(`Заказать для "${shop}"?`, async (ok) => {
-            if (ok) {
-                if (!await ensureMenuReady()) return;
-                if (!Object.keys(currentCart).length) return;
-                showLoader();
-                tg.MainButton.showProgress();
-
-                const retryEntry=readReceipts().find(r=>r.status==='unknown' && sameOrder(r.payload,cartSnapshot()));
-                const payload = retryEntry ? JSON.parse(JSON.stringify(retryEntry.payload)) : {
-                    orderProtocol: 5, requestId: newRequestId(), clientCreatedAt: new Date().toISOString(),
-                    user: editUser || user, 
-                    date: date, 
-                    shopName: shop,
-                    items: JSON.parse(JSON.stringify(currentCart)),
-                    isSelfDelivery: isSelfDelivery
-                };
-                
-                if(sendingOrder) { hideLoader(); tg.MainButton.hideProgress(); return; }
+            const confirmedSnapshot=cartSnapshot();
+            phase='confirmation';confirmationPending=true;sendingOrder=false;ownsPreflight=false;
+            record('order_confirmation',{status:'requested'});
+            tg.showConfirm(`Заказать для "${confirmedSnapshot.shopName}"?`, async ok=>{
+                confirmationPending=false;
+                record(ok?'order_confirmed':'order_cancel',{status:ok?'confirmed':'cancelled'});
+                if(!ok)return;
+                if(sendingOrder){stop('already_sending');return;}
                 sendingOrder=true;
                 try {
-                    // Save request identity before transmission, so a lost reply can be checked later.
-                    supportEvent('order_start',{requestId:payload.requestId,date:payload.date,shopName:payload.shopName,products:Object.keys(payload.items).length});flushSupportEvents();
-                    saveReceipt({payload,status:'unknown'});
-                    const receipt=await transmitOrder(payload);
-                    saveReceipt({payload,status:receipt.status,code:receipt.code});
-                    supportEvent('order_result',{requestId:payload.requestId,date:payload.date,shopName:payload.shopName,status:receipt.status,code:receipt.code||''});flushSupportEvents();
-                    if(receipt.status==='rejected') {
-                        orderStatus('Заказ не принят. Выбранные товары остались в корзине. Свяжитесь с менеджером.');
-                        return;
-                    }
-                    tg.HapticFeedback.notificationOccurred('success');
+                    phase='menu_after_confirmation';record('order_check',{stage:phase,status:'started'});
+                    if(!await ensureMenuReady()){stop('menu_not_ready');return;}
+                    if(!Object.keys(currentCart).length){stop('empty_cart_after_refresh');return;}
+                    if(!sameOrder(confirmedSnapshot,cartSnapshot())){stop('cart_changed_after_confirmation');orderStatus('Состав, цена или дата изменились. Проверьте корзину и нажмите «Оформить» ещё раз.');return;}
+                    phase='prepare_request';
+                    const retry=readReceipts().find(r=>r.status==='unknown'&&sameOrder(r.payload,confirmedSnapshot));
+                    payload=retry?JSON.parse(JSON.stringify(retry.payload)):{orderProtocol:5,requestId:newRequestId(),clientCreatedAt:new Date().toISOString(),...confirmedSnapshot};
+                    record('order_request_prepared',{requestId:payload.requestId,status:retry?'same_id_retry':'new_request'});
+                    phase='local_receipt';
+                    try{saveReceipt({payload,status:'unknown'});}
+                    catch(e){stop('receipt_storage_failed');orderStatus('Заказ пока не отправлен. Не удалось сохранить данные отправки на устройстве. Корзина осталась на экране.');return;}
+                    showLoader();tg.MainButton.showProgress();phase='transmit';
+                    record('order_start',{requestId:payload.requestId});
+                    const receipt=await transmitOrder(payload,attemptId);
+                    accepted=receipt.status==='queued'||receipt.status==='synced';
+                    record('order_result',{requestId:payload.requestId,status:receipt.status,code:receipt.code||''});
+                    try{saveReceipt({payload,status:receipt.status,code:receipt.code});}
+                    catch(e){record('order_local_warning',{requestId:payload.requestId,code:'receipt_storage_failed'});}
+                    if(receipt.status==='rejected'){orderStatus('Заказ не принят. Выбранные товары остались в корзине. Свяжитесь с менеджером.');return;}
+                    phase='show_success';
+                    try{tg.HapticFeedback.notificationOccurred('success');}catch(e){}
                     editUser=null;currentCart={};
-                    document.getElementById('copy-notify').style.display='none';
-                    renderOrderReceipts();
-                    orderStatus(receipt.status==='queued' ? 'Заказ оформлен.' : 'Заказ оформлен.');
-                    await load(true); if(isAdmin) tab('admin'); else tab('hist');
+                    document.getElementById('copy-notify').style.display='none';renderOrderReceipts();
+                    orderStatus('Заказ оформлен.');
+                    record('order_success_shown',{requestId:payload.requestId,status:receipt.status});
+                    phase='refresh_history';
+                    try{await load(true);if(isAdmin)tab('admin');else tab('hist');}
+                    catch(e){record('order_refresh_error',{requestId:payload.requestId,code:e.name});orderStatus('Заказ оформлен. История обновится после восстановления связи.');}
                 } catch(e) {
-                    supportEvent('order_error',{requestId:payload.requestId,date:payload.date,shopName:payload.shopName,code:e.definitive?(e.serverMessage||'not_accepted'):e.name});flushSupportEvents();
-                    tg.HapticFeedback.notificationOccurred('warning');
-                    if(e.definitive) {
-                        saveReceipt({payload,status:'not_sent',code:e.serverMessage||e.message});
-                        orderStatus('Заказ пока не отправлен. Обновляем меню; выбранные товары остались в корзине. После обновления нажмите «Оформить».');
-                        menuVerified=false;load(true);
-                    } else {
-                        orderStatus('Проверяем отправку заказа. Пока подтверждения нет. Выбранные товары остались в корзине; можно повторить проверку кнопкой «Оформить».');
-                        flushPendingOrders();
-                    }
-                    renderOrderReceipts();
-                } finally {
-                    sendingOrder=false;hideLoader();tg.MainButton.hideProgress();
-                }
-            }
-        });
+                    record('order_error',{stage:phase,requestId:payload?.requestId||'',status:accepted?'accepted':'unconfirmed',code:e.definitive?(e.serverMessage||'not_accepted'):(e.proxyCode||e.name)});
+                    if(accepted){orderStatus('Заказ оформлен. История обновится после восстановления связи.');return;}
+                    if(!payload){orderStatus('Заказ пока не отправлен. Выбранные товары остались в корзине. Повторите оформление.');return;}
+                    if(e.definitive){try{saveReceipt({payload,status:'not_sent',code:e.serverMessage||e.message});}catch(ignore){}
+                        orderStatus('Заказ пока не отправлен. Обновляем меню; выбранные товары остались в корзине. После обновления нажмите «Оформить».');menuVerified=false;load(true).catch(()=>{});
+                    }else{orderStatus('Проверяем отправку заказа. Пока подтверждения нет. Выбранные товары остались в корзине; можно повторить проверку кнопкой «Оформить».');flushPendingOrders();}
+                }finally{sendingOrder=false;hideLoader();tg.MainButton.hideProgress();}
+            });
+            record('order_confirmation',{status:'opened'});
+        }catch(e){confirmationPending=false;record('order_error',{stage:phase,code:e.name,status:'not_sent'});orderStatus('Заказ пока не отправлен. Выбранные товары остались в корзине. Повторите оформление.');}
+        finally{if(ownsPreflight)sendingOrder=false;}
     }
 
     async function deleteOrder(u, d, shop) {
@@ -1184,6 +1216,7 @@
                 box.innerHTML += `<div class="card"><div class="row"><div><b>${ord.shopName}</b><br><small>${ord.total} ₽</small></div><div style="display:flex; align-items:center;"><button class="btn-m" style="background:var(--main); color:#fff;" onclick="startEdit('${ord.user}', '${ord.shopName}', '${sel}', ${JSON.stringify(ord.items).replace(/"/g, '&quot;')})">ПРАВИТЬ</button><span class="del-icon" onclick="deleteOrder('${ord.user}','${sel}','${ord.shopName}')">✖</span></div></div></div>`;
             });
         } catch (e) {
+            supportEvent('read_error',{stage:'Админ: разбор или отображение',code:e.name});
             box.innerHTML = '<div class="card" style="text-align:center; color:#b30000;">Нет связи с сервером. Потяните вниз/откройте вкладку заново, чтобы повторить попытку.</div>';
         }
     }
