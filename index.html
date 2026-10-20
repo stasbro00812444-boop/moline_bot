@@ -307,7 +307,7 @@
             if(supportPanel!==panel)return;draw();box.replaceChildren();supportText(box,'После выбора клиента здесь появятся его данные.');
         }catch(e){box.replaceChildren();supportText(box,'Не удалось открыть список. Расширенный доступ требует роли sis-admin в таблице.');box.appendChild(supportButton('Повторить',openSupport));}
     }
-    function supportError(code){return ({empty_cart:'Корзина пустая',empty_cart_after_refresh:'После обновления в корзине не осталось товаров',minimum_quantity:'Не набрано минимальное количество для этого клиента',menu_not_ready:'Не удалось подтвердить меню',previous_unconfirmed:'Предыдущая отправка ещё не подтверждена',cart_changed:'Корзина изменилась во время проверки',cart_changed_after_confirmation:'После подтверждения изменились состав, цена или дата',already_sending:'Повторное нажатие во время текущей операции',existing_order:'Такой заказ уже найден в истории',receipt_storage_failed:'Не удалось сохранить подтверждение на устройстве',invalid_receipt:'Ответ не содержит корректного подтверждения сохранения',upstream_timeout:'Google не ответил вовремя',AbortError:'Истекло время ожидания',TypeError:'Не удалось выполнить сетевой запрос',menu_refresh_required:'Нужно обновить меню',menu_prices_changed:'Цены в корзине отличаются от текущего меню',partner_blocked:'Клиент заблокирован',invalid_order_shop:'Точка не соответствует аккаунту',invalid_ack:'Не получено корректное подтверждение',window_error:'Ошибка в интерфейсе',unhandled_rejection:'Незавершённая операция в интерфейсе'})[code]||code||'Причина не указана';}
+    function supportError(code){return ({empty_cart:'Корзина пустая',empty_cart_after_refresh:'После обновления в корзине не осталось товаров',receipt_absent_confirmed:'Отправка не найдена на сервере; исходные данные сохранены на устройстве',minimum_quantity:'Не набрано минимальное количество для этого клиента',menu_not_ready:'Не удалось подтвердить меню',previous_unconfirmed:'Предыдущая отправка ещё не подтверждена',cart_changed:'Корзина изменилась во время проверки',cart_changed_after_confirmation:'После подтверждения изменились состав, цена или дата',already_sending:'Повторное нажатие во время текущей операции',existing_order:'Такой заказ уже найден в истории',receipt_storage_failed:'Не удалось сохранить подтверждение на устройстве',invalid_receipt:'Ответ не содержит корректного подтверждения сохранения',upstream_timeout:'Google не ответил вовремя',AbortError:'Истекло время ожидания',TypeError:'Не удалось выполнить сетевой запрос',menu_refresh_required:'Нужно обновить меню',menu_prices_changed:'Цены в корзине отличаются от текущего меню',partner_blocked:'Клиент заблокирован',invalid_order_shop:'Точка не соответствует аккаунту',invalid_ack:'Не получено корректное подтверждение',window_error:'Ошибка в интерфейсе',unhandled_rejection:'Незавершённая операция в интерфейсе'})[code]||code||'Причина не указана';}
     function supportIsError(row){const e=row.event;return ['read_error','order_error','runtime_error','order_transport_error','order_refresh_error','order_local_warning'].includes(e.kind)||(e.kind==='order_stop'&&!['existing_order','already_sending'].includes(e.code))||e.http>=400||e.status==='rejected'||(e.kind==='menu_gate'&&e.status==='not_ready');}
     function supportOrderCard(parent,r){
         const card=document.createElement('div');card.className='card';parent.appendChild(card);
@@ -363,7 +363,7 @@
                     if(!data.events.length)supportText(content,'Событий пока нет. Сбор начинается после обновления приложения у клиента.');
                     for(const row of data.events){const e=row.event;const card=document.createElement('div');card.className='card';content.appendChild(card);
                         supportText(card,supportTime(row.event.clientTime||row.receivedAt)+' · '+(names[e.kind]||e.kind),'b');
-                        supportText(card,[({click:'Нажатие',history_lookup:'Поиск прежнего заказа',previous_receipts:'Проверка прежней отправки',menu_before_confirmation:'Меню до подтверждения',menu_after_confirmation:'Меню после подтверждения',quantity:'Количество товаров',confirmation:'Окно подтверждения',prepare_request:'Подготовка заказа',local_receipt:'Сохранение номера отправки',transmit:'Отправка',refresh_history:'Обновление истории'})[e.stage]||e.stage,e.http?'HTTP '+e.http:'',e.status?({queued:'Сохранён на сервере',synced:'Обработка подтверждена',rejected:'Получен отказ',not_ready:'Меню не подтверждено',started:'Начато',complete:'Завершено',parsing:'Читается ответ',parsed:'Данные разобраны',requested:'Запрошено окно',opened:'Окно показано',confirmed:'Подтверждено',cancelled:'Отменено',new_request:'Новая отправка',same_id_retry:'Повтор с прежним ID',accepted:'Заказ принят',unconfirmed:'Подтверждения нет',not_sent:'Не отправлено'})[e.status]||e.status:'',e.code?supportError(e.code):'',e.date,e.shopName].filter(Boolean).join(' · '));
+                        supportText(card,[({click:'Нажатие',history_lookup:'Поиск прежнего заказа',previous_receipts:'Проверка прежней отправки',menu_before_confirmation:'Меню до подтверждения',menu_after_confirmation:'Меню после подтверждения',quantity:'Количество товаров',confirmation:'Окно подтверждения',prepare_request:'Подготовка заказа',local_receipt:'Сохранение номера отправки',transmit:'Отправка',refresh_history:'Обновление истории'})[e.stage]||e.stage,e.http?'HTTP '+e.http:'',e.status?({checking:'Сервер ещё принимает отправку',not_found:'Отправка не найдена на сервере',queued:'Сохранён на сервере',synced:'Обработка подтверждена',rejected:'Получен отказ',not_ready:'Меню не подтверждено',started:'Начато',complete:'Завершено',parsing:'Читается ответ',parsed:'Данные разобраны',requested:'Запрошено окно',opened:'Окно показано',confirmed:'Подтверждено',cancelled:'Отменено',new_request:'Новая отправка',same_id_retry:'Повтор с прежним ID',accepted:'Заказ принят',unconfirmed:'Подтверждения нет',not_sent:'Не отправлено'})[e.status]||e.status:'',e.code?supportError(e.code):'',e.date,e.shopName].filter(Boolean).join(' · '));
                         if(e.requestId)supportText(card,'ID заказа: '+e.requestId);
                         if(e.attemptId)supportText(card,'Попытка оформления: '+e.attemptId);
                         if(Number.isFinite(e.quantity))supportText(card,'Количество единиц: '+e.quantity);
@@ -583,6 +583,7 @@
 
     const receiptStorageKey = 'moline_order_receipts_v5_' + user;
     let checkingReceipts = false, sendingOrder = false;
+    const receiptChecks=new Map();
     function readReceipts() { try { return JSON.parse(localStorage.getItem(receiptStorageKey) || '[]'); } catch(e) { return []; } }
     function saveReceipt(entry) {
         const entries=readReceipts().filter(r=>r.payload.requestId!==entry.payload.requestId);
@@ -603,7 +604,7 @@
             const res=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(payload),signal:controller.signal});
             supportEvent(payload.type==='order_receipt'?'receipt_http':'order_http',{attemptId,requestId:payload.requestId,http:res.status});
             const result=await res.json();
-            if(!res.ok && res.status!==422) { const error=new Error(result.error||'HTTP '+res.status); error.definitive=res.status===400; error.serverMessage=result.message; throw error; }
+            if(!res.ok && res.status!==422) { const error=new Error(result.error||'HTTP '+res.status); error.definitive=payload.type!=='order_receipt' && res.status===400; error.serverMessage=result.message; throw error; }
             return result;
         } finally { clearTimeout(timer); }
     }
@@ -622,23 +623,48 @@
         }
         throw last;
     }
-    async function flushPendingOrders() {
-        // Status checks only. Never silently send a phone draft hours later.
-        if(checkingReceipts)return; checkingReceipts=true;
-        try {
-            for(const entry of readReceipts().filter(r=>r.status==='queued'||r.status==='unknown')) {
-                try {
-                    const r=await orderRequest({type:'order_receipt',requestId:entry.payload.requestId});
-                    if(r.orderProtocol===5 && r.requestId===entry.payload.requestId && r.durable===true && ['queued','synced','rejected'].includes(r.status)) {
-                        saveReceipt({payload:entry.payload,status:r.status,code:r.code});
-                        supportEvent('receipt_result',{requestId:r.requestId,date:entry.payload.date,shopName:entry.payload.shopName,status:r.status,code:r.code||''});
-                        if(entry.status!=='synced' && r.status==='synced') { load(true); }
-                        else if(r.status==='rejected') orderStatus('Предыдущий заказ не принят. Свяжитесь с менеджером.');
+    function sameOrderSlot(a,b) {
+        return a && b && a.user===b.user && a.shopName===b.shopName && a.date===b.date;
+    }
+    function validReceipt(r,id) {
+        return r && r.orderProtocol===5 && r.requestId===id && r.durable===true && ['queued','synced','rejected'].includes(r.status);
+    }
+    async function checkSavedReceipt(entry) {
+        const id=entry.payload.requestId;
+        if(receiptChecks.has(id))return receiptChecks.get(id);
+        const work=(async()=>{
+            try {
+                const r=await orderRequest({type:'order_receipt',requestId:id});
+                const latest=readReceipts().find(x=>x.payload.requestId===id);
+                if(!latest || !['queued','unknown'].includes(latest.status))return;
+                if(validReceipt(r,id)) {
+                    saveReceipt({payload:latest.payload,status:r.status,code:r.code});
+                    supportEvent('receipt_result',{requestId:id,date:latest.payload.date,shopName:latest.payload.shopName,status:r.status,code:r.code||''});
+                    if(latest.status!=='synced' && r.status==='synced') load(true).catch(()=>{});
+                } else if(r && r.receiptProtocol===2 && r.orderProtocol===5 && r.requestId===id && r.durable===false) {
+                    if(r.status==='not_found' && latest.status==='unknown') {
+                        // Keep the original payload and ID for an explicit manual retry.
+                        // An acknowledged queued order can never be dismissed this way.
+                        saveReceipt({...latest,status:'not_found',code:'receipt_absent_confirmed'});
+                        supportEvent('receipt_result',{requestId:id,date:latest.payload.date,shopName:latest.payload.shopName,status:'not_found',code:'receipt_absent_confirmed'});
+                    } else if(r.status==='checking') {
+                        supportEvent('receipt_result',{requestId:id,date:latest.payload.date,shopName:latest.payload.shopName,status:'checking'});
                     }
-                } catch(e) {} // no receipt is not success; retain the original request.
+                }
+            } catch(e) {
+                // Offline, generic HTTP errors and old proxy replies are never proof of absence.
+                supportEvent('receipt_result',{requestId:id,status:'unconfirmed',code:e.name||'receipt_unavailable'});
             }
-            renderOrderReceipts();
-        } finally {checkingReceipts=false;}
+        })();
+        receiptChecks.set(id,work);
+        try{return await work;}finally{receiptChecks.delete(id);}
+    }
+    async function flushPendingOrders(scope) {
+        // Read-only reconciliation: never replay stored orders automatically.
+        const entries=readReceipts().filter(r=>(r.status==='queued'||r.status==='unknown') && (!scope||sameOrderSlot(r.payload,scope)));
+        // A checkout checks its own slot; unrelated drafts cannot delay or block it.
+        await Promise.allSettled((scope?entries:entries.slice(-10)).map(checkSavedReceipt));
+        renderOrderReceipts();
     }
     // Preserve old phone queue for investigation; never auto-send its stale orders.
     try {
@@ -1136,8 +1162,8 @@
             record('order_check',{stage:phase,status:'complete'});
             if(!sameOrder(snapshot,cartSnapshot())){stop('cart_changed');orderStatus('Корзина изменилась. Нажмите «Оформить» ещё раз.');return;}
             phase='previous_receipts';record('order_check',{stage:phase,status:'started'});
-            await flushPendingOrders();
-            if(readReceipts().some(r=>r.status==='unknown'&&!sameOrder(r.payload,snapshot))){stop('previous_unconfirmed');orderStatus('Проверяем предыдущую отправку. Пока подтверждения нет, повторный заказ не отправляем. Корзина осталась на экране.');return;}
+            await flushPendingOrders(snapshot);
+            if(readReceipts().some(r=>r.status==='unknown'&&sameOrderSlot(r.payload,snapshot)&&!sameOrder(r.payload,snapshot))){stop('previous_unconfirmed');orderStatus('Проверяем предыдущую отправку. Пока подтверждения нет, повторный заказ не отправляем. Корзина осталась на экране.');return;}
             phase='menu_before_confirmation';record('order_check',{stage:phase,status:'started'});
             if(!await ensureMenuReady()){stop('menu_not_ready');return;}
             if(!Object.keys(currentCart).length){stop('empty_cart_after_refresh');return;}
@@ -1160,7 +1186,7 @@
                     if(!sameOrder(confirmedSnapshot,cartSnapshot())){stop('cart_changed_after_confirmation');orderStatus('Состав, цена или дата изменились. Проверьте корзину и нажмите «Оформить» ещё раз.');return;}
                     if(!orderMeetsMinimum()){stop('minimum_quantity');tg.showAlert(minimumOrderMessage());return;}
                     phase='prepare_request';
-                    const retry=readReceipts().find(r=>r.status==='unknown'&&sameOrder(r.payload,confirmedSnapshot));
+                    const retry=readReceipts().find(r=>['unknown','not_found'].includes(r.status)&&sameOrder(r.payload,confirmedSnapshot));
                     payload=retry?JSON.parse(JSON.stringify(retry.payload)):{orderProtocol:5,requestId:newRequestId(),clientCreatedAt:new Date().toISOString(),...confirmedSnapshot};
                     record('order_request_prepared',{requestId:payload.requestId,status:retry?'same_id_retry':'new_request'});
                     phase='local_receipt';
