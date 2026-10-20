@@ -307,7 +307,7 @@
             if(supportPanel!==panel)return;draw();box.replaceChildren();supportText(box,'После выбора клиента здесь появятся его данные.');
         }catch(e){box.replaceChildren();supportText(box,'Не удалось открыть список. Расширенный доступ требует роли sis-admin в таблице.');box.appendChild(supportButton('Повторить',openSupport));}
     }
-    function supportError(code){return ({empty_cart:'Корзина пустая',empty_cart_after_refresh:'После обновления в корзине не осталось товаров',minimum_quantity:'Не набрано минимальное количество — 10 единиц',menu_not_ready:'Не удалось подтвердить меню',previous_unconfirmed:'Предыдущая отправка ещё не подтверждена',cart_changed:'Корзина изменилась во время проверки',cart_changed_after_confirmation:'После подтверждения изменились состав, цена или дата',already_sending:'Повторное нажатие во время текущей операции',existing_order:'Такой заказ уже найден в истории',receipt_storage_failed:'Не удалось сохранить подтверждение на устройстве',invalid_receipt:'Ответ не содержит корректного подтверждения сохранения',upstream_timeout:'Google не ответил вовремя',AbortError:'Истекло время ожидания',TypeError:'Не удалось выполнить сетевой запрос',menu_refresh_required:'Нужно обновить меню',menu_prices_changed:'Цены в корзине отличаются от текущего меню',partner_blocked:'Клиент заблокирован',invalid_order_shop:'Точка не соответствует аккаунту',invalid_ack:'Не получено корректное подтверждение',window_error:'Ошибка в интерфейсе',unhandled_rejection:'Незавершённая операция в интерфейсе'})[code]||code||'Причина не указана';}
+    function supportError(code){return ({empty_cart:'Корзина пустая',empty_cart_after_refresh:'После обновления в корзине не осталось товаров',minimum_quantity:'Не набрано минимальное количество для этого клиента',menu_not_ready:'Не удалось подтвердить меню',previous_unconfirmed:'Предыдущая отправка ещё не подтверждена',cart_changed:'Корзина изменилась во время проверки',cart_changed_after_confirmation:'После подтверждения изменились состав, цена или дата',already_sending:'Повторное нажатие во время текущей операции',existing_order:'Такой заказ уже найден в истории',receipt_storage_failed:'Не удалось сохранить подтверждение на устройстве',invalid_receipt:'Ответ не содержит корректного подтверждения сохранения',upstream_timeout:'Google не ответил вовремя',AbortError:'Истекло время ожидания',TypeError:'Не удалось выполнить сетевой запрос',menu_refresh_required:'Нужно обновить меню',menu_prices_changed:'Цены в корзине отличаются от текущего меню',partner_blocked:'Клиент заблокирован',invalid_order_shop:'Точка не соответствует аккаунту',invalid_ack:'Не получено корректное подтверждение',window_error:'Ошибка в интерфейсе',unhandled_rejection:'Незавершённая операция в интерфейсе'})[code]||code||'Причина не указана';}
     function supportIsError(row){const e=row.event;return ['read_error','order_error','runtime_error','order_transport_error','order_refresh_error','order_local_warning'].includes(e.kind)||(e.kind==='order_stop'&&!['existing_order','already_sending'].includes(e.code))||e.http>=400||e.status==='rejected'||(e.kind==='menu_gate'&&e.status==='not_ready');}
     function supportOrderCard(parent,r){
         const card=document.createElement('div');card.className='card';parent.appendChild(card);
@@ -406,7 +406,18 @@
     let hasInn = false; 
     
     let currentCart = {}; 
-    let currentDeliveryCost = 300; 
+    let currentDeliveryCost = 300;
+    let currentMinimumOrderQty = 10;
+    function minimumOrderQty(value) {
+        if ((typeof value !== "number" && typeof value !== "string") || String(value).trim() === "") return 10;
+        const qty=Number(value);
+        return Number.isSafeInteger(qty) && qty>=1 && qty<=10000 ? qty : 10;
+    }
+    function orderMeetsMinimum() {
+        const qty=Object.values(currentCart||{}).reduce((n,i)=>n+Number(i.qty),0);
+        return isAdmin || qty>=currentMinimumOrderQty;
+    }
+    function minimumOrderMessage() { return "Минимальное количество для заказа — " + currentMinimumOrderQty + " шт."; } 
     let isSelfDelivery = localStorage.getItem('moline_self_delivery') === 'true';
 
     // =====================================================================
@@ -475,7 +486,7 @@
         // Persist only a customer catalog preview, without history, invoices or admin privileges.
         const m = payload.m;
         const preview = { menu: m.menu, catalog: m.catalog || {},
-            displayNames: m.displayNames || [user], deliveryCost: m.deliveryCost,
+            displayNames: m.displayNames || [user], deliveryCost: m.deliveryCost, minimumOrderQty: minimumOrderQty(m.minimumOrderQty),
             isAdmin: false, hasInn: false, invoices: [], allPartners: [] };
         try {
             localStorage.setItem(menuCacheKey, JSON.stringify({ version: 2, identity: menuIdentity,
@@ -701,6 +712,7 @@
         allPartners = m.allPartners || [];
         externalCatalog = m.catalog || {}; 
         currentDeliveryCost = m.deliveryCost !== undefined ? m.deliveryCost : 300;
+        currentMinimumOrderQty = minimumOrderQty(m.minimumOrderQty);
         
         hasInn = m.hasInn || false;
         invoicesData = m.invoices || [];
@@ -1130,7 +1142,7 @@
             if(!await ensureMenuReady()){stop('menu_not_ready');return;}
             if(!Object.keys(currentCart).length){stop('empty_cart_after_refresh');return;}
             phase='quantity';record('order_check',{stage:phase,status:'started'});
-            if(!isAdmin&&Object.values(currentCart).reduce((n,i)=>n+Number(i.qty),0)<10){stop('minimum_quantity');tg.showAlert('Минимальное количество для заказа — 10 единиц продукции.');return;}
+            if(!orderMeetsMinimum()){stop('minimum_quantity');tg.showAlert(minimumOrderMessage());return;}
             orderStatus('');
             const confirmedSnapshot=cartSnapshot();
             phase='confirmation';confirmationPending=true;sendingOrder=false;ownsPreflight=false;
@@ -1146,6 +1158,7 @@
                     if(!await ensureMenuReady()){stop('menu_not_ready');return;}
                     if(!Object.keys(currentCart).length){stop('empty_cart_after_refresh');return;}
                     if(!sameOrder(confirmedSnapshot,cartSnapshot())){stop('cart_changed_after_confirmation');orderStatus('Состав, цена или дата изменились. Проверьте корзину и нажмите «Оформить» ещё раз.');return;}
+                    if(!orderMeetsMinimum()){stop('minimum_quantity');tg.showAlert(minimumOrderMessage());return;}
                     phase='prepare_request';
                     const retry=readReceipts().find(r=>r.status==='unknown'&&sameOrder(r.payload,confirmedSnapshot));
                     payload=retry?JSON.parse(JSON.stringify(retry.payload)):{orderProtocol:5,requestId:newRequestId(),clientCreatedAt:new Date().toISOString(),...confirmedSnapshot};
