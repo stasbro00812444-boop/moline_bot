@@ -72,6 +72,26 @@
 
         /* --- НОВОЕ: баннер статуса связи --- */
         /* уведомления о связи убраны по просьбе — вместо них просто блюр + спиннер */
+        .recovery-screen {position:fixed;inset:0;z-index:30000;background:var(--bg);overflow-y:auto;overscroll-behavior:contain;padding:24px 20px calc(24px + env(safe-area-inset-bottom));box-sizing:border-box;}
+        .recovery-content {max-width:560px;margin:0 auto;overflow-wrap:anywhere;}
+        .recovery-content h1 {font-size:26px;line-height:1.2;margin:16px 0 16px;letter-spacing:-.025em;}
+        .recovery-content h2 {font-size:19px;line-height:1.4;margin:28px 0 6px;}
+        .recovery-content p {font-size:16px;line-height:1.55;margin:0 0 14px;}
+        .recovery-items {list-style:none;padding:0;margin:20px 0 28px;border-top:1px solid #decbd5;}
+        .recovery-items li {display:flex;gap:16px;justify-content:space-between;padding:14px 0;border-bottom:1px solid #decbd5;font-size:16px;line-height:1.45;}
+        .recovery-items strong {flex-shrink:0;white-space:nowrap;font-weight:600;}
+        .recovery-items span {min-width:0;}
+        .recovery-note {background:#f8e6ef;padding:16px;color:#563347;}
+        .recovery-actions {display:grid;gap:10px;}
+        .recovery-button,.recovery-launch {font:inherit;font-size:16px;line-height:1.4;min-height:48px;padding:14px 16px;border:0;border-radius:12px;background:var(--main);color:#2c2c2c;cursor:pointer;}
+        .recovery-button.secondary {background:#f1e9ed;}
+        .recovery-button:focus-visible,.recovery-launch:focus-visible,.recovery-copy:focus-visible {outline:3px solid #783b5c;outline-offset:3px;}
+        .recovery-button:hover {filter:brightness(.97);}
+        .recovery-button:disabled {opacity:.65;cursor:wait;}
+        .recovery-launch {display:block;width:calc(100% - 30px);margin:14px 15px;text-align:left;background:#f8e6ef;}
+        .recovery-copy {box-sizing:border-box;width:100%;min-height:220px;padding:14px;font:inherit;font-size:16px;line-height:1.5;margin:20px 0;resize:vertical;}
+        .recovery-content ::selection {background:#e8a4c4;color:#2c2c2c;}
+
     </style>
 </head>
 <body>
@@ -586,8 +606,9 @@
     const receiptChecks=new Map();
     function readReceipts() { try { return JSON.parse(localStorage.getItem(receiptStorageKey) || '[]'); } catch(e) { return []; } }
     function saveReceipt(entry) {
+        const old=readReceipts().find(r=>r.payload.requestId===entry.payload.requestId);
         const entries=readReceipts().filter(r=>r.payload.requestId!==entry.payload.requestId);
-        entries.push(entry); localStorage.setItem(receiptStorageKey,JSON.stringify(entries));
+        entries.push({...old,...entry}); localStorage.setItem(receiptStorageKey,JSON.stringify(entries));
     }
     function newRequestId() {
         if (crypto.randomUUID) return crypto.randomUUID();
@@ -597,6 +618,7 @@
         // Receipt checks continue in the background; no persistent technical banner.
         const box=document.getElementById('order-receipts-v5');
         if(box)box.remove();
+        recoveryRender();
     }
     async function orderRequest(payload,attemptId) {
         const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),10000);
@@ -666,6 +688,184 @@
         await Promise.allSettled((scope?entries:entries.slice(-10)).map(checkSavedReceipt));
         renderOrderReceipts();
     }
+    // v6.8: local rescue for a confirmed attempt. Never auto-submit an order.
+    const recoveryManager='molinebymonk';
+    let recoveryPanel=null, recoveryEntry=null, recoveryDismissed=new Set(), recoveryShown=new Set();
+    const recoveryRegistrations=new Map();
+    function recoveryToday(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
+    function recoveryCandidates(){
+        const latest=new Map();
+        for(const r of readReceipts()){
+            const p=r?.payload;
+            if(!p||p.user!==user||!p.requestId||!p.items||!/^\d{4}-\d{2}-\d{2}$/.test(p.date||''))continue;
+            const key=JSON.stringify([p.user,p.shopName,p.date]),old=latest.get(key);
+            if(!old||String(p.clientCreatedAt||'')>=String(old.payload.clientCreatedAt||''))latest.set(key,r);
+        }
+        return [...latest.values()].filter(r=>['unknown','not_found'].includes(r.status)&&!r.recoveryDismissedAt&&!r.recoverySentAt)
+          .sort((a,b)=>String(b.payload.clientCreatedAt||'').localeCompare(String(a.payload.clientCreatedAt||'')));
+    }
+    function recoveryText(entry){
+        const p=entry.payload,rows=Object.entries(p.items).map(([name,i])=>({name,qty:Number(i.qty),price:Number(i.price)}));
+        const date=p.date.split('-').reverse().join('.');
+        const subtotal=rows.reduce((n,i)=>n+i.qty*i.price,0);
+        const delivery=Number.isFinite(entry.recoveryDelivery)?entry.recoveryDelivery:null;
+        const lines=['MOLINE — заказ через менеджера',p.shopName,'Доставка: '+date,
+          'Аккаунт: '+p.user,'ID: '+p.requestId,'',...rows.map(i=>i.name+' — '+i.qty+' шт. × '+i.price+' ₽'),'',
+          'Товары: '+subtotal+' ₽',p.isSelfDelivery?'Самовывоз':delivery===null?'Доставку и итог подтвердите, пожалуйста.':'Доставка: '+delivery+' ₽'];
+        if(delivery!==null||p.isSelfDelivery)lines.push('Итого по сохранённым ценам: '+(subtotal+(p.isSelfDelivery?0:delivery))+' ₽');
+        if(p.clientCreatedAt)lines.push('Попытка оформления: '+new Date(p.clientCreatedAt).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'}));
+        lines.push('ID: '+p.requestId,'','Не получил(а) подтверждение в приложении. Проверьте, пожалуйста, нет ли уже этого заказа, и подтвердите его приём.');
+        if(p.date<recoveryToday())lines.push('Исходная дата уже прошла — прошу согласовать дальнейшие действия.');
+        return lines.join('\n');
+    }
+    function recoveryRemember(id,fields){
+        const r=readReceipts().find(x=>x.payload.requestId===id);if(!r)return;
+        saveReceipt({...r,...fields});
+    }
+    async function registerRecovery(entry){
+        const p=entry?.payload;if(!p||p.user!==user||!tg.initData)return;
+        if(entry.recoveryRegisterRetryAt>Date.now())return;
+        const stamp=Date.parse(p.clientCreatedAt);if(!Number.isFinite(stamp)||Date.now()-stamp>14*86400000)return;
+        const signature=[entry.status,entry.recoverySentAt||'',entry.recoveryDismissedAt||''].join(':');
+        if(entry.recoveryRegisteredState===signature||recoveryRegistrations.has(p.requestId))return;
+        const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
+        const work=(async()=>{
+            try{
+                const res=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},
+                  body:JSON.stringify({type:'order_recovery_register',initData:tg.initData,payload:p,
+                    outcome:entry.recoverySentAt?'manager_sent':entry.recoveryDismissedAt?'dismissed':entry.status}),signal:controller.signal});
+                const data=await res.json();
+                if(res.ok&&data.recoveryProtocol===1&&data.registered===true){
+                    const latest=readReceipts().find(x=>x.payload.requestId===p.requestId);
+                    if(latest)saveReceipt({...latest,recoveryRegisteredState:signature,recoveryRegisterRetryAt:0});
+                } else {throw new Error('registration_unavailable');}
+            }catch(e){try{recoveryRemember(p.requestId,{recoveryRegisterRetryAt:Date.now()+60000});}catch(ignore){}}finally{clearTimeout(timer);recoveryRegistrations.delete(p.requestId);}
+        })();recoveryRegistrations.set(p.requestId,work);return work;
+    }
+    async function recoveryCheck(entry){
+        const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),3500);
+        try{
+            const res=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},
+              body:JSON.stringify({type:'order_receipt',requestId:entry.payload.requestId}),signal:controller.signal});
+            const r=await res.json();
+            if(validReceipt(r,entry.payload.requestId)){
+                const latest=readReceipts().find(x=>x.payload.requestId===entry.payload.requestId)||entry;
+                saveReceipt({...latest,status:r.status,code:r.code});registerRecovery({...latest,status:r.status});
+                return ['queued','synced'].includes(r.status)?'accepted':'rejected';
+            }
+            if(r?.receiptProtocol===2&&r.requestId===entry.payload.requestId&&r.durable===false){
+                if(r.status==='checking')return 'checking';
+                if(r.status==='not_found'){recoveryRemember(entry.payload.requestId,{status:'not_found'});return 'not_found';}
+            }
+        }catch(e){}finally{clearTimeout(timer);}
+        return 'unknown';
+    }
+    function recoveryClose(){
+        if(recoveryPanel){recoveryPanel.remove();recoveryPanel=null;}
+        document.body.style.overflow='';
+        const focus=document.getElementById('recovery-launch');if(focus)focus.focus();
+    }
+    function recoveryNode(parent,tag,text,className){const e=document.createElement(tag);e.textContent=text;if(className)e.className=className;parent.appendChild(e);return e;}
+    function recoveryButton(parent,text,fn,secondary){const b=recoveryNode(parent,'button',text,secondary?'recovery-button secondary':'recovery-button');b.type='button';b.onclick=fn;return b;}
+    function recoveryScreen(entry,review=false,note=''){
+        recoveryClose();recoveryEntry=entry;
+        const panel=document.createElement('section');recoveryPanel=panel;
+        panel.id='recovery-panel';panel.className='recovery-screen';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-labelledby','recovery-title');
+        const content=recoveryNode(panel,'div','','recovery-content');
+        const heading=recoveryNode(content,'h1',review?'Проверьте заказ':'Заказ ждёт подтверждения');heading.id='recovery-title';heading.tabIndex=-1;
+        recoveryNode(content,'p',review?'После подтверждения откроется чат менеджера с готовым текстом. Нажмите «Отправить» в Telegram.':'Мы не получили подтверждение оформления. Состав сохранён — его можно передать менеджеру напрямую.');
+        recoveryNode(content,'h2',entry.payload.shopName);
+        recoveryNode(content,'p','Дата доставки: '+entry.payload.date.split('-').reverse().join('.'),'recovery-date');
+        if(entry.payload.date<recoveryToday())recoveryNode(content,'p','Дата этого заказа уже прошла. Менеджер поможет согласовать дальнейшие действия.','recovery-note');
+        const list=recoveryNode(content,'ul','','recovery-items');
+        for(const [name,item]of Object.entries(entry.payload.items)){
+            const row=recoveryNode(list,'li','');recoveryNode(row,'span',name);recoveryNode(row,'strong',item.qty+' шт.');
+        }
+        const subtotal=Object.values(entry.payload.items).reduce((n,i)=>n+Number(i.qty)*Number(i.price),0);
+        recoveryNode(content,'p','Товары по сохранённым ценам: '+subtotal+' ₽');
+        recoveryNode(content,'p',entry.payload.isSelfDelivery?'Самовывоз':Number.isFinite(entry.recoveryDelivery)?'Доставка: '+entry.recoveryDelivery+' ₽':'Стоимость доставки подтвердит менеджер.');
+        if(note)recoveryNode(content,'p',note,'recovery-note');
+        const actions=recoveryNode(content,'div','','recovery-actions');
+        const needsCopy=Array.from(recoveryText(entry)).length>3800||encodeURIComponent(recoveryText(entry)).length>7000;
+        if(review&&needsCopy)recoveryNode(content,'p','Для большого заказа подготовим текст для копирования. Затем откройте чат менеджера и вставьте его.','recovery-note');
+        if(!review)recoveryButton(actions,'Отправить менеджеру',async function(){
+            this.disabled=true;this.textContent='Проверяем подтверждение…';
+            const state=await recoveryCheck(entry);
+            if(state==='accepted'){
+                recoveryClose();orderStatus('Этот заказ уже сохранён. Его можно проверить в истории.');renderOrderReceipts();return;
+            }
+            recoveryScreen(entry,true,state==='checking'?'Сервер ещё проверяет отправку. Менеджер должен проверить наличие заказа перед добавлением.':state==='unknown'?'Сейчас нет ответа сервера. В сообщении будет просьба проверить заказ, чтобы избежать повтора.':'');
+        });
+        else{
+            recoveryButton(actions,needsCopy?'Подготовить текст заказа':'Подтвердить и открыть чат',()=>{
+                const text=recoveryText(entry);recoveryRemember(entry.payload.requestId,{recoveryOpenedAt:new Date().toISOString()});
+                if(Array.from(text).length>3800||encodeURIComponent(text).length>7000){recoveryShowCopy(content,text);return;}
+                try{tg.openTelegramLink('https://t.me/'+recoveryManager+'?text='+encodeURIComponent(text));}
+                catch(e){recoveryShowCopy(content,text);}
+            });
+            recoveryButton(actions,'Скопировать заказ',async function(){
+                const text=recoveryText(entry);
+                if(Array.from(text).length>3800){recoveryShowCopy(content,text);return;}
+                try{await navigator.clipboard.writeText(text);this.textContent='Заказ скопирован';}
+                catch(e){recoveryShowCopy(content,text);}
+            },true);
+            recoveryButton(actions,'Я отправил(а) сообщение',()=>{
+                recoveryRemember(entry.payload.requestId,{recoverySentAt:new Date().toISOString()});
+                supportEvent('receipt_result',{requestId:entry.payload.requestId,date:entry.payload.date,shopName:entry.payload.shopName,status:'manager_sent',code:'manager_handoff_reported'});
+                registerRecovery(readReceipts().find(x=>x.payload.requestId===entry.payload.requestId));
+                recoveryClose();renderOrderReceipts();orderStatus('Вы отметили отправку сообщения. Подтверждение заказа ожидайте от менеджера.');
+            },true);
+        }
+        recoveryButton(actions,'Вернуться в приложение',()=>{recoveryDismissed.add(entry.payload.requestId);recoveryClose();renderOrderReceipts();},true);
+        recoveryButton(actions,'Этот заказ уже не нужен',()=>{
+            tg.showConfirm('Убрать предложение отправить этот заказ менеджеру? Это не отменит заказ, если сервер уже принял его.',ok=>{
+                if(!ok)return;recoveryRemember(entry.payload.requestId,{recoveryDismissedAt:new Date().toISOString()});
+                registerRecovery(readReceipts().find(x=>x.payload.requestId===entry.payload.requestId));recoveryClose();renderOrderReceipts();
+            });
+        },true);
+        panel.onkeydown=e=>{
+            if(e.key==='Escape'){e.preventDefault();recoveryDismissed.add(entry.payload.requestId);recoveryClose();return;}
+            if(e.key==='Tab'){
+                const buttons=[heading,...panel.querySelectorAll('button,textarea')].filter(x=>!x.disabled);const first=buttons[0],last=buttons[buttons.length-1];
+                if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}
+                else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}
+            }
+        };
+        document.body.appendChild(panel);document.body.style.overflow='hidden';heading.focus();
+    }
+    function recoveryShowCopy(parent,text){
+        let box=parent.querySelector('.recovery-copy');
+        if(!box){
+            const parts=[];let part='';
+            for(const line of text.split('\n')){if(Array.from(part+'\n'+line).length>3300&&part){parts.push(part);part='';}part+=(part?'\n':'')+line;}if(part)parts.push(part);
+            parts.forEach((part,i)=>{
+                const value=parts.length>1?'ID: '+recoveryEntry.payload.requestId+' · часть '+(i+1)+' из '+parts.length+'\n'+part:part;
+                if(parts.length>1)recoveryNode(parent,'p','Часть '+(i+1)+' из '+parts.length+'. Отправьте менеджеру все части.');
+                const area=recoveryNode(parent,'textarea','','recovery-copy');area.readOnly=true;area.value=value;area.setAttribute('aria-label','Текст заказа, часть '+(i+1));
+                recoveryButton(parent,parts.length>1?'Скопировать часть '+(i+1):'Скопировать текст',async function(){try{await navigator.clipboard.writeText(value);this.textContent='Скопировано';}catch(e){area.focus();area.select();}},true);
+            });box=parent.querySelector('.recovery-copy');
+        }
+        box.focus();box.select();
+        if(!parent.querySelector('.recovery-chat')){
+            const b=recoveryButton(parent,'Открыть чат менеджера',()=>tg.openTelegramLink('https://t.me/'+recoveryManager),true);b.classList.add('recovery-chat');
+        }
+    }
+    function recoveryRender(){
+        if(recoveryPanel&&recoveryEntry){const current=readReceipts().find(r=>r.payload.requestId===recoveryEntry.payload.requestId);if(current&&['queued','synced'].includes(current.status))recoveryClose();}
+        const old=document.getElementById('recovery-launch');if(old)old.remove();
+        const entries=recoveryCandidates();
+        if(!entries.length)return;
+        const launch=document.createElement('button');launch.id='recovery-launch';launch.type='button';launch.className='recovery-launch';
+        launch.textContent='Проверить сохранённый заказ'+(entries.length>1?' · '+entries.length:'');
+        launch.onclick=()=>recoveryScreen(entries[0]);document.getElementById('tab-bar').after(launch);
+        const first=entries.find(r=>!recoveryDismissed.has(r.payload.requestId)&&!recoveryShown.has(r.payload.requestId));
+        if(first&&!sendingOrder&&!confirmationPending&&!recoveryPanel){recoveryShown.add(first.payload.requestId);recoveryScreen(first);}
+    }
+    function recoveryTick(){
+        for(const r of readReceipts().filter(r=>r?.payload?.user===user).slice(-20).reverse().slice(0,3))registerRecovery(r);
+        recoveryRender();
+    }
+
     // Preserve old phone queue for investigation; never auto-send its stale orders.
     try {
         const oldQueue=JSON.parse(localStorage.getItem('moline_pending_orders')||'[]');
@@ -675,7 +875,7 @@
             setTimeout(()=>tg.showAlert('Найдены старые заказы без подтверждения отправки. Они сохранены на телефоне для проверки и не отправляются автоматически. Свяжитесь с менеджером, прежде чем оформлять их заново.'),1500);
         }
     } catch(e) {}
-    setInterval(flushPendingOrders,15000);
+    setInterval(()=>{flushPendingOrders();recoveryTick();},15000);
 
 
     // =====================================================================
@@ -1156,6 +1356,8 @@
         sendingOrder=true;ownsPreflight=true;
         try {
             if(!currentCart||!Object.keys(currentCart).length){stop('empty_cart');return;}
+            const sent=readReceipts().find(r=>r.recoverySentAt&&['unknown','not_found'].includes(r.status)&&sameOrderSlot(r.payload,cartSnapshot()));
+            if(sent){stop('already_with_manager');orderStatus('Вы отметили отправку этого заказа менеджеру. Согласуйте с ним изменения, чтобы избежать повтора.');return;}
             const snapshot=cartSnapshot();phase='history_lookup';
             record('order_check',{stage:phase,status:'started'});orderStatus('Проверяем заказ…');
             if(await existingOrder(snapshot)){stop('existing_order');return;}
@@ -1180,24 +1382,25 @@
                 if(sendingOrder){stop('already_sending');return;}
                 sendingOrder=true;
                 try {
-                    phase='menu_after_confirmation';record('order_check',{stage:phase,status:'started'});
-                    if(!await ensureMenuReady()){stop('menu_not_ready');return;}
-                    if(!Object.keys(currentCart).length){stop('empty_cart_after_refresh');return;}
-                    if(!sameOrder(confirmedSnapshot,cartSnapshot())){stop('cart_changed_after_confirmation');orderStatus('Состав, цена или дата изменились. Проверьте корзину и нажмите «Оформить» ещё раз.');return;}
-                    if(!orderMeetsMinimum()){stop('minimum_quantity');tg.showAlert(minimumOrderMessage());return;}
                     phase='prepare_request';
                     const retry=readReceipts().find(r=>['unknown','not_found'].includes(r.status)&&sameOrder(r.payload,confirmedSnapshot));
                     payload=retry?JSON.parse(JSON.stringify(retry.payload)):{orderProtocol:5,requestId:newRequestId(),clientCreatedAt:new Date().toISOString(),...confirmedSnapshot};
                     record('order_request_prepared',{requestId:payload.requestId,status:retry?'same_id_retry':'new_request'});
                     phase='local_receipt';
-                    try{saveReceipt({payload,status:'unknown'});}
+                    try{saveReceipt({payload,status:'unknown',recoveryConfirmedAt:new Date().toISOString(),recoveryDelivery:confirmedSnapshot.isSelfDelivery?0:Number(currentDeliveryCost)});}
                     catch(e){stop('receipt_storage_failed');orderStatus('Заказ пока не отправлен. Не удалось сохранить данные отправки на устройстве. Корзина осталась на экране.');return;}
+                    registerRecovery(readReceipts().find(r=>r.payload.requestId===payload.requestId));
+                    phase='menu_after_confirmation';record('order_check',{stage:phase,status:'started'});
+                    if(!await ensureMenuReady()){stop('menu_not_ready');return;}
+                    if(!Object.keys(currentCart).length){stop('empty_cart_after_refresh');return;}
+                    if(!sameOrder(confirmedSnapshot,cartSnapshot())){stop('cart_changed_after_confirmation');orderStatus('Состав, цена или дата изменились. Проверьте корзину и нажмите «Оформить» ещё раз.');return;}
+                    if(!orderMeetsMinimum()){stop('minimum_quantity');tg.showAlert(minimumOrderMessage());return;}
                     showLoader();tg.MainButton.showProgress();phase='transmit';
                     record('order_start',{requestId:payload.requestId});
                     const receipt=await transmitOrder(payload,attemptId);
                     accepted=receipt.status==='queued'||receipt.status==='synced';
                     record('order_result',{requestId:payload.requestId,status:receipt.status,code:receipt.code||''});
-                    try{saveReceipt({payload,status:receipt.status,code:receipt.code});}
+                    try{saveReceipt({payload,status:receipt.status,code:receipt.code});registerRecovery(readReceipts().find(r=>r.payload.requestId===payload.requestId));}
                     catch(e){record('order_local_warning',{requestId:payload.requestId,code:'receipt_storage_failed'});}
                     if(receipt.status==='rejected'){orderStatus('Заказ не принят. Выбранные товары остались в корзине. Свяжитесь с менеджером.');return;}
                     phase='show_success';
@@ -1216,7 +1419,7 @@
                     if(e.definitive){try{saveReceipt({payload,status:'not_sent',code:e.serverMessage||e.message});}catch(ignore){}
                         orderStatus('Заказ пока не отправлен. Обновляем меню; выбранные товары остались в корзине. После обновления нажмите «Оформить».');menuVerified=false;load(true).catch(()=>{});
                     }else{orderStatus('Проверяем отправку заказа. Пока подтверждения нет. Выбранные товары остались в корзине; можно повторить проверку кнопкой «Оформить».');flushPendingOrders();}
-                }finally{sendingOrder=false;hideLoader();tg.MainButton.hideProgress();}
+                }finally{sendingOrder=false;hideLoader();tg.MainButton.hideProgress();setTimeout(recoveryTick,0);}
             });
             record('order_confirmation',{status:'opened'});
         }catch(e){confirmationPending=false;record('order_error',{stage:phase,code:e.name,status:'not_sent'});orderStatus('Заказ пока не отправлен. Выбранные товары остались в корзине. Повторите оформление.');}
@@ -1271,9 +1474,11 @@
 
     function onDateChange() { renderMenu(); }
     function onShopChange() { renderMenu(); }
+    setTimeout(recoveryTick,0);
     load();
     initSupport();
     setInterval(initSupport,60000);
 </script>
 </body>
 </html>
+
