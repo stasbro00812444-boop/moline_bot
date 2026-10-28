@@ -60,6 +60,9 @@
         .info-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); z-index: 10001; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px; box-sizing: border-box; }
         .info-modal-overlay.active { opacity: 1; pointer-events: auto; }
         .info-card { background: var(--bg); border-radius: 24px; width: 100%; max-width: 340px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transform: translateY(20px); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 85vh; }
+        .product-photo[hidden] { display:none; }
+        .product-photo { margin:0 0 20px; }
+        .product-photo img { display:block;width:100%;height:auto;max-height:240px;object-fit:contain; }
         .info-content { padding: 24px 20px 20px; overflow-y: auto; background: var(--bg); }
         .info-title { font-family: 'GeistMono', monospace; font-size: 19px; font-weight: 600; color: #2c2c2c; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.3px; }
         .info-row { display: flex; flex-direction: column; margin-bottom: 12px; border-bottom: 1px dashed #eee; padding-bottom: 8px; }
@@ -113,6 +116,7 @@
     <div id="product-info-modal" class="info-modal-overlay" onclick="closeProductInfo(event)">
         <div class="info-card" onclick="event.stopPropagation()">
             <div class="info-content">
+                <div id="pi-photo" class="product-photo" hidden></div>
                 <div class="info-title" id="pi-title">Название</div>
                 <div class="info-row"><span class="info-label">Состав</span><span class="info-val" id="pi-comp">-</span></div>
                 <div class="info-row"><span class="info-label">КБЖУ</span><span class="info-val" id="pi-kbju">-</span></div>
@@ -912,9 +916,26 @@
         if(tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
     }
 
+    let productPhotoVersion = 0;
+    function showProductPhoto(productName, info) {
+        const slot=document.getElementById('pi-photo');
+        if(!slot)return;
+        const version=++productPhotoVersion;
+        slot.replaceChildren();slot.hidden=true;
+        const url=String(info.photo||'');
+        // Only the known Drive image route is allowed. Never inject URL or names as HTML.
+        if(!/^https:\/\/drive\.google\.com\/thumbnail\?id=[\w-]+&sz=w640(?:&resourcekey=[\w%-]+)?$/.test(url))return;
+        const image=document.createElement('img');
+        image.alt=productName;image.decoding='async';image.referrerPolicy='no-referrer';
+        image.onload=()=>{if(version===productPhotoVersion&&image.naturalWidth>0){slot.hidden=false;}};
+        image.onerror=()=>{if(version===productPhotoVersion){slot.hidden=true;slot.replaceChildren();}};
+        slot.appendChild(image);image.src=url;
+    }
+
     function openProductInfo(productName) {
         const normalizedKey = productName.toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]/g, '');
         const info = externalCatalog[normalizedKey] || {};
+        showProductPhoto(productName,info);
         document.getElementById('pi-title').innerText = productName;
         document.getElementById('pi-comp').innerText = info.comp || "-";
         document.getElementById('pi-weight').innerText = info.weight || "-";
@@ -927,6 +948,8 @@
     function closeProductInfo(e) {
         if (e && e.target !== document.getElementById('product-info-modal')) return;
         document.getElementById('product-info-modal').classList.remove('active');
+        productPhotoVersion++;
+        const photoSlot=document.getElementById('pi-photo');photoSlot.hidden=true;photoSlot.replaceChildren();
     }
 
     // Применяет данные меню/истории к интерфейсу (общая часть для "живой" загрузки и кэша)
