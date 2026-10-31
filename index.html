@@ -713,13 +713,10 @@
         const date=p.date.split('-').reverse().join('.');
         const subtotal=rows.reduce((n,i)=>n+i.qty*i.price,0);
         const delivery=Number.isFinite(entry.recoveryDelivery)?entry.recoveryDelivery:null;
-        const lines=['MOLINE — заказ через менеджера',p.shopName,'Доставка: '+date,
-          'Аккаунт: '+p.user,'ID: '+p.requestId,'',...rows.map(i=>i.name+' — '+i.qty+' шт. × '+i.price+' ₽'),'',
-          'Товары: '+subtotal+' ₽',p.isSelfDelivery?'Самовывоз':delivery===null?'Доставку и итог подтвердите, пожалуйста.':'Доставка: '+delivery+' ₽'];
-        if(delivery!==null||p.isSelfDelivery)lines.push('Итого по сохранённым ценам: '+(subtotal+(p.isSelfDelivery?0:delivery))+' ₽');
-        if(p.clientCreatedAt)lines.push('Попытка оформления: '+new Date(p.clientCreatedAt).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'}));
-        lines.push('ID: '+p.requestId,'','Не получил(а) подтверждение в приложении. Проверьте, пожалуйста, нет ли уже этого заказа, и подтвердите его приём.');
-        if(p.date<recoveryToday())lines.push('Исходная дата уже прошла — прошу согласовать дальнейшие действия.');
+        const lines=['🛍 ЗАКАЗ: '+String(p.shopName).trim(),'🗓 '+date,'',
+          ...rows.map(i=>'▪️ '+i.name.trim()+' — '+i.qty+' шт.'),'',
+          p.isSelfDelivery?'📦 Самовывоз':delivery===null?'🚚 Доставка: уточняется':'🚚 Доставка: '+delivery+' ₽'];
+        lines.push('💰 ИТОГО: '+(p.isSelfDelivery?subtotal+' ₽':delivery===null?subtotal+' ₽ + доставка':(subtotal+delivery)+' ₽'));
         return lines.join('\n');
     }
     function recoveryRemember(id,fields){
@@ -843,7 +840,7 @@
             const parts=[];let part='';
             for(const line of text.split('\n')){if(Array.from(part+'\n'+line).length>3300&&part){parts.push(part);part='';}part+=(part?'\n':'')+line;}if(part)parts.push(part);
             parts.forEach((part,i)=>{
-                const value=parts.length>1?'ID: '+recoveryEntry.payload.requestId+' · часть '+(i+1)+' из '+parts.length+'\n'+part:part;
+                const value=parts.length>1?'🛍 ЗАКАЗ: '+String(recoveryEntry.payload.shopName).trim()+' · часть '+(i+1)+' из '+parts.length+'\n'+part:part;
                 if(parts.length>1)recoveryNode(parent,'p','Часть '+(i+1)+' из '+parts.length+'. Отправьте менеджеру все части.');
                 const area=recoveryNode(parent,'textarea','','recovery-copy');area.readOnly=true;area.value=value;area.setAttribute('aria-label','Текст заказа, часть '+(i+1));
                 recoveryButton(parent,parts.length>1?'Скопировать часть '+(i+1):'Скопировать текст',async function(){try{await navigator.clipboard.writeText(value);this.textContent='Скопировано';}catch(e){area.focus();area.select();}},true);
