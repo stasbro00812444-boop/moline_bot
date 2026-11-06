@@ -21,6 +21,7 @@ var CRMCore = (function () {
       if(e.type==='shift.open') s.shifts[d.id]={id:d.id,location_id:e.location_id,employee_id:e.actor_id,opened_at:e.created_at,closed_at:'',opening_cash:d.opening_cash,status:'open'};
       if(e.type==='shift.close') { sh=s.shifts[d.shift_id]; check(sh,'Смена не найдена'); Object.assign(sh,{closed_at:e.created_at,actual_cash:d.actual_cash,expected_cash:d.expected_cash,difference:d.actual_cash-d.expected_cash,status:'closed'}); }
       if(e.type==='order.create') s.orders[d.id]=Object.assign({},d,{created_at:e.created_at,location_id:e.location_id,status:'new'});
+      if(e.type==='order.payment'&&s.orders[d.order_id])s.orders[d.order_id].payment_status=d.status;
       if(e.type==='order.status') {Object.assign(s.orders[d.order_id],{status:d.status,reason:d.reason||'',updated_at:e.created_at});if(d.stock_usage)s.orders[d.order_id].stock_usage=d.stock_usage;}
       if(e.type==='sale.create') {
         if(d.order_id)Object.assign(s.orders[d.order_id],{status:'fulfilled',sale_id:d.id,updated_at:e.created_at});
@@ -80,3 +81,4 @@ var CRMCore = (function () {
   return {check:check,money:money,qty:qty,key:key,reduce:reduce,reserved:reserved,planStock:planStock,expectedCash:expectedCash,report:report};
 })();
 if(typeof module!=='undefined')module.exports=CRMCore;
+
