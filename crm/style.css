@@ -32,3 +32,11 @@
 .availability-toggle:focus-visible{outline:3px solid #ba7c94;outline-offset:2px}
 @media(max-width:520px){.availability-row{gap:12px}.availability-toggle{min-width:100px;padding:10px}}
 
+/* Compact product editor, with the same neutral workspace surfaces. */
+.site-preview{min-height:175px;display:grid;place-items:center;background:#f7f5f2;border:1px solid #e5e0db;border-radius:12px;margin:14px 0;color:#81736a;overflow:hidden}
+.site-photo{display:block;width:100%;height:175px;object-fit:contain}
+#dialog{max-height:calc(100dvh - 32px);overflow:auto}
+#dialog textarea{display:block;width:100%;min-height:86px;resize:vertical;padding:12px;border:1px solid #ddd8d2;border-radius:9px;font:inherit;color:inherit;background:#fff}
+#dialog input[type=file]{height:auto;min-height:48px;padding:10px;background:#f7f5f2}
+#dialog input:focus-visible,#dialog textarea:focus-visible,#dialog select:focus-visible{outline:3px solid #ba7c94;outline-offset:2px}
+
