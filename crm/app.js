@@ -4,7 +4,7 @@ const rub=n=>(Number(n||0)/100).toLocaleString('ru-RU',{maximumFractionDigits:2}
 const today=()=>new Date(Date.now()+10800000).toISOString().slice(0,10);
 const DEFAULT_CRM_API='https://script.google.com/macros/s/AKfycbyzSdWYQZU_ofcyNg8uUUtYSlGymvCtVvkojTOIxUVNMNpDWuJ2Mi7UYZILGOD700wlsg/exec';
 function telegramData(){return window.Telegram?.WebApp?.initData||'';}
-const labels={sale:'Продажа',sales:'Документы',stock:'Склад',shifts:'Смены',reports:'Отчёты',orders:'Заказы',settings:'Настройки'};
+const labels={sale:'Продажа',sales:'Документы',stock:'Склад',availability:'Наличие сайта',shifts:'Смены',reports:'Отчёты',orders:'Заказы',settings:'Настройки'};
 let page='settings',category='',search='',cart={},locationId='CAFE',busy=false,live=false,demoMode=false,connectionError='',apiUrl=localStorage.getItem('crmApiUrl')||DEFAULT_CRM_API,accessToken='',pending=null;
 let demoEvents=[],demoCounter=0;
 const demoProducts=[{id:'DEMO01',name:'Круассан классический',category:'Выпечка',unit:'шт',price:18000,cost:null,stock_tracked:true,min_stock:5},{id:'DEMO02',name:'Булочка с корицей',category:'Выпечка',unit:'шт',price:22000,cost:null,stock_tracked:true,min_stock:4},{id:'DEMO03',name:'Эклер шоколадный',category:'Десерты',unit:'шт',price:25000,cost:null,stock_tracked:true,min_stock:3},{id:'DEMO04',name:'Капучино',category:'Напитки',unit:'шт',price:23000,cost:null,stock_tracked:false,min_stock:0}];
@@ -47,13 +47,13 @@ window.addEventListener('keydown',e=>{
 window.matchMedia?.('(max-width:760px)').addEventListener('change',()=>setMenu(false,false));
 
 function render(){
-  $('#nav').innerHTML=Object.entries(labels).map(([id,name])=>`<button data-page="${id}" class="${page===id?'active':''}">${name}</button>`).join('');
+  $('#nav').innerHTML=Object.entries(labels).filter(([id])=>id!=='availability'||!!data.site_availability).map(([id,name])=>`<button data-page="${id}" class="${page===id?'active':''}">${name}</button>`).join('');
   $('#nav').querySelectorAll('button').forEach(b=>{b.disabled=busy||(!live&&!demoMode&&b.dataset.page!=='settings');b.onclick=()=>{if(busy)return;page=b.dataset.page;setMenu(false,false);render();};});
   $('#title').textContent=labels[page];$('#identity').textContent=data.employee.name+' · '+data.employee.role;
   $('#location').innerHTML=data.locations.map(l=>`<option value="${esc(l.id)}" ${l.id===locationId?'selected':''}>${esc(l.name)}</option>`).join('');
   $('#location').disabled=busy;$('#shiftButton').disabled=busy||(!live&&!demoMode);$('#shiftButton').textContent=currentShift()?'Закрыть смену':'Открыть смену';
   $('#mode').className='notice'+(live?' live':'');$('#mode').textContent=live?'Рабочий режим · Google Sheets подключены · '+data.products.length+' позиций.':demoMode?'ДЕМОНСТРАЦИЯ · Все товары, цены и остатки здесь тестовые. Действия не записываются в вашу таблицу и сбросятся при перезагрузке.':'Вход в CRM · Подключите свою таблицу. Рабочий каталог появится после проверки доступа.';
-  ({sale:renderSale,sales:renderSales,stock:renderStock,shifts:renderShifts,reports:renderReports,orders:renderOrders,settings:renderSettings}[page])();
+  ({sale:renderSale,sales:renderSales,stock:renderStock,availability:renderAvailability,shifts:renderShifts,reports:renderReports,orders:renderOrders,settings:renderSettings}[page])();
 }
 $('#location').onchange=e=>{if(busy)return;locationId=e.target.value;cart={};render();};
 function renderSale(){
@@ -106,6 +106,17 @@ function shiftDialog(){const shift=currentShift();if(shift)dialog('Закрыт�
 function refundDialog(id){const order=(data.orders||[]).find(o=>o.sale_id===id&&o.source==='site-paid');if(order)return notify('Онлайн-возврат оформляется через банк');dialog('Полный возврат продажи',input('reason','Причина')+select('restock','Возвращать товар в остаток?',[['false','Нет — товар не возвращён в продажу'],['true','Да — товар можно снова продавать']]),v=>mutate('sale.refund',{location_id:locationId,sale_id:id,reason:v.reason,restock:v.restock==='true'}));}
 function paymentDialog(id){const s=data.sales.find(x=>x.id===id);dialog('Погашение долга',input('amount','Сумма, ₽','number',(s.total-s.paid)/100,'min="0.01" step="0.01"')+select('method','Способ',[['cash','Наличные'],['card','Терминал'],['transfer','Перевод']]),v=>mutate('payment.add',{location_id:locationId,sale_id:id,...v}));}
 function renderStock(){const list=data.products.filter(p=>p.stock_tracked);$('#content').innerHTML=`<div class="toolbar"><button onclick="stockDialog('stock.receive')">+ Приход</button><button onclick="stockDialog('stock.writeoff')">Списание</button><button onclick="stockDialog('stock.count')">Инвентаризация</button><button onclick="stockDialog('stock.transfer')">Перемещение</button><button onclick="refresh()">Обновить</button></div><div class="panel">${table(['Позиция','Категория','Готовых свободно','Минимум','Состояние'],list.map(p=>[esc(p.name),esc(p.category),physicalAvailable(p)+' '+esc(p.unit),p.min_stock||0,physicalAvailable(p)<Number(p.min_stock)?'<span class="badge low">Мало</span>':'<span class="badge">Достаточно</span>']))}</div>`;}
+function renderAvailability(){
+ const settings=data.site_availability,canEdit=live&&['admin','manager'].includes(data.employee.role);
+ if(!settings){$('#content').innerHTML='<div class="panel"><p>Настройки наличия пока не загружены. Обновите CRM.</p></div>';return;}
+ const toggle=(key,on,label,detail,effective)=>`<div class="availability-row"><div><strong>${esc(label)}</strong><p class="muted">${esc(detail)}${effective===false&&on?' · сейчас недоступен':''}</p></div><button type="button" class="availability-toggle ${on?'is-on':''}" data-availability-key="${esc(key)}" aria-pressed="${on}" aria-label="${esc(label)}: ${on?'выключить':'включить'}" ${canEdit?'':'disabled'}>${on?'Доступен':'Выключен'}</button></div>`;
+ $('#content').innerHTML=`<div class="toolbar"><span class="muted">Изменения сразу действуют для новых заказов на сайте</span><button onclick="refresh()">Обновить</button></div><div class="panel"><h2>Ингредиенты</h2><p class="muted">Общий переключатель не меняет остатки и не отменяет уже оплаченные заказы.</p>${toggle('MILK_CLASSIC',settings.milk,'Классическое молоко','Латте, капучино, флет-уайт, раф, маття латте и какао')}</div><div class="panel"><h2>Позиции</h2><p class="muted">Можно выключить одну позицию независимо от общего переключателя молока. Выключение действует на все даты.</p>${settings.products.map(p=>toggle(p.id,p.enabled,p.name,p.category,p.effective)).join('')}</div>`;
+ $('#content').querySelectorAll('[data-availability-key]').forEach(button=>button.onclick=async()=>{
+  const key=button.dataset.availabilityKey,on=button.getAttribute('aria-pressed')==='true';
+  try{await mutate('catalog.availability',{key,active:!on});render();notify(key==='MILK_CLASSIC'?'Наличие молока обновлено':'Доступность позиции обновлена');}
+  catch(error){render();notify(error.message);}
+ });
+}
 function stockDialog(action){if(!data.products.some(p=>p.stock_tracked))return notify('Сначала добавьте товары с учётом остатков');dialog({'stock.receive':'Приход товара','stock.writeoff':'Списание товара','stock.count':'Фактический остаток','stock.transfer':'Перемещение товара'}[action],select('product_id','Товар',data.products.filter(p=>p.stock_tracked).map(p=>[p.id,p.name+' · '+p.unit]))+input('qty',action==='stock.count'?'Сколько насчитали':'Количество','number','','min="0" step="0.001"')+(action==='stock.transfer'?select('to_location','Куда',data.locations.filter(x=>x.id!==locationId).map(x=>[x.id,x.name])):'')+input('reason','Основание / причина'),v=>mutate(action,{location_id:locationId,...v}));}
 function renderShifts(){$('#content').innerHTML=`<div class="toolbar"><button onclick="shiftDialog()">${currentShift()?'Закрыть смену':'Открыть смену'}</button><button onclick="cashDialog('cash.in')">Внести наличные</button><button onclick="cashDialog('cash.out')">Изъять наличные</button><button onclick="refresh()">Обновить</button></div><div class="panel">${table(['Смена','Открытие','Закрытие','Начальные','По учёту','Факт','Разница'],data.shifts.filter(s=>s.location_id===locationId).map(s=>[short(s.id),date(s.opened_at),s.closed_at?date(s.closed_at):'<span class="badge">Открыта</span>',rub(s.opening_cash),rub(s.expected_cash),s.status==='closed'?rub(s.actual_cash):'—',s.status==='closed'?rub(s.difference):'—']))}</div>`;}
 function cashDialog(action){dialog(action==='cash.in'?'Внесение наличных':'Изъятие наличных',input('amount','Сумма, ₽','number','','min="0.01" step="0.01"')+input('reason','Основание'),v=>mutate(action,{location_id:locationId,...v}));}
@@ -183,3 +194,4 @@ setInterval(async()=>{
  try{const next=await api('bootstrap',{});if(live&&page==='orders'&&!busy&&!pending&&!$('#dialog').open){data=next;renderOrders();}}
  catch{}finally{refreshingOrders=false;}
 },20000);
+
