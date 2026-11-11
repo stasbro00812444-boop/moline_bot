@@ -109,15 +109,17 @@ function renderStock(){const list=data.products.filter(p=>p.stock_tracked);$('#c
 function renderProductAdmin(){
  const canEdit=live&&['admin','manager'].includes(data.employee.role);
  const cards=Object.fromEntries((data.site_cards||[]).map(p=>[p.product_id,p]));
- $('#content').innerHTML=`<div class="toolbar"><button class="primary" id="new-product" ${canEdit?'':'disabled'}>+ Добавить товар</button><button onclick="refresh()">Обновить</button></div><div class="panel"><p class="muted">18 товаров уже на сайте — меняйте их карточки и наличие. Остальные товары CRM можно оформить как черновик и опубликовать после проверки фото, состава и учета.</p>${table(['Фото','Товар','Цена','Сайт','Действия'],data.products.map(p=>{
+ const pencil='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4L16.5 3.5Z"/></svg>';
+ $('#content').innerHTML=`<div class="toolbar"><button class="primary" id="new-product" ${canEdit?'':'disabled'}>+ Добавить товар</button><button onclick="refresh()">Обновить</button></div><div class="panel product-admin"><p class="muted">Товары сайта можно изменить здесь. Остальные позиции сначала сохраните как черновик, затем опубликуйте.</p><div class="product-admin-list">${data.products.map(p=>{
   const card=cards[p.id],legacy=!!MOLINE_LEGACY_IMAGES[p.id],eligible=data.capabilities?.site_cards&&!['ADD_001','ADD_002','SYS_PAYMENT_TEST'].includes(p.id);
   const shown=card?.next_price_on&&card.next_price_on<=new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Moscow'})?Number(card.next_price)*100:p.price;
   const photo=card?.media_id?`https://molinebymonk.ru/api/auth/catalog/media/${esc(card.media_id)}.webp`:MOLINE_LEGACY_IMAGES[p.id];
-  const image=photo?`<img class="product-thumb" src="${photo}" alt="" loading="lazy">`:'';
+  const image=photo?`<img class="product-thumb" src="${photo}" alt="" loading="lazy">`:'<span class="product-thumb product-thumb-empty" aria-hidden="true"></span>';
   const state=legacy?'На сайте':card?.published?'Опубликован':card?'Черновик':'Не на сайте';
-  const actions=eligible?`<button data-site-edit="${esc(p.id)}" ${canEdit?'':'disabled'}>${card||legacy?'Карточка':'Оформить'}</button>${!legacy?(card?.published?`<button data-site-unpublish="${esc(p.id)}" ${canEdit?'':'disabled'}>Снять</button>`:card?`<button data-site-publish="${esc(p.id)}" ${canEdit?'':'disabled'}>Опубликовать</button>`:''):''}`:'—';
-  return [image,esc(p.name)+'<br><small>'+esc(p.id)+'</small>',rub(shown),state,actions];
- }))}</div>`;
+  const edit=eligible?`<button class="product-edit" data-site-edit="${esc(p.id)}" aria-label="${card||legacy?'Редактировать':'Оформить'}: ${esc(p.name)}" title="${card||legacy?'Редактировать':'Оформить'}" ${canEdit?'':'disabled'}>${pencil}</button>`:'';
+  const publish=eligible&&!legacy?(card?.published?`<button class="product-state-action" data-site-unpublish="${esc(p.id)}" ${canEdit?'':'disabled'}>Снять с сайта</button>`:card?`<button class="product-state-action" data-site-publish="${esc(p.id)}" ${canEdit?'':'disabled'}>Опубликовать</button>`:''):'';
+  return `<article class="product-admin-row">${image}<div class="product-admin-main"><strong>${esc(p.name)}</strong><div class="product-admin-meta"><span>${rub(shown)}</span><span class="product-admin-status">${state}</span></div>${publish}</div>${edit}</article>`;
+ }).join('')}</div></div>`;
  $('#new-product').onclick=productDialog;
  $('#content').querySelectorAll('[data-site-edit]').forEach(b=>b.onclick=()=>siteProductDialog(b.dataset.siteEdit));
  $('#content').querySelectorAll('[data-site-publish]').forEach(b=>b.onclick=()=>publishSiteProduct(b.dataset.sitePublish));
