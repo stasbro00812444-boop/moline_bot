@@ -166,8 +166,14 @@ async function connect(automatic=false){
 }
 function disconnect(){if(busy)return;if(pending)return notify('Сначала повторите неподтверждённую операцию');live=false;demoMode=true;connectionError='';accessToken='';cart={};locationId='CAFE';category='';search='';page='sale';resetDemo();render();}
 async function refresh(){if(busy)return;if(live)try{data=await api('bootstrap',{});render();}catch(e){notify(e.message);}else render();}
-async function mutate(action,d){if(busy)throw Error('Дождитесь завершения операции');if(pending)throw Error('Повторите неподтверждённую операцию в настройках');busy=true;document.body.classList.add('loading');try{if(live){pending={action,data:d,id:crypto.randomUUID()};try{data=await api(action,d,pending.id);pending=null;}catch(e){if(e.confirmed)pending=null;throw e;}}else demoMutate(action,d);}finally{busy=false;document.body.classList.remove('loading');}}
-async function retryPending(){if(!pending||busy)return;busy=true;try{data=await api(pending.action,pending.data,pending.id);pending=null;cart={};$('#dialog').close();render();notify('Операция подтверждена');}catch(e){if(e.confirmed)pending=null;notify(e.message);}finally{busy=false;}}
+function applyResponse(action,response){
+ if(action==='catalog.availability'){
+  if(!response?.site_availability)throw Error('CRM не подтвердила наличие. Проверьте состояние повторно.');
+  data={...data,site_availability:response.site_availability};
+ }else data=response;
+}
+async function mutate(action,d){if(busy)throw Error('Дождитесь завершения операции');if(pending)throw Error('Повторите неподтвержденную операцию в настройках');busy=true;document.body.classList.add('loading');try{if(live){pending={action,data:d,id:crypto.randomUUID()};try{applyResponse(action,await api(action,d,pending.id));pending=null;}catch(e){if(e.confirmed)pending=null;throw e;}}else demoMutate(action,d);}finally{busy=false;document.body.classList.remove('loading');}}
+async function retryPending(){if(!pending||busy)return;busy=true;try{applyResponse(pending.action,await api(pending.action,pending.data,pending.id));pending=null;cart={};$('#dialog').close();render();notify('Операция подтверждена');}catch(e){if(e.confirmed)pending=null;notify(e.message);}finally{busy=false;}}
 function demoMutate(type,d){const s=CRMCore.reduce(demoEvents),sh=currentShift(),check=CRMCore.check,m=CRMCore.money,q=CRMCore.qty,p={},id='demo-'+(++demoCounter);const needShift=()=>check(sh,'Сначала откройте смену');
  if(type==='shift.open'){check(!sh,'Смена уже открыта');p.id=id;p.opening_cash=m(d.opening_cash);check(p.opening_cash>=0,'Неверная сумма');}
  else if(type==='shift.close'){needShift();p.shift_id=sh.id;p.actual_cash=m(d.actual_cash);check(p.actual_cash>=0,'Неверная сумма');p.expected_cash=CRMCore.expectedCash(s,sh.id);p.comment=d.reason;}
