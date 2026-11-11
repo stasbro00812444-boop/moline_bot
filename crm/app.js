@@ -112,8 +112,13 @@ function renderAvailability(){
  const toggle=(key,on,label,detail,effective)=>`<div class="availability-row"><div><strong>${esc(label)}</strong><p class="muted">${esc(detail)}${effective===false&&on?' · сейчас недоступен':''}</p></div><button type="button" class="availability-toggle ${on?'is-on':''}" data-availability-key="${esc(key)}" aria-pressed="${on}" aria-label="${esc(label)}: ${on?'выключить':'включить'}" ${canEdit?'':'disabled'}>${on?'Доступен':'Выключен'}</button></div>`;
  $('#content').innerHTML=`<div class="toolbar"><span class="muted">Изменения сразу действуют для новых заказов на сайте</span><button onclick="refresh()">Обновить</button></div><div class="panel"><h2>Ингредиенты</h2><p class="muted">Общий переключатель не меняет остатки и не отменяет уже оплаченные заказы.</p>${toggle('MILK_CLASSIC',settings.milk,'Классическое молоко','Латте, капучино, флет-уайт, раф, маття латте и какао')}</div><div class="panel"><h2>Позиции</h2><p class="muted">Можно выключить одну позицию независимо от общего переключателя молока. Выключение действует на все даты.</p>${settings.products.map(p=>toggle(p.id,p.enabled,p.name,p.category,p.effective)).join('')}</div>`;
  $('#content').querySelectorAll('[data-availability-key]').forEach(button=>button.onclick=async()=>{
-  const key=button.dataset.availabilityKey,on=button.getAttribute('aria-pressed')==='true';
-  try{await mutate('catalog.availability',{key,active:!on});render();notify(key==='MILK_CLASSIC'?'Наличие молока обновлено':'Доступность позиции обновлена');}
+  const key=button.dataset.availabilityKey,on=button.getAttribute('aria-pressed')==='true',next=!on;
+  if(busy||pending)return;
+  // Show the requested state immediately, but mark it as unconfirmed until the server responds.
+  button.setAttribute('aria-pressed',String(next));button.setAttribute('aria-busy','true');
+  button.classList.toggle('is-on',next);button.classList.add('is-saving');
+  button.textContent=(next?'Доступен':'Выключен')+'…';button.title='Сохраняем на сервере';button.disabled=true;
+  try{await mutate('catalog.availability',{key,active:next});render();notify(key==='MILK_CLASSIC'?'Наличие молока обновлено':'Доступность позиции обновлена');}
   catch(error){render();notify(error.message);}
  });
 }
