@@ -47,7 +47,7 @@ window.addEventListener('keydown',e=>{
 window.matchMedia?.('(max-width:760px)').addEventListener('change',()=>setMenu(false,false));
 
 function render(){
-  $('#nav').innerHTML=Object.entries(labels).map(([id,name])=>`<button data-page="${id}" class="${page===id?'active':''}">${name}</button>`).join('');
+  $('#nav').innerHTML=Object.entries(labels).filter(([id])=>id!=='availability'||!!data.site_availability).map(([id,name])=>`<button data-page="${id}" class="${page===id?'active':''}">${name}</button>`).join('');
   $('#nav').querySelectorAll('button').forEach(b=>{b.disabled=busy||(!live&&!demoMode&&b.dataset.page!=='settings');b.onclick=()=>{if(busy)return;page=b.dataset.page;setMenu(false,false);render();};});
   $('#title').textContent=labels[page];$('#identity').textContent=data.employee.name+' · '+data.employee.role;
   $('#location').innerHTML=data.locations.map(l=>`<option value="${esc(l.id)}" ${l.id===locationId?'selected':''}>${esc(l.name)}</option>`).join('');
