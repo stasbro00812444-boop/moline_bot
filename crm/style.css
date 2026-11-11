@@ -20,3 +20,14 @@
   .header-title .eyebrow{font-size:8px;letter-spacing:1px}
 }
 @media(prefers-reduced-motion:reduce){aside{transition:none}}
+
+/* Website availability controls */
+.availability-row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 0;border-top:1px solid #ebe5df}
+.availability-row:first-of-type{border-top:0}
+.availability-row strong{font-weight:550}
+.availability-row p{margin:6px 0 0;line-height:1.5}
+.availability-toggle{flex:none;min-width:112px;border-radius:24px;background:#f1eee9}
+.availability-toggle.is-on{background:#e7f1e8;border-color:#a6cbaa;color:#32613d}
+.availability-toggle:focus-visible{outline:3px solid #ba7c94;outline-offset:2px}
+@media(max-width:520px){.availability-row{gap:12px}.availability-toggle{min-width:100px;padding:10px}}
+
