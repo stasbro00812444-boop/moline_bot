@@ -108,8 +108,45 @@ function paymentDialog(id){const s=data.sales.find(x=>x.id===id);dialog('Пог�
 function renderStock(){const list=data.products.filter(p=>p.stock_tracked);$('#content').innerHTML=`<div class="toolbar"><button onclick="stockDialog('stock.receive')">+ Приход</button><button onclick="stockDialog('stock.writeoff')">Списание</button><button onclick="stockDialog('stock.count')">Инвентаризация</button><button onclick="stockDialog('stock.transfer')">Перемещение</button><button onclick="refresh()">Обновить</button></div><div class="panel">${table(['Позиция','Категория','Готовых свободно','Минимум','Состояние'],list.map(p=>[esc(p.name),esc(p.category),physicalAvailable(p)+' '+esc(p.unit),p.min_stock||0,physicalAvailable(p)<Number(p.min_stock)?'<span class="badge low">Мало</span>':'<span class="badge">Достаточно</span>']))}</div>`;}
 function renderProductAdmin(){
  const canEdit=live&&['admin','manager'].includes(data.employee.role);
- $('#content').innerHTML=`<div class="toolbar"><button class="primary" id="new-product" ${canEdit?'':'disabled'}>+ Добавить товар</button><button onclick="refresh()">Обновить</button></div><div class="panel"><p class="muted">Новые товары попадают в таблицу CRM и доступны для внутреннего учета. На сайте автоматически не публикуются: для сайта отдельно нужны карточка с фото и подключение к оплате.</p>${table(['Код','Название','Категория','Цена','Учет остатков'],data.products.map(p=>[esc(p.id),esc(p.name)+' · '+esc(p.unit),esc(p.category),rub(p.price),p.stock_tracked?'Да':'Нет']))}</div>`;
+ const cards=Object.fromEntries((data.site_cards||[]).map(p=>[p.product_id,p]));
+ $('#content').innerHTML=`<div class="toolbar"><button class="primary" id="new-product" ${canEdit?'':'disabled'}>+ Добавить товар</button><button onclick="refresh()">Обновить</button></div><div class="panel"><p class="muted">Сначала создайте товар. Затем добавьте фото, описание и состав, проверьте карточку и опубликуйте. Цена на завтра вступит в силу в полночь по Москве.</p>${table(['Товар','Цена','Сайт','Действия'],data.products.map(p=>{const card=cards[p.id],site=p.id.startsWith('INT_')&&data.capabilities?.site_cards;return [esc(p.name)+'<br><small>'+esc(p.id)+'</small>',rub(p.price),site?(card?.published?'Опубликован':card?'Черновик':'Не оформлен'):'—',site?`<button data-site-edit="${esc(p.id)}" ${canEdit?'':'disabled'}>Карточка</button>${card?.published?`<button data-site-unpublish="${esc(p.id)}" ${canEdit?'':'disabled'}>Снять с сайта</button>`:card?`<button data-site-publish="${esc(p.id)}" ${canEdit?'':'disabled'}>Опубликовать</button>`:''}`:'—']}))}</div>`;
  $('#new-product').onclick=productDialog;
+ $('#content').querySelectorAll('[data-site-edit]').forEach(b=>b.onclick=()=>siteProductDialog(b.dataset.siteEdit));
+ $('#content').querySelectorAll('[data-site-publish]').forEach(b=>b.onclick=()=>publishSiteProduct(b.dataset.sitePublish));
+ $('#content').querySelectorAll('[data-site-unpublish]').forEach(b=>b.onclick=()=>unpublishSiteProduct(b.dataset.siteUnpublish));
+}
+async function imageData(file){
+ if(!(file instanceof File)||!file.size)return '';
+ if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>6_000_000)throw Error('Нужен PNG, JPEG или WebP до 6 МБ');
+ const bitmap=await createImageBitmap(file),scale=Math.min(1,1200/Math.max(bitmap.width,bitmap.height));
+ const canvas=document.createElement('canvas');canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
+ canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
+ let blob;
+ for(const quality of [.88,.75,.62]){blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));if(blob?.size<=750000)break;}
+ if(!blob||blob.type!=='image/webp'||blob.size>750000)throw Error('Фото слишком большое. Выберите изображение меньшего размера');
+ const bytes=new Uint8Array(await blob.arrayBuffer());let text='';for(const byte of bytes)text+=String.fromCharCode(byte);
+ return btoa(text);
+}
+function siteProductDialog(id){
+ const p=data.products.find(p=>p.id===id),card=(data.site_cards||[]).find(x=>x.product_id===id);
+ if(!p||!live||!data.capabilities?.site_cards)return;
+ const photo=card?.media_id?`<img class="site-photo" src="https://molinebymonk.ru/api/auth/catalog/media/${esc(card.media_id)}.webp" alt="Текущее фото товара">`:'';
+ const fields=`<p class="muted">${esc(p.name)} · ${rub(p.price)}</p><div class="site-preview" id="site-preview">${photo||'<span>Фото еще не загружено</span>'}</div><label for="site-photo">Фото товара</label><input id="site-photo" name="image" type="file" accept="image/png,image/jpeg,image/webp"><label for="site-description">Описание</label><textarea id="site-description" name="description" maxlength="2000" required>${esc(card?.description||'')}</textarea><label for="site-ingredients">Состав и аллергены</label><textarea id="site-ingredients" name="ingredients" maxlength="2000" required>${esc(card?.ingredients||'')}</textarea>${select('stock_mode','Учет для сайта',[['finished','Готовый остаток'],['recipe','По рецепту сборки'],['made_to_order','Готовим под заказ (лимит дня)'],['manual','Вручную включать и выключать']])}<label for="site-next-price">Новая цена, ₽ (необязательно)</label><input id="site-next-price" name="next_price" type="number" min="0.01" step="0.01" value="${esc(card?.next_price||'')}"><label for="site-next-date">Дата новой цены (по Москве)</label><input id="site-next-date" name="next_price_on" type="date" value="${esc(card?.next_price_on||'')}"><p class="muted">Сохранение возвращает товар в черновик. После проверки нажмите «Опубликовать».</p>`;
+ dialog('Карточка сайта',fields,async v=>{
+  const image=await imageData(v.image);let media_id=card?.media_id||'';
+  if(image){const upload=await api('catalog.media.upload',{image},crypto.randomUUID());media_id=upload.media_id;}
+  await mutate('catalog.site.save',{product_id:id,description:v.description,ingredients:v.ingredients,media_id,stock_mode:v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on});
+ });
+ $('#f-stock_mode').value=card?.stock_mode||'finished';
+ $('#site-photo').onchange=e=>{const f=e.target.files?.[0];if(!f)return;const url=URL.createObjectURL(f);const preview=$('#site-preview');preview.innerHTML='';const img=document.createElement('img');img.className='site-photo';img.alt='Предпросмотр';img.src=url;img.onload=()=>URL.revokeObjectURL(url);preview.append(img);};
+}
+async function publishSiteProduct(id){
+ if(!confirm('Проверили фото, описание, состав и правило склада? Товар появится на сайте после публикации.'))return;
+ try{await mutate('catalog.site.publish',{product_id:id});render();notify('Товар опубликован на сайте');}catch(e){notify(e.message);}
+}
+async function unpublishSiteProduct(id){
+ if(!confirm('Снять товар с сайта? Оформленные заказы сохранятся.'))return;
+ try{await mutate('catalog.site.unpublish',{product_id:id});render();notify('Товар снят с сайта');}catch(e){notify(e.message);}
 }
 function productDialog(){
  if(!live||!['admin','manager'].includes(data.employee.role))return;
