@@ -4,7 +4,7 @@ const rub=n=>(Number(n||0)/100).toLocaleString('ru-RU',{maximumFractionDigits:2}
 const today=()=>new Date(Date.now()+10800000).toISOString().slice(0,10);
 const DEFAULT_CRM_API='https://script.google.com/macros/s/AKfycbyzSdWYQZU_ofcyNg8uUUtYSlGymvCtVvkojTOIxUVNMNpDWuJ2Mi7UYZILGOD700wlsg/exec';
 function telegramData(){return window.Telegram?.WebApp?.initData||'';}
-const labels={sale:'Продажа',sales:'Документы',stock:'Склад',availability:'Наличие сайта',shifts:'Смены',reports:'Отчёты',orders:'Заказы',settings:'Настройки'};
+const labels={sale:'Продажа',sales:'Документы',stock:'Склад',products:'Товары',availability:'Наличие сайта',shifts:'Смены',reports:'Отчёты',orders:'Заказы',settings:'Настройки'};
 let page='settings',category='',search='',cart={},locationId='CAFE',busy=false,live=false,demoMode=false,connectionError='',apiUrl=localStorage.getItem('crmApiUrl')||DEFAULT_CRM_API,accessToken='',pending=null;
 let demoEvents=[],demoCounter=0;
 const demoProducts=[{id:'DEMO01',name:'Круассан классический',category:'Выпечка',unit:'шт',price:18000,cost:null,stock_tracked:true,min_stock:5},{id:'DEMO02',name:'Булочка с корицей',category:'Выпечка',unit:'шт',price:22000,cost:null,stock_tracked:true,min_stock:4},{id:'DEMO03',name:'Эклер шоколадный',category:'Десерты',unit:'шт',price:25000,cost:null,stock_tracked:true,min_stock:3},{id:'DEMO04',name:'Капучино',category:'Напитки',unit:'шт',price:23000,cost:null,stock_tracked:false,min_stock:0}];
@@ -47,13 +47,13 @@ window.addEventListener('keydown',e=>{
 window.matchMedia?.('(max-width:760px)').addEventListener('change',()=>setMenu(false,false));
 
 function render(){
-  $('#nav').innerHTML=Object.entries(labels).filter(([id])=>id!=='availability'||!!data.site_availability).map(([id,name])=>`<button data-page="${id}" class="${page===id?'active':''}">${name}</button>`).join('');
+  $('#nav').innerHTML=Object.entries(labels).filter(([id])=>(id!=='availability'||!!data.site_availability)&&(id!=='products'||data.capabilities?.product_create===true)).map(([id,name])=>`<button data-page="${id}" class="${page===id?'active':''}">${name}</button>`).join('');
   $('#nav').querySelectorAll('button').forEach(b=>{b.disabled=busy||(!live&&!demoMode&&b.dataset.page!=='settings');b.onclick=()=>{if(busy)return;page=b.dataset.page;setMenu(false,false);render();};});
   $('#title').textContent=labels[page];$('#identity').textContent=data.employee.name+' · '+data.employee.role;
   $('#location').innerHTML=data.locations.map(l=>`<option value="${esc(l.id)}" ${l.id===locationId?'selected':''}>${esc(l.name)}</option>`).join('');
   $('#location').disabled=busy;$('#shiftButton').disabled=busy||(!live&&!demoMode);$('#shiftButton').textContent=currentShift()?'Закрыть смену':'Открыть смену';
   $('#mode').className='notice'+(live?' live':'');$('#mode').textContent=live?'Рабочий режим · Google Sheets подключены · '+data.products.length+' позиций.':demoMode?'ДЕМОНСТРАЦИЯ · Все товары, цены и остатки здесь тестовые. Действия не записываются в вашу таблицу и сбросятся при перезагрузке.':'Вход в CRM · Подключите свою таблицу. Рабочий каталог появится после проверки доступа.';
-  ({sale:renderSale,sales:renderSales,stock:renderStock,availability:renderAvailability,shifts:renderShifts,reports:renderReports,orders:renderOrders,settings:renderSettings}[page])();
+  ({sale:renderSale,sales:renderSales,stock:renderStock,products:renderProductAdmin,availability:renderAvailability,shifts:renderShifts,reports:renderReports,orders:renderOrders,settings:renderSettings}[page])();
 }
 $('#location').onchange=e=>{if(busy)return;locationId=e.target.value;cart={};render();};
 function renderSale(){
@@ -106,6 +106,16 @@ function shiftDialog(){const shift=currentShift();if(shift)dialog('Закрыт�
 function refundDialog(id){const order=(data.orders||[]).find(o=>o.sale_id===id&&o.source==='site-paid');if(order)return notify('Онлайн-возврат оформляется через банк');dialog('Полный возврат продажи',input('reason','Причина')+select('restock','Возвращать товар в остаток?',[['false','Нет — товар не возвращён в продажу'],['true','Да — товар можно снова продавать']]),v=>mutate('sale.refund',{location_id:locationId,sale_id:id,reason:v.reason,restock:v.restock==='true'}));}
 function paymentDialog(id){const s=data.sales.find(x=>x.id===id);dialog('Погашение долга',input('amount','Сумма, ₽','number',(s.total-s.paid)/100,'min="0.01" step="0.01"')+select('method','Способ',[['cash','Наличные'],['card','Терминал'],['transfer','Перевод']]),v=>mutate('payment.add',{location_id:locationId,sale_id:id,...v}));}
 function renderStock(){const list=data.products.filter(p=>p.stock_tracked);$('#content').innerHTML=`<div class="toolbar"><button onclick="stockDialog('stock.receive')">+ Приход</button><button onclick="stockDialog('stock.writeoff')">Списание</button><button onclick="stockDialog('stock.count')">Инвентаризация</button><button onclick="stockDialog('stock.transfer')">Перемещение</button><button onclick="refresh()">Обновить</button></div><div class="panel">${table(['Позиция','Категория','Готовых свободно','Минимум','Состояние'],list.map(p=>[esc(p.name),esc(p.category),physicalAvailable(p)+' '+esc(p.unit),p.min_stock||0,physicalAvailable(p)<Number(p.min_stock)?'<span class="badge low">Мало</span>':'<span class="badge">Достаточно</span>']))}</div>`;}
+function renderProductAdmin(){
+ const canEdit=live&&['admin','manager'].includes(data.employee.role);
+ $('#content').innerHTML=`<div class="toolbar"><button class="primary" id="new-product" ${canEdit?'':'disabled'}>+ Добавить товар</button><button onclick="refresh()">Обновить</button></div><div class="panel"><p class="muted">Новые товары попадают в таблицу CRM и доступны для внутреннего учета. На сайте автоматически не публикуются: для сайта отдельно нужны карточка с фото и подключение к оплате.</p>${table(['Код','Название','Категория','Цена','Учет остатков'],data.products.map(p=>[esc(p.id),esc(p.name)+' · '+esc(p.unit),esc(p.category),rub(p.price),p.stock_tracked?'Да':'Нет']))}</div>`;
+ $('#new-product').onclick=productDialog;
+}
+function productDialog(){
+ if(!live||!['admin','manager'].includes(data.employee.role))return;
+ const optional='<label for="f-cost">Себестоимость, ₽ (необязательно)</label><input id="f-cost" name="cost" type="number" min="0" step="0.01" inputmode="decimal">';
+ dialog('Новый товар CRM',input('name','Название','text','','maxlength="100"')+input('category','Категория','text','','maxlength="100"')+select('unit','Единица',[['шт','шт'],['кг','кг'],['л','л']])+input('price','Цена, ₽','number','','min="0.01" max="100000" step="0.01" inputmode="decimal"')+optional+select('stock_tracked','Учитывать остатки?', [['false','Нет'],['true','Да']])+input('min_stock','Минимальный остаток','number','0','min="0" max="100000" step="0.001" inputmode="decimal"')+'<p class="muted">Товар будет создан активным только во внутреннем каталоге CRM.</p>',v=>mutate('catalog.product.create',{name:v.name,category:v.category,unit:v.unit,price:v.price,cost:v.cost,stock_tracked:v.stock_tracked==='true',min_stock:v.min_stock}));
+}
 function renderAvailability(){
  const settings=data.site_availability,canEdit=live&&['admin','manager'].includes(data.employee.role);
  if(!settings){$('#content').innerHTML='<div class="panel"><p>Настройки наличия пока не загружены. Обновите CRM.</p></div>';return;}
