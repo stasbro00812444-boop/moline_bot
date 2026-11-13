@@ -53,4 +53,10 @@
 #dialog textarea{display:block;width:100%;min-height:86px;resize:vertical;padding:12px;border:1px solid #ddd8d2;border-radius:9px;font:inherit;color:inherit;background:#fff}
 #dialog input[type=file]{height:auto;min-height:48px;padding:10px;background:#f7f5f2}
 #dialog input:focus-visible,#dialog textarea:focus-visible,#dialog select:focus-visible{outline:3px solid #ba7c94;outline-offset:2px}
+#dialog #fields h3{margin:24px 0 10px;padding:10px 0;border-bottom:1px solid #eee8e2;font-size:14px;font-weight:600;color:#735d67}
+#dialog #fields h3:first-child{margin-top:4px}
+#dialog .product-publish-choice{display:flex;align-items:center;gap:12px;margin:22px 0 8px;padding:14px;border:1px solid #e6d4dc;border-radius:10px;background:#faf4f6;cursor:pointer}
+#dialog .product-publish-choice input{width:20px;height:20px;min-height:20px;flex:none;margin:0;accent-color:#ad718b}
+#dialog .site-preview{margin-top:10px}
+#dialog select:disabled{color:#7d746d;background:#f4f0ec;cursor:default}
 
