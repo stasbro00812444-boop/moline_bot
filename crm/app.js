@@ -110,18 +110,19 @@ function renderProductAdmin(){
  const canEdit=live&&['admin','manager'].includes(data.employee.role);
  const cards=Object.fromEntries((data.site_cards||[]).map(p=>[p.product_id,p]));
  const pencil='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4L16.5 3.5Z"/></svg>';
- $('#content').innerHTML=`<div class="toolbar"><button class="primary" id="new-product" ${canEdit?'':'disabled'}>+ Добавить товар</button><button onclick="refresh()">Обновить</button></div><div class="panel product-admin"><p class="muted">Товары сайта можно изменить здесь. Остальные позиции сначала сохраните как черновик, затем опубликуйте.</p><div class="product-admin-list">${data.products.map(p=>{
+ $('#content').innerHTML=`<div class="toolbar"><button class="primary" id="new-product" ${canEdit?'':'disabled'}>+ Добавить товар</button><button onclick="refresh()">Обновить</button></div><div class="panel product-admin"><p class="muted">Откройте товар, чтобы изменить его и карточку сайта в одной форме.</p><div class="product-admin-list">${data.products.map(p=>{
   const card=cards[p.id],legacy=!!MOLINE_LEGACY_IMAGES[p.id],eligible=data.capabilities?.site_cards&&!['ADD_001','ADD_002','SYS_PAYMENT_TEST'].includes(p.id);
   const shown=card?.next_price_on&&card.next_price_on<=new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Moscow'})?Number(card.next_price)*100:p.price;
   const photo=card?.media_id?`https://molinebymonk.ru/api/auth/catalog/media/${esc(card.media_id)}.webp`:MOLINE_LEGACY_IMAGES[p.id];
   const image=photo?`<img class="product-thumb" src="${photo}" alt="" loading="lazy">`:'<span class="product-thumb product-thumb-empty" aria-hidden="true"></span>';
-  const state=legacy?'На сайте':card?.published?'Опубликован':card?'Черновик':'Не на сайте';
+  const published=legacy?(!card||card.published===true):card?.published===true;
+  const state=published?'На сайте':card?'Снят с сайта':'Не на сайте';
   const edit=eligible?`<button class="product-edit" data-site-edit="${esc(p.id)}" aria-label="${card||legacy?'Редактировать':'Оформить'}: ${esc(p.name)}" title="${card||legacy?'Редактировать':'Оформить'}" ${canEdit?'':'disabled'}>${pencil}</button>`:'';
-  const publish=eligible&&!legacy?(card?.published?`<button class="product-state-action" data-site-unpublish="${esc(p.id)}" ${canEdit?'':'disabled'}>Снять с сайта</button>`:card?`<button class="product-state-action" data-site-publish="${esc(p.id)}" ${canEdit?'':'disabled'}>Опубликовать</button>`:''):'';
+  const publish=eligible?(published?`<button class="product-state-action" data-site-unpublish="${esc(p.id)}" ${canEdit?'':'disabled'}>Снять с сайта</button>`:card?`<button class="product-state-action" data-site-publish="${esc(p.id)}" ${canEdit?'':'disabled'}>Опубликовать</button>`:''):'';
   return `<article class="product-admin-row">${image}<div class="product-admin-main"><strong>${esc(p.name)}</strong><div class="product-admin-meta"><span>${rub(shown)}</span><span class="product-admin-status">${state}</span></div>${publish}</div>${edit}</article>`;
  }).join('')}</div></div>`;
- $('#new-product').onclick=productDialog;
- $('#content').querySelectorAll('[data-site-edit]').forEach(b=>b.onclick=()=>siteProductDialog(b.dataset.siteEdit));
+ $('#new-product').onclick=()=>productDialog();
+ $('#content').querySelectorAll('[data-site-edit]').forEach(b=>b.onclick=()=>productDialog(b.dataset.siteEdit));
  $('#content').querySelectorAll('[data-site-publish]').forEach(b=>b.onclick=()=>publishSiteProduct(b.dataset.sitePublish));
  $('#content').querySelectorAll('[data-site-unpublish]').forEach(b=>b.onclick=()=>unpublishSiteProduct(b.dataset.siteUnpublish));
 }
@@ -137,21 +138,6 @@ async function imageData(file){
  const bytes=new Uint8Array(await blob.arrayBuffer());let text='';for(const byte of bytes)text+=String.fromCharCode(byte);
  return btoa(text);
 }
-function siteProductDialog(id){
- const p=data.products.find(p=>p.id===id),card=(data.site_cards||[]).find(x=>x.product_id===id);
- if(!p||!live||!data.capabilities?.site_cards)return;
- const legacy=!!MOLINE_LEGACY_IMAGES[id],isNew=!legacy;
- const imageUrl=card?.media_id?`https://molinebymonk.ru/api/auth/catalog/media/${esc(card.media_id)}.webp`:MOLINE_LEGACY_IMAGES[id];
- const photo=imageUrl?`<img class="site-photo" src="${imageUrl}" alt="Фото товара на сайте">`:'';
- const fields=`<p class="muted">${esc(p.name)} · ${rub(p.price)}</p><label for="site-name">Название для сайта (необязательно)</label><input id="site-name" name="site_name" maxlength="100" value="${esc(card?.site_name||'')}" placeholder="${esc(p.name)}"><div class="site-preview" id="site-preview">${photo||'<span>Добавьте фотографию для публикации</span>'}</div><label for="site-photo">${isNew?'Фото товара':'Заменить фото (необязательно)'}</label><input id="site-photo" name="image" type="file" accept="image/png,image/jpeg,image/webp"><label for="site-description">Описание ${isNew?'':'(пусто — сохранить текст сайта)'}</label><textarea id="site-description" name="description" maxlength="2000" ${isNew?'required':''}>${esc(card?.description||'')}</textarea><label for="site-ingredients">Состав и аллергены ${isNew?'':'(пусто — сохранить данные сайта)'}</label><textarea id="site-ingredients" name="ingredients" maxlength="2000" ${isNew?'required':''}>${esc(card?.ingredients||'')}</textarea>${isNew?select('stock_mode','Учет для сайта',[['finished','Готовый остаток'],['recipe','По рецепту сборки'],['made_to_order','Готовим под заказ (лимит дня)'],['manual','Вручную включать и выключать']]):''}<label for="site-next-price">Новая цена, ₽ (необязательно)</label><input id="site-next-price" name="next_price" type="number" min="0.01" step="0.01" value="${esc(card?.next_price||'')}"><label for="site-next-date">Дата новой цены (по Москве)</label><input id="site-next-date" name="next_price_on" type="date" value="${esc(card?.next_price_on||'')}"><p class="muted">${isNew?'Сохранение создает черновик. После проверки нажмите «Опубликовать».':'Старый товар остается на сайте; наличие меняйте в разделе «Наличие сайта».'}</p>`;
- dialog('Карточка сайта',fields,async v=>{
-  const image=await imageData(v.image);let media_id=card?.media_id||'';
-  if(image){const upload=await api('catalog.media.upload',{image},crypto.randomUUID());media_id=upload.media_id;}
-  await mutate('catalog.site.save',{product_id:id,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:isNew?v.stock_mode:'legacy',next_price:v.next_price,next_price_on:v.next_price_on});
- });
- if(isNew)$('#f-stock_mode').value=card?.stock_mode||'finished';
- $('#site-photo').onchange=e=>{const f=e.target.files?.[0];if(!f)return;const url=URL.createObjectURL(f);const preview=$('#site-preview');preview.innerHTML='';const img=document.createElement('img');img.className='site-photo';img.alt='Предпросмотр';img.src=url;img.onload=()=>URL.revokeObjectURL(url);preview.append(img);};
-}
 async function publishSiteProduct(id){
  if(!confirm('Проверили фото, описание, состав и правило склада? Товар появится на сайте после публикации.'))return;
  try{await mutate('catalog.site.publish',{product_id:id});render();notify('Товар опубликован на сайте');}catch(e){notify(e.message);}
@@ -160,11 +146,60 @@ async function unpublishSiteProduct(id){
  if(!confirm('Снять товар с сайта? Оформленные заказы сохранятся.'))return;
  try{await mutate('catalog.site.unpublish',{product_id:id});render();notify('Товар снят с сайта');}catch(e){notify(e.message);}
 }
-function productDialog(){
+function productDialog(id=''){
  if(!live||!['admin','manager'].includes(data.employee.role))return;
- const optional='<label for="f-cost">Себестоимость, ₽ (необязательно)</label><input id="f-cost" name="cost" type="number" min="0" step="0.01" inputmode="decimal">';
- const categories=[...new Set(['Выпечка','Напитки','Десерты',...data.products.map(p=>p.category).filter(Boolean)])];
-  dialog('Новый товар CRM',input('name','Название','text','','maxlength="100"')+select('category','Категория',categories.map(c=>[c,c]))+input('category_new','Или новая категория','text','','maxlength="40" placeholder="Например, завтраки"')+select('unit','Единица',[['шт','шт'],['кг','кг'],['л','л']])+input('price','Цена, ₽','number','','min="0.01" max="100000" step="0.01" inputmode="decimal"')+optional+select('stock_tracked','Учитывать остатки?', [['false','Нет'],['true','Да']])+input('min_stock','Минимальный остаток','number','0','min="0" max="100000" step="0.001" inputmode="decimal"')+'<p class="muted">Товар будет создан активным только во внутреннем каталоге CRM.</p>',v=>{const category=(v.category_new||v.category).trim();if(!/^[а-яёa-z0-9][а-яёa-z0-9 -]{1,38}[а-яёa-z0-9]$/i.test(category))throw Error('Категория: от 3 до 40 букв или цифр; можно использовать пробел и дефис.');return mutate('catalog.product.create',{name:v.name,category,unit:v.unit,price:v.price,cost:v.cost,stock_tracked:v.stock_tracked==='true',min_stock:v.min_stock});});
+ const p=id?data.products.find(x=>x.id===id):null;
+ if(id&&!p)return;
+ const card=(data.site_cards||[]).find(x=>x.product_id===id),legacy=!!(id&&MOLINE_LEGACY_IMAGES[id]);
+ const published=legacy?(!card||card.published===true):card?.published===true;
+ const categories=[...new Set(['Выпечка','Напитки','Десерты',...data.products.map(x=>x.category).filter(Boolean)])];
+ const imageUrl=card?.media_id?`https://molinebymonk.ru/api/auth/catalog/media/${esc(card.media_id)}.webp`:MOLINE_LEGACY_IMAGES[id];
+ const stock=p?.stock_tracked?'true':'false';
+ const fields=`<h3>Товар CRM</h3>`+
+  input('name','Название','text',p?.name||'','maxlength="100"')+
+  select('category','Категория',categories.map(c=>[c,c]))+
+  '<label for="f-category_new">Или новая категория</label><input id="f-category_new" name="category_new" maxlength="40" placeholder="Например, завтраки">'+
+  select('unit','Единица',[['шт','шт'],['кг','кг'],['л','л']])+
+  input('price','Цена, ₽','number',p?p.price/100:'','min="0.01" max="100000" step="0.01" inputmode="decimal"')+
+  `<label for="f-cost">Себестоимость, ₽ (необязательно)</label><input id="f-cost" name="cost" type="number" min="0" step="0.01" value="${esc(p?.cost==null?'':p.cost/100)}">`+
+  select('stock_tracked','Учитывать остатки?', [['false','Нет'],['true','Да']])+
+  input('min_stock','Минимальный остаток','number',p?.min_stock??0,'min="0" max="100000" step="0.001" inputmode="decimal"')+
+  `<h3>Карточка сайта</h3><label for="site-name">Название на сайте (необязательно)</label><input id="site-name" name="site_name" maxlength="100" value="${esc(card?.site_name||'')}" placeholder="Как в CRM">`+
+  `<div class="site-preview" id="site-preview">${imageUrl?`<img class="site-photo" src="${imageUrl}" alt="Фото товара">`:'<span>Фото пока не выбрано</span>'}</div><label for="site-photo">${imageUrl?'Заменить фото':'Фото товара'}</label><input id="site-photo" name="image" type="file" accept="image/png,image/jpeg,image/webp">`+
+  `<label for="site-description">Описание</label><textarea id="site-description" name="description" maxlength="2000">${esc(card?.description||'')}</textarea>`+
+  `<label for="site-ingredients">Состав и аллергены</label><textarea id="site-ingredients" name="ingredients" maxlength="2000">${esc(card?.ingredients||'')}</textarea>`+
+  (legacy?'':select('stock_mode','Правило наличия на сайте',[['manual','Включать вручную'],['finished','Готовый остаток'],['recipe','По рецепту сборки'],['made_to_order','Готовим под заказ (лимит дня)']]))+
+  `<label for="site-next-price">Новая цена, ₽ (необязательно)</label><input id="site-next-price" name="next_price" type="number" min="0.01" step="0.01" value="${esc(card?.next_price||'')}"><label for="site-next-date">Дата новой цены (по Москве)</label><input id="site-next-date" name="next_price_on" type="date" value="${esc(card?.next_price_on||'')}">`+
+  `<label class="product-publish-choice"><input name="publish" type="checkbox" ${published||!p?'checked':''}> Показывать на сайте после сохранения</label><p class="muted">Можно сохранить черновик без публикации. Единица и учет остатков после создания фиксируются, история заказов сохраняется.</p>`;
+ let savedId=id;
+ dialog(p?'Редактировать товар':'Новый товар',fields,async v=>{
+  const nextCategory=(v.category_new||v.category).trim();
+  if(!/^[а-яёa-z0-9][а-яёa-z0-9 -]{1,38}[а-яёa-z0-9]$/i.test(nextCategory))throw Error('Категория: 3–40 символов, буквы, цифры, пробел и дефис.');
+  if(p&&v.unit!==p.unit)throw Error('Единицу существующего товара изменить нельзя.');
+  if(p&&(v.stock_tracked==='true')!==p.stock_tracked)throw Error('Учёт остатков существующего товара изменить нельзя.');
+  const wantsSite=v.publish==='on';
+  const photo=await imageData(v.image);let media_id=card?.media_id||'';
+  if(wantsSite&&!legacy&&(!media_id&&!photo||!v.description.trim()||!v.ingredients.trim()))throw Error('Для публикации добавьте фото, описание и состав.');
+  if(photo){const upload=await api('catalog.media.upload',{image:photo},crypto.randomUUID());media_id=upload.media_id;}
+  const details={name:v.name,category:nextCategory,unit:v.unit,price:v.price,cost:v.cost,stock_tracked:v.stock_tracked==='true',min_stock:v.min_stock};
+  if(savedId)await mutate('catalog.product.update',{product_id:savedId,...details});
+  else{
+   const before=new Set(data.products.map(x=>x.id));
+   await mutate('catalog.product.create',details);
+   const created=data.products.find(x=>!before.has(x.id)&&x.name===details.name&&x.category===details.category);
+   if(!created)throw Error('Товар создан, но его код не найден. Обновите список и откройте товар для завершения.');
+   savedId=created.id;
+  }
+  await mutate('catalog.site.save',{product_id:savedId,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:legacy?'legacy':v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on});
+  const currently=legacy?(!card||card.published===true):card?.published===true;
+  if(wantsSite&&!currently)await mutate('catalog.site.publish',{product_id:savedId});
+  if(!wantsSite&&currently)await mutate('catalog.site.unpublish',{product_id:savedId});
+ });
+ $('#f-category').value=p?.category||categories[0];$('#f-unit').value=p?.unit||'шт';
+ $('#f-stock_tracked').value=stock;
+ if(p){for(const name of ['unit','stock_tracked']){const select=$('#f-'+name);select.disabled=true;const hidden=document.createElement('input');hidden.type='hidden';hidden.name=name;hidden.value=select.value;select.after(hidden);}}
+ if(!legacy)$('#f-stock_mode').value=card?.stock_mode||((p?.stock_tracked)?'finished':'manual');
+ $('#site-photo').onchange=e=>{const file=e.target.files?.[0];if(!file)return;const preview=$('#site-preview');preview.replaceChildren();const img=document.createElement('img');img.className='site-photo';img.alt='Предпросмотр';const url=URL.createObjectURL(file);img.src=url;img.onload=()=>URL.revokeObjectURL(url);preview.append(img);};
 }
 function renderAvailability(){
  const settings=data.site_availability,canEdit=live&&['admin','manager'].includes(data.employee.role);
