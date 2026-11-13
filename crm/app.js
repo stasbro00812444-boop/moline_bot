@@ -140,11 +140,11 @@ async function imageData(file){
 }
 async function publishSiteProduct(id){
  if(!confirm('Проверили фото, описание, состав и правило склада? Товар появится на сайте после публикации.'))return;
- try{await mutate('catalog.site.publish',{product_id:id});render();notify('Товар опубликован на сайте');}catch(e){notify(e.message);}
+ try{if(data.capabilities?.site_contract!=='products-20261113-v2')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.publish',{product_id:id});render();notify('Товар опубликован на сайте');}catch(e){notify(e.message);}
 }
 async function unpublishSiteProduct(id){
  if(!confirm('Снять товар с сайта? Оформленные заказы сохранятся.'))return;
- try{await mutate('catalog.site.unpublish',{product_id:id});render();notify('Товар снят с сайта');}catch(e){notify(e.message);}
+ try{if(data.capabilities?.site_contract!=='products-20261113-v2')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.unpublish',{product_id:id});render();notify('Товар снят с сайта');}catch(e){notify(e.message);}
 }
 function productDialog(id=''){
  if(!live||!['admin','manager'].includes(data.employee.role))return;
@@ -177,6 +177,7 @@ function productDialog(id=''){
   if(!/^[а-яёa-z0-9][а-яёa-z0-9 -]{1,38}[а-яёa-z0-9]$/i.test(nextCategory))throw Error('Категория: 3–40 символов, буквы, цифры, пробел и дефис.');
   if(p&&v.unit!==p.unit)throw Error('Единицу существующего товара изменить нельзя.');
   if(p&&(v.stock_tracked==='true')!==p.stock_tracked)throw Error('Учёт остатков существующего товара изменить нельзя.');
+  if(data.capabilities?.site_contract!=='products-20261113-v2')throw Error('Опубликованная версия Apps Script устарела. В редакторе нажмите «Развернуть → Управление развертываниями → Изменить → Новая версия → Развернуть», затем переподключите CRM. Товар не изменён.');
   const wantsSite=v.publish==='on';
   const photo=await imageData(v.image);let media_id=card?.media_id||'';
   if(wantsSite&&!legacy&&(!media_id&&!photo||!v.description.trim()||!v.ingredients.trim()))throw Error('Для публикации добавьте фото, описание и состав.');
