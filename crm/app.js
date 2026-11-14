@@ -63,7 +63,8 @@ function renderSale(){
 function renderProducts(){
  const categories=['',...new Set(data.products.map(p=>p.category))];$('#categories').innerHTML=categories.map(c=>`<button class="${category===c?'active':''}">${esc(c||'Все позиции')}</button>`).join('');$('#categories').querySelectorAll('button').forEach((b,i)=>b.onclick=()=>{category=categories[i];renderProducts();});
  const list=data.products.filter(p=>(!category||p.category===category)&&p.name.toLowerCase().includes(search.toLowerCase()));
- $('#products').innerHTML=list.length?list.map(p=>`<button class="product" data-id="${esc(p.id)}"><span class="cat">${esc(p.category)}</span><strong>${esc(p.name)}</strong><span class="bottom"><span>${rub(p.price)}</span><span class="muted">${p.stock_tracked?available(p)+' '+esc(p.unit):'без склада'}</span></span></button>`).join(''):'<div class="empty">Нет товаров. В рабочем режиме каталог заполняется на листе «Товары».</div>';
+ const cards=Object.fromEntries((data.site_cards||[]).map(c=>[c.product_id,c]));
+ $('#products').innerHTML=list.length?list.map(p=>{const media=cards[p.id]?.media_id;const photo=/^[a-f0-9]{64}$/.test(media||'')?`https://molinebymonk.ru/api/auth/catalog/media/${media}.webp`:MOLINE_LEGACY_IMAGES[p.id];return `<button class="product" data-id="${esc(p.id)}">${photo?`<img class="sale-product-photo" src="${esc(photo)}" alt="" loading="lazy">`:'<span class="sale-product-photo sale-product-placeholder" aria-hidden="true"></span>'}<span class="cat">${esc(p.category)}</span><strong>${esc(p.name)}</strong><span class="bottom"><span>${rub(p.price)}</span><span class="muted">${p.stock_tracked?available(p)+' '+esc(p.unit):'без склада'}</span></span></button>`;}).join(''):'<div class="empty">Нет товаров. В рабочем режиме каталог заполняется на листе «Товары».</div>';
  $('#products').querySelectorAll('button').forEach(b=>b.onclick=()=>add(b.dataset.id,1));
 }
 function confirmClassic(product,amount,accept){
