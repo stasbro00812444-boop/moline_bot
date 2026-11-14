@@ -120,12 +120,20 @@ function renderProductAdmin(){
   const state=published?'На сайте':card?'Снят с сайта':'Не на сайте';
   const edit=eligible?`<button class="product-edit" data-site-edit="${esc(p.id)}" aria-label="${card||legacy?'Редактировать':'Оформить'}: ${esc(p.name)}" title="${card||legacy?'Редактировать':'Оформить'}" ${canEdit?'':'disabled'}>${pencil}</button>`:'';
   const publish=eligible?(published?`<button class="product-state-action" data-site-unpublish="${esc(p.id)}" ${canEdit?'':'disabled'}>Снять с сайта</button>`:card?`<button class="product-state-action" data-site-publish="${esc(p.id)}" ${canEdit?'':'disabled'}>Опубликовать</button>`:''):'';
-  return `<article class="product-admin-row">${image}<div class="product-admin-main"><strong>${esc(p.name)}</strong><div class="product-admin-meta"><span>${rub(shown)}</span><span class="product-admin-status">${state}</span></div>${publish}</div>${edit}</article>`;
+  const archive=eligible?`<button class="product-archive danger" data-product-archive="${esc(p.id)}" ${canEdit?'':'disabled'}>В архив</button>`:'';
+  return `<article class="product-admin-row">${image}<div class="product-admin-main"><strong>${esc(p.name)}</strong><div class="product-admin-meta"><span>${rub(shown)}</span><span class="product-admin-status">${state}</span></div>${publish}${archive}</div>${edit}</article>`;
  }).join('')}</div></div>`;
  $('#new-product').onclick=()=>productDialog();
  $('#content').querySelectorAll('[data-site-edit]').forEach(b=>b.onclick=()=>productDialog(b.dataset.siteEdit));
  $('#content').querySelectorAll('[data-site-publish]').forEach(b=>b.onclick=()=>publishSiteProduct(b.dataset.sitePublish));
  $('#content').querySelectorAll('[data-site-unpublish]').forEach(b=>b.onclick=()=>unpublishSiteProduct(b.dataset.siteUnpublish));
+ $('#content').querySelectorAll('[data-product-archive]').forEach(b=>b.onclick=()=>archiveProduct(b.dataset.productArchive));
+}
+async function archiveProduct(id){
+ const product=data.products.find(p=>p.id===id);if(!product)return;
+ if(Object.keys(cart).some(key=>key===id))return notify('Сначала уберите товар из текущей продажи');
+ if(!confirm(`Убрать «${product.name}» из CRM и с сайта? История продаж сохранится.`))return;
+ try{await mutate('catalog.product.archive',{product_id:id});render();notify('Товар перемещен в архив');}catch(error){notify(error.message);}
 }
 async function imageData(file){
  if(!(file instanceof File)||!file.size)return '';
@@ -153,11 +161,11 @@ async function productSaveStage(message){
 }
 async function publishSiteProduct(id){
  if(!confirm('Проверили фото, описание, состав и правило склада? Товар появится на сайте после публикации.'))return;
- try{if(data.capabilities?.site_contract!=='products-20261113-v2')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.publish',{product_id:id});render();notify('Товар опубликован на сайте');}catch(e){notify(e.message);}
+ try{if(data.capabilities?.site_contract!=='products-20261114-v3')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.publish',{product_id:id});render();notify('Товар опубликован на сайте');}catch(e){notify(e.message);}
 }
 async function unpublishSiteProduct(id){
  if(!confirm('Снять товар с сайта? Оформленные заказы сохранятся.'))return;
- try{if(data.capabilities?.site_contract!=='products-20261113-v2')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.unpublish',{product_id:id});render();notify('Товар снят с сайта');}catch(e){notify(e.message);}
+ try{if(data.capabilities?.site_contract!=='products-20261114-v3')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.unpublish',{product_id:id});render();notify('Товар снят с сайта');}catch(e){notify(e.message);}
 }
 function productDialog(id=''){
  if(!live||!['admin','manager'].includes(data.employee.role))return;
@@ -178,9 +186,14 @@ function productDialog(id=''){
   select('stock_tracked','Учитывать остатки?', [['false','Нет'],['true','Да']])+
   input('min_stock','Минимальный остаток','number',p?.min_stock??0,'min="0" max="100000" step="0.001" inputmode="decimal"')+
   `<h3>Карточка сайта</h3><label for="site-name">Название на сайте (необязательно)</label><input id="site-name" name="site_name" maxlength="100" value="${esc(card?.site_name||'')}" placeholder="Как в CRM">`+
-  `<div class="site-preview" id="site-preview">${imageUrl?`<img class="site-photo" src="${imageUrl}" alt="Фото товара">`:'<span>Фото пока не выбрано</span>'}</div><label for="site-photo">${imageUrl?'Заменить фото':'Фото товара'}</label><input id="site-photo" name="image" type="file" accept="image/png,image/jpeg,image/webp">`+
+  `<div class="site-preview size-${esc(card?.image_size||'medium')}" id="site-preview">${imageUrl?`<img class="site-photo" src="${imageUrl}" alt="Фото товара">`:'<span>Фото пока не выбрано</span>'}</div><label for="site-photo">${imageUrl?'Заменить фото':'Фото товара'}</label><input id="site-photo" name="image" type="file" accept="image/png,image/jpeg,image/webp">`+
+  select('image_size','Размер фото на сайте',[['small','Компактный'],['medium','Обычный'],['large','Крупный']])+
+  `<p class="muted">Предпросмотр размера. Сайт сохранит пропорции фотографии.</p>`+
   `<label for="site-description">Описание</label><textarea id="site-description" name="description" maxlength="2000">${esc(card?.description||'')}</textarea>`+
   `<label for="site-ingredients">Состав и аллергены</label><textarea id="site-ingredients" name="ingredients" maxlength="2000">${esc(card?.ingredients||'')}</textarea>`+
+  `<h3>Пищевая ценность</h3><p class="muted">КБЖУ на 100 г или 100 мл. Пустое поле не будет показано на сайте.</p>`+
+  `<label for="f-weight">Масса или объем порции</label><input id="f-weight" name="weight" maxlength="30" placeholder="70 г или 300 мл" value="${esc(card?.weight||'')}">`+
+  [['calories','Ккал'],['protein','Белки, г'],['fat','Жиры, г'],['carbs','Углеводы, г']].map(([key,label])=>`<label for="f-${key}">${label}</label><input id="f-${key}" name="${key}" type="number" min="0" max="9999" step="0.01" inputmode="decimal" value="${esc(card?.[key]??'')}">`).join('')+
   (legacy?'':select('stock_mode','Правило наличия на сайте',[['manual','Включать вручную'],['finished','Готовый остаток'],['recipe','По рецепту сборки'],['made_to_order','Готовим под заказ (лимит дня)']]))+
   `<label for="site-next-price">Новая цена, ₽ (необязательно)</label><input id="site-next-price" name="next_price" type="number" min="0.01" step="0.01" value="${esc(card?.next_price||'')}"><label for="site-next-date">Дата новой цены (по Москве)</label><input id="site-next-date" name="next_price_on" type="date" value="${esc(card?.next_price_on||'')}">`+
   `<label class="product-publish-choice"><input name="publish" type="checkbox" ${published||!p?'checked':''}> Показывать на сайте после сохранения</label><p class="muted">Можно сохранить черновик без публикации. Единица и учет остатков после создания фиксируются, история заказов сохраняется.</p>`;
@@ -190,7 +203,7 @@ function productDialog(id=''){
   if(!/^[а-яёa-z0-9][а-яёa-z0-9 -]{1,38}[а-яёa-z0-9]$/i.test(nextCategory))throw Error('Категория: 3–40 символов, буквы, цифры, пробел и дефис.');
   if(p&&v.unit!==p.unit)throw Error('Единицу существующего товара изменить нельзя.');
   if(p&&(v.stock_tracked==='true')!==p.stock_tracked)throw Error('Учёт остатков существующего товара изменить нельзя.');
-  if(data.capabilities?.site_contract!=='products-20261113-v2')throw Error('Опубликованная версия Apps Script устарела. В редакторе нажмите «Развернуть → Управление развертываниями → Изменить → Новая версия → Развернуть», затем переподключите CRM. Товар не изменён.');
+  if(data.capabilities?.site_contract!=='products-20261114-v3')throw Error('Опубликованная версия Apps Script устарела. В редакторе нажмите «Развернуть → Управление развертываниями → Изменить → Новая версия → Развернуть», затем переподключите CRM. Товар не изменён.');
   const wantsSite=v.publish==='on';
   await productSaveStage('Проверяем данные и обрабатываем фото…');
   const photo=await imageData(v.image);let media_id=card?.media_id||'';
@@ -209,8 +222,8 @@ function productDialog(id=''){
     savedId=created.id;
    }
   }
-  const siteDetails={product_id:savedId,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:legacy?'legacy':v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on};
-  const siteChanged=!card||card.site_name!==siteDetails.site_name||card.description!==siteDetails.description||card.ingredients!==siteDetails.ingredients||card.media_id!==siteDetails.media_id||card.stock_mode!==siteDetails.stock_mode||String(card.next_price||'')!==String(siteDetails.next_price||'')||String(card.next_price_on||'')!==String(siteDetails.next_price_on||'');
+  const siteDetails={product_id:savedId,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:legacy?'legacy':v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on,weight:v.weight,calories:v.calories,protein:v.protein,fat:v.fat,carbs:v.carbs,image_size:v.image_size};
+  const siteChanged=!card||['site_name','description','ingredients','media_id','stock_mode','next_price','next_price_on','weight','calories','protein','fat','carbs','image_size'].some(key=>String(card[key]??(key==='image_size'?'medium':''))!==String(siteDetails[key]??''));
   if(siteChanged){await productSaveStage('Сохраняем карточку сайта…');await mutate('catalog.site.save',siteDetails);}
   const currently=legacy?(!card||card.published===true):card?.published===true;
   if(wantsSite&&!currently){await productSaveStage('Публикуем товар на сайте…');await mutate('catalog.site.publish',{product_id:savedId});}
@@ -220,6 +233,8 @@ function productDialog(id=''){
  $('#f-stock_tracked').value=stock;
  if(p){for(const name of ['unit','stock_tracked']){const select=$('#f-'+name);select.disabled=true;const hidden=document.createElement('input');hidden.type='hidden';hidden.name=name;hidden.value=select.value;select.after(hidden);}}
  if(!legacy)$('#f-stock_mode').value=card?.stock_mode||((p?.stock_tracked)?'finished':'manual');
+ $('#f-image_size').value=card?.image_size||'medium';
+ $('#f-image_size').onchange=e=>{$('#site-preview').className='site-preview size-'+e.target.value;};
  $('#site-photo').onchange=e=>{const file=e.target.files?.[0];if(!file)return;const preview=$('#site-preview');preview.replaceChildren();const img=document.createElement('img');img.className='site-photo';img.alt='Предпросмотр';const url=URL.createObjectURL(file);img.src=url;img.onload=()=>URL.revokeObjectURL(url);preview.append(img);};
 }
 function renderAvailability(){
@@ -321,4 +336,5 @@ setInterval(async()=>{
  try{const next=await api('bootstrap',{});if(live&&page==='orders'&&!busy&&!pending&&!$('#dialog').open){data=next;renderOrders();}}
  catch{}finally{refreshingOrders=false;}
 },20000);
+
 
