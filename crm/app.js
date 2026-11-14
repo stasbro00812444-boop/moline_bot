@@ -128,7 +128,8 @@ function renderProductAdmin(){
 }
 async function imageData(file){
  if(!(file instanceof File)||!file.size)return '';
- if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>6_000_000)throw Error('Нужен PNG, JPEG или WebP до 6 МБ');
+ if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Нужен PNG, JPEG или WebP');
+ if(file.size>50_000_000)throw Error('Исходное фото больше 50 МБ. Выберите файл меньшего размера.');
  const bitmap=await createImageBitmap(file),scale=Math.min(1,1200/Math.max(bitmap.width,bitmap.height));
  const canvas=document.createElement('canvas');canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
  canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
