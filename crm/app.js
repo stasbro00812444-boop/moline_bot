@@ -101,7 +101,7 @@ function short(id){return esc(String(id).slice(0,8));}function date(s){return ne
 function renderSales(){const sales=data.sales.filter(s=>s.location_id===locationId);$('#content').innerHTML=`<div class="toolbar"><span class="muted">Последние 300 документов · время Москвы</span><button onclick="refresh()">Обновить</button></div><div class="panel">${table(['Документ','Время','Состав','Сумма','Оплачено','Статус','Действия'],sales.map(s=>[short(s.id),date(s.created_at),esc(s.lines.map(l=>l.name+' × '+l.qty).join(', ')),rub(s.total),rub(s.paid),s.status==='refunded'?'Возвращён':s.paid<s.total?'Есть долг':'Продан',s.status==='sold'?`<button data-refund="${esc(s.id)}">Возврат</button>${s.total>s.paid?`<button data-pay="${esc(s.id)}">Принять оплату</button>`:''}`:'—']))}</div>`;$('#content').querySelectorAll('[data-refund]').forEach(b=>b.onclick=()=>refundDialog(b.dataset.refund));$('#content').querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>paymentDialog(b.dataset.pay));}
 function input(name,label,type='text',value='',extra=''){return `<label for="f-${name}">${label}</label><input id="f-${name}" name="${name}" type="${type}" value="${esc(value)}" ${extra} required>`;}
 function select(name,label,options){return `<label for="f-${name}">${label}</label><select id="f-${name}" name="${name}">${options.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`;}
-function dialog(title,fields,save){$('#submit').textContent='Сохранить';if(busy||pending)return notify('Есть незавершённая операция. Откройте настройки для повторной отправки.');$('#dialog-title').textContent=title;$('#fields').innerHTML=fields;$('#form-error').textContent='';$('#submit').disabled=false;$('#form').onsubmit=async e=>{e.preventDefault();if(busy)return;$('#submit').disabled=true;try{await save(Object.fromEntries(new FormData(e.target)));$('#dialog').close();render();notify('Сохранено');}catch(err){$('#form-error').textContent=err.message;}finally{$('#submit').disabled=false;}};$('#dialog').showModal();}
+function dialog(title,fields,save){$('#submit').textContent='Сохранить';if(busy||pending)return notify('Есть незавершённая операция. Откройте настройки для повторной отправки.');$('#dialog-title').textContent=title;$('#fields').innerHTML=fields;$('#form-error').textContent='';$('#submit').disabled=false;$('#form').onsubmit=async e=>{e.preventDefault();if(busy)return;$('#submit').disabled=true;try{await save(Object.fromEntries(new FormData(e.target)));$('#dialog').close();render();notify('Сохранено');}catch(err){const node=$('#form-error');node.textContent=err.name==='AbortError'?'CRM не ответила за 40 секунд. Операция могла сохраниться. Проверьте список товаров или повторите неподтвержденную операцию в настройках.':err.message;node.scrollIntoView({block:'nearest'});}finally{$('#submit').disabled=false;$('#submit').textContent='Сохранить';}};$('#dialog').showModal();}
 function shiftDialog(){const shift=currentShift();if(shift)dialog('Закрытие смены',`<p class="muted">Ожидаемые наличные: ${rub(shift.expected_cash)}</p>`+input('actual_cash','Наличные по факту, ₽','number','', 'min="0" step="0.01"')+input('reason','Комментарий / причина расхождения','text','Без расхождений'),v=>mutate('shift.close',{location_id:locationId,...v}));else dialog('Открытие смены',input('opening_cash','Разменные наличные, ₽','number','0','min="0" step="0.01"'),v=>mutate('shift.open',{location_id:locationId,...v}));}
 function refundDialog(id){const order=(data.orders||[]).find(o=>o.sale_id===id&&o.source==='site-paid');if(order)return notify('Онлайн-возврат оформляется через банк');dialog('Полный возврат продажи',input('reason','Причина')+select('restock','Возвращать товар в остаток?',[['false','Нет — товар не возвращён в продажу'],['true','Да — товар можно снова продавать']]),v=>mutate('sale.refund',{location_id:locationId,sale_id:id,reason:v.reason,restock:v.restock==='true'}));}
 function paymentDialog(id){const s=data.sales.find(x=>x.id===id);dialog('Погашение долга',input('amount','Сумма, ₽','number',(s.total-s.paid)/100,'min="0.01" step="0.01"')+select('method','Способ',[['cash','Наличные'],['card','Терминал'],['transfer','Перевод']]),v=>mutate('payment.add',{location_id:locationId,sale_id:id,...v}));}
@@ -135,8 +135,14 @@ async function imageData(file){
  let blob;
  for(const quality of [.88,.75,.62]){blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));if(blob?.size<=750000)break;}
  if(!blob||blob.type!=='image/webp'||blob.size>750000)throw Error('Фото слишком большое. Выберите изображение меньшего размера');
- const bytes=new Uint8Array(await blob.arrayBuffer());let text='';for(const byte of bytes)text+=String.fromCharCode(byte);
- return btoa(text);
+ const bytes=new Uint8Array(await blob.arrayBuffer()),parts=[];
+ for(let i=0;i<bytes.length;i+=32768){parts.push(String.fromCharCode(...bytes.subarray(i,i+32768)));if(i&&i%262144===0)await new Promise(resolve=>setTimeout(resolve,0));}
+ return btoa(parts.join(''));
+}
+async function productSaveStage(message){
+ const progress=$('#form-progress');if(progress)progress.textContent=message;
+ const submit=$('#submit');if(submit)submit.textContent='Сохраняем…';
+ await new Promise(resolve=>requestAnimationFrame(resolve));
 }
 async function publishSiteProduct(id){
  if(!confirm('Проверили фото, описание, состав и правило склада? Товар появится на сайте после публикации.'))return;
@@ -172,29 +178,36 @@ function productDialog(id=''){
   `<label for="site-next-price">Новая цена, ₽ (необязательно)</label><input id="site-next-price" name="next_price" type="number" min="0.01" step="0.01" value="${esc(card?.next_price||'')}"><label for="site-next-date">Дата новой цены (по Москве)</label><input id="site-next-date" name="next_price_on" type="date" value="${esc(card?.next_price_on||'')}">`+
   `<label class="product-publish-choice"><input name="publish" type="checkbox" ${published||!p?'checked':''}> Показывать на сайте после сохранения</label><p class="muted">Можно сохранить черновик без публикации. Единица и учет остатков после создания фиксируются, история заказов сохраняется.</p>`;
  let savedId=id;
- dialog(p?'Редактировать товар':'Новый товар',fields,async v=>{
+ dialog(p?'Редактировать товар':'Новый товар',fields+'<p id="form-progress" role="status" aria-live="polite"></p>',async v=>{
   const nextCategory=(v.category_new||v.category).trim();
   if(!/^[а-яёa-z0-9][а-яёa-z0-9 -]{1,38}[а-яёa-z0-9]$/i.test(nextCategory))throw Error('Категория: 3–40 символов, буквы, цифры, пробел и дефис.');
   if(p&&v.unit!==p.unit)throw Error('Единицу существующего товара изменить нельзя.');
   if(p&&(v.stock_tracked==='true')!==p.stock_tracked)throw Error('Учёт остатков существующего товара изменить нельзя.');
   if(data.capabilities?.site_contract!=='products-20261113-v2')throw Error('Опубликованная версия Apps Script устарела. В редакторе нажмите «Развернуть → Управление развертываниями → Изменить → Новая версия → Развернуть», затем переподключите CRM. Товар не изменён.');
   const wantsSite=v.publish==='on';
+  await productSaveStage('Проверяем данные и обрабатываем фото…');
   const photo=await imageData(v.image);let media_id=card?.media_id||'';
   if(wantsSite&&!legacy&&(!media_id&&!photo||!v.description.trim()||!v.ingredients.trim()))throw Error('Для публикации добавьте фото, описание и состав.');
-  if(photo){const upload=await api('catalog.media.upload',{image:photo},crypto.randomUUID());media_id=upload.media_id;}
+  if(photo){await productSaveStage('Загружаем фото…');const upload=await api('catalog.media.upload',{image:photo},crypto.randomUUID());media_id=upload.media_id;}
   const details={name:v.name,category:nextCategory,unit:v.unit,price:v.price,cost:v.cost,stock_tracked:v.stock_tracked==='true',min_stock:v.min_stock};
-  if(savedId)await mutate('catalog.product.update',{product_id:savedId,...details});
+  const productChanged=!p||p.name!==details.name||p.category!==details.category||p.unit!==details.unit||p.price!==Math.round(Number(details.price)*100)||(p.cost==null?'':p.cost)!==(details.cost===''?'':Math.round(Number(details.cost)*100))||p.stock_tracked!==details.stock_tracked||Number(p.min_stock||0)!==Number(details.min_stock);
+  if(savedId&&productChanged){await productSaveStage('Обновляем товар в CRM…');await mutate('catalog.product.update',{product_id:savedId,...details});}
   else{
-   const before=new Set(data.products.map(x=>x.id));
-   await mutate('catalog.product.create',details);
-   const created=data.products.find(x=>!before.has(x.id)&&x.name===details.name&&x.category===details.category);
-   if(!created)throw Error('Товар создан, но его код не найден. Обновите список и откройте товар для завершения.');
-   savedId=created.id;
+   if(!savedId){
+    await productSaveStage('Создаем товар в CRM…');
+    const before=new Set(data.products.map(x=>x.id));
+    await mutate('catalog.product.create',details);
+    const created=data.products.find(x=>!before.has(x.id)&&x.name===details.name&&x.category===details.category);
+    if(!created)throw Error('Товар создан, но его код не найден. Обновите список и откройте товар для завершения.');
+    savedId=created.id;
+   }
   }
-  await mutate('catalog.site.save',{product_id:savedId,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:legacy?'legacy':v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on});
+  const siteDetails={product_id:savedId,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:legacy?'legacy':v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on};
+  const siteChanged=!card||card.site_name!==siteDetails.site_name||card.description!==siteDetails.description||card.ingredients!==siteDetails.ingredients||card.media_id!==siteDetails.media_id||card.stock_mode!==siteDetails.stock_mode||String(card.next_price||'')!==String(siteDetails.next_price||'')||String(card.next_price_on||'')!==String(siteDetails.next_price_on||'');
+  if(siteChanged){await productSaveStage('Сохраняем карточку сайта…');await mutate('catalog.site.save',siteDetails);}
   const currently=legacy?(!card||card.published===true):card?.published===true;
-  if(wantsSite&&!currently)await mutate('catalog.site.publish',{product_id:savedId});
-  if(!wantsSite&&currently)await mutate('catalog.site.unpublish',{product_id:savedId});
+  if(wantsSite&&!currently){await productSaveStage('Публикуем товар на сайте…');await mutate('catalog.site.publish',{product_id:savedId});}
+  if(!wantsSite&&currently){await productSaveStage('Снимаем товар с сайта…');await mutate('catalog.site.unpublish',{product_id:savedId});}
  });
  $('#f-category').value=p?.category||categories[0];$('#f-unit').value=p?.unit||'шт';
  $('#f-stock_tracked').value=stock;
@@ -268,7 +281,7 @@ function applyResponse(action,response){
   data={...data,site_availability:response.site_availability};
  }else data=response;
 }
-async function mutate(action,d){if(busy)throw Error('Дождитесь завершения операции');if(pending)throw Error('Повторите неподтвержденную операцию в настройках');busy=true;document.body.classList.add('loading');try{if(live){pending={action,data:d,id:crypto.randomUUID()};try{applyResponse(action,await api(action,d,pending.id));pending=null;}catch(e){if(e.confirmed)pending=null;throw e;}}else demoMutate(action,d);}finally{busy=false;document.body.classList.remove('loading');}}
+async function mutate(action,d){if(busy)throw Error('Дождитесь завершения операции');if(pending)throw Error('Повторите неподтвержденную операцию в настройках');busy=true;if(!$('#dialog').open)document.body.classList.add('loading');try{if(live){pending={action,data:d,id:crypto.randomUUID()};try{applyResponse(action,await api(action,d,pending.id));pending=null;}catch(e){if(e.confirmed)pending=null;throw e;}}else demoMutate(action,d);}finally{busy=false;document.body.classList.remove('loading');}}
 async function retryPending(){if(!pending||busy)return;busy=true;try{applyResponse(pending.action,await api(pending.action,pending.data,pending.id));pending=null;cart={};$('#dialog').close();render();notify('Операция подтверждена');}catch(e){if(e.confirmed)pending=null;notify(e.message);}finally{busy=false;}}
 function demoMutate(type,d){const s=CRMCore.reduce(demoEvents),sh=currentShift(),check=CRMCore.check,m=CRMCore.money,q=CRMCore.qty,p={},id='demo-'+(++demoCounter);const needShift=()=>check(sh,'Сначала откройте смену');
  if(type==='shift.open'){check(!sh,'Смена уже открыта');p.id=id;p.opening_cash=m(d.opening_cash);check(p.opening_cash>=0,'Неверная сумма');}
