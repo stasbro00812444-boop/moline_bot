@@ -120,7 +120,7 @@ function renderProductAdmin(){
   const state=published?'На сайте':card?'Снят с сайта':'Не на сайте';
   const edit=eligible?`<button class="product-edit" data-site-edit="${esc(p.id)}" aria-label="${card||legacy?'Редактировать':'Оформить'}: ${esc(p.name)}" title="${card||legacy?'Редактировать':'Оформить'}" ${canEdit?'':'disabled'}>${pencil}</button>`:'';
   const publish=eligible?(published?`<button class="product-state-action" data-site-unpublish="${esc(p.id)}" ${canEdit?'':'disabled'}>Снять с сайта</button>`:card?`<button class="product-state-action" data-site-publish="${esc(p.id)}" ${canEdit?'':'disabled'}>Опубликовать</button>`:''):'';
-  const archive=eligible?`<button class="product-archive danger" data-product-archive="${esc(p.id)}" ${canEdit?'':'disabled'}>В архив</button>`:'';
+  const archive=eligible?`<button class="product-archive danger" data-product-archive="${esc(p.id)}" ${canEdit?'':'disabled'}>Удалить товар</button>`:'';
   return `<article class="product-admin-row">${image}<div class="product-admin-main"><strong>${esc(p.name)}</strong><div class="product-admin-meta"><span>${rub(shown)}</span><span class="product-admin-status">${state}</span></div>${publish}${archive}</div>${edit}</article>`;
  }).join('')}</div></div>`;
  $('#new-product').onclick=()=>productDialog();
@@ -138,7 +138,7 @@ async function archiveProduct(id){
 async function imageData(file){
  if(!(file instanceof File)||!file.size)return '';
  if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Нужен PNG, JPEG или WebP');
- if(file.size>50_000_000)throw Error('Исходное фото больше 50 МБ. Выберите файл меньшего размера.');
+ // Сжимаем исходный файл перед отправкой; лимит сервера относится к итоговому WebP.
  let bitmap;try{bitmap=await createImageBitmap(file);}catch{throw Error('Не удалось открыть фото. Сохраните его как PNG или JPEG и попробуйте снова.');}
  const canvas=document.createElement('canvas');let blob;
  for(const maxSide of [1200,1000,800,640]){
@@ -188,6 +188,7 @@ function productDialog(id=''){
   `<h3>Карточка сайта</h3><label for="site-name">Название на сайте (необязательно)</label><input id="site-name" name="site_name" maxlength="100" value="${esc(card?.site_name||'')}" placeholder="Как в CRM">`+
   `<div class="site-preview size-${esc(card?.image_size||'medium')}" id="site-preview"><div class="site-preview-image">${imageUrl?`<img class="site-photo" src="${imageUrl}" alt="Фото товара">`:'<span>Фото пока не выбрано</span>'}</div><strong id="site-preview-name">${esc(card?.site_name||p?.name||'Новый товар')}</strong><span id="site-preview-price">${p?rub(p.price):'Цена'}</span><span class="site-preview-add">добавить</span></div><label for="site-photo">${imageUrl?'Заменить фото':'Фото товара'}</label><input id="site-photo" name="image" type="file" accept="image/png,image/jpeg,image/webp">`+
   select('image_size','Размер фото на сайте',[['small','Компактный'],['medium','Обычный'],['large','Крупный']])+
+  `<label for="f-image_x">Положение фото по горизонтали</label><input id="f-image_x" name="image_x" type="range" min="-20" max="20" step="1" value="${esc(card?.image_x??0)}"><label for="f-image_y">Положение фото по вертикали</label><input id="f-image_y" name="image_y" type="range" min="-20" max="20" step="1" value="${esc(card?.image_y??0)}"><button type="button" id="reset-image-position">Выровнять фото по центру</button>`+
   `<p class="muted">Предпросмотр размера. Сайт сохранит пропорции фотографии.</p>`+
   `<label for="site-description">Описание</label><textarea id="site-description" name="description" maxlength="2000">${esc(card?.description||'')}</textarea>`+
   `<label for="site-ingredients">Состав и аллергены</label><textarea id="site-ingredients" name="ingredients" maxlength="2000">${esc(card?.ingredients||'')}</textarea>`+
@@ -222,8 +223,8 @@ function productDialog(id=''){
     savedId=created.id;
    }
   }
-  const siteDetails={product_id:savedId,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:legacy?'legacy':v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on,weight:v.weight,calories:v.calories,protein:v.protein,fat:v.fat,carbs:v.carbs,image_size:v.image_size};
-  const siteChanged=!card||['site_name','description','ingredients','media_id','stock_mode','next_price','next_price_on','weight','calories','protein','fat','carbs','image_size'].some(key=>String(card[key]??(key==='image_size'?'medium':''))!==String(siteDetails[key]??''));
+  const siteDetails={product_id:savedId,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:legacy?'legacy':v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on,weight:v.weight,calories:v.calories,protein:v.protein,fat:v.fat,carbs:v.carbs,image_size:v.image_size,image_x:Number(v.image_x),image_y:Number(v.image_y)};
+  const siteChanged=!card||['site_name','description','ingredients','media_id','stock_mode','next_price','next_price_on','weight','calories','protein','fat','carbs','image_size','image_x','image_y'].some(key=>String(card[key]??(key==='image_size'?'medium':''))!==String(siteDetails[key]??''));
   if(siteChanged){await productSaveStage('Сохраняем карточку сайта…');await mutate('catalog.site.save',siteDetails);}
   const currently=legacy?(!card||card.published===true):card?.published===true;
   if(wantsSite&&!currently){await productSaveStage('Публикуем товар на сайте…');await mutate('catalog.site.publish',{product_id:savedId});}
@@ -235,10 +236,12 @@ function productDialog(id=''){
  if(!legacy)$('#f-stock_mode').value=card?.stock_mode||((p?.stock_tracked)?'finished':'manual');
  $('#f-image_size').value=card?.image_size||'medium';
  $('#f-image_size').onchange=e=>{$('#site-preview').className='site-preview size-'+e.target.value;};
+ const position=()=>{const image=$('#site-preview .site-photo');if(image){image.style.setProperty('--image-x',$('#f-image_x').value+'%');image.style.setProperty('--image-y',$('#f-image_y').value+'%');}};
+ $('#f-image_x').oninput=position;$('#f-image_y').oninput=position;$('#reset-image-position').onclick=()=>{$('#f-image_x').value=0;$('#f-image_y').value=0;position();};position();
  $('#site-name').oninput=e=>{$('#site-preview-name').textContent=e.target.value||$('#f-name').value||'Новый товар';};
  $('#f-name').oninput=e=>{if(!$('#site-name').value)$('#site-preview-name').textContent=e.target.value||'Новый товар';};
  $('#f-price').oninput=e=>{$('#site-preview-price').textContent=e.target.value?Number(e.target.value).toLocaleString('ru-RU')+' ₽':'Цена';};
- $('#site-photo').onchange=e=>{const file=e.target.files?.[0];if(!file)return;const preview=$('#site-preview .site-preview-image');preview.replaceChildren();const img=document.createElement('img');img.className='site-photo';img.alt='Предпросмотр';const url=URL.createObjectURL(file);img.src=url;img.onload=()=>URL.revokeObjectURL(url);preview.append(img);};
+ $('#site-photo').onchange=e=>{const file=e.target.files?.[0];if(!file)return;const preview=$('#site-preview .site-preview-image');preview.replaceChildren();const img=document.createElement('img');img.className='site-photo';img.style.setProperty('--image-x',$('#f-image_x').value+'%');img.style.setProperty('--image-y',$('#f-image_y').value+'%');img.alt='Предпросмотр';const url=URL.createObjectURL(file);img.src=url;img.onload=()=>URL.revokeObjectURL(url);preview.append(img);};
 }
 function renderAvailability(){
  const settings=data.site_availability,canEdit=live&&['admin','manager'].includes(data.employee.role);
