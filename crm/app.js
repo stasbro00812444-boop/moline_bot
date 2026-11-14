@@ -186,7 +186,7 @@ function productDialog(id=''){
   select('stock_tracked','Учитывать остатки?', [['false','Нет'],['true','Да']])+
   input('min_stock','Минимальный остаток','number',p?.min_stock??0,'min="0" max="100000" step="0.001" inputmode="decimal"')+
   `<h3>Карточка сайта</h3><label for="site-name">Название на сайте (необязательно)</label><input id="site-name" name="site_name" maxlength="100" value="${esc(card?.site_name||'')}" placeholder="Как в CRM">`+
-  `<div class="site-preview size-${esc(card?.image_size||'medium')}" id="site-preview">${imageUrl?`<img class="site-photo" src="${imageUrl}" alt="Фото товара">`:'<span>Фото пока не выбрано</span>'}</div><label for="site-photo">${imageUrl?'Заменить фото':'Фото товара'}</label><input id="site-photo" name="image" type="file" accept="image/png,image/jpeg,image/webp">`+
+  `<div class="site-preview size-${esc(card?.image_size||'medium')}" id="site-preview"><div class="site-preview-image">${imageUrl?`<img class="site-photo" src="${imageUrl}" alt="Фото товара">`:'<span>Фото пока не выбрано</span>'}</div><strong id="site-preview-name">${esc(card?.site_name||p?.name||'Новый товар')}</strong><span id="site-preview-price">${p?rub(p.price):'Цена'}</span><span class="site-preview-add">добавить</span></div><label for="site-photo">${imageUrl?'Заменить фото':'Фото товара'}</label><input id="site-photo" name="image" type="file" accept="image/png,image/jpeg,image/webp">`+
   select('image_size','Размер фото на сайте',[['small','Компактный'],['medium','Обычный'],['large','Крупный']])+
   `<p class="muted">Предпросмотр размера. Сайт сохранит пропорции фотографии.</p>`+
   `<label for="site-description">Описание</label><textarea id="site-description" name="description" maxlength="2000">${esc(card?.description||'')}</textarea>`+
@@ -235,7 +235,10 @@ function productDialog(id=''){
  if(!legacy)$('#f-stock_mode').value=card?.stock_mode||((p?.stock_tracked)?'finished':'manual');
  $('#f-image_size').value=card?.image_size||'medium';
  $('#f-image_size').onchange=e=>{$('#site-preview').className='site-preview size-'+e.target.value;};
- $('#site-photo').onchange=e=>{const file=e.target.files?.[0];if(!file)return;const preview=$('#site-preview');preview.replaceChildren();const img=document.createElement('img');img.className='site-photo';img.alt='Предпросмотр';const url=URL.createObjectURL(file);img.src=url;img.onload=()=>URL.revokeObjectURL(url);preview.append(img);};
+ $('#site-name').oninput=e=>{$('#site-preview-name').textContent=e.target.value||$('#f-name').value||'Новый товар';};
+ $('#f-name').oninput=e=>{if(!$('#site-name').value)$('#site-preview-name').textContent=e.target.value||'Новый товар';};
+ $('#f-price').oninput=e=>{$('#site-preview-price').textContent=e.target.value?Number(e.target.value).toLocaleString('ru-RU')+' ₽':'Цена';};
+ $('#site-photo').onchange=e=>{const file=e.target.files?.[0];if(!file)return;const preview=$('#site-preview .site-preview-image');preview.replaceChildren();const img=document.createElement('img');img.className='site-photo';img.alt='Предпросмотр';const url=URL.createObjectURL(file);img.src=url;img.onload=()=>URL.revokeObjectURL(url);preview.append(img);};
 }
 function renderAvailability(){
  const settings=data.site_availability,canEdit=live&&['admin','manager'].includes(data.employee.role);
