@@ -131,12 +131,17 @@ async function imageData(file){
  if(!(file instanceof File)||!file.size)return '';
  if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Нужен PNG, JPEG или WebP');
  if(file.size>50_000_000)throw Error('Исходное фото больше 50 МБ. Выберите файл меньшего размера.');
- const bitmap=await createImageBitmap(file),scale=Math.min(1,1200/Math.max(bitmap.width,bitmap.height));
- const canvas=document.createElement('canvas');canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
- canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
- let blob;
- for(const quality of [.88,.75,.62]){blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));if(blob?.size<=750000)break;}
- if(!blob||blob.type!=='image/webp'||blob.size>750000)throw Error('Фото слишком большое. Выберите изображение меньшего размера');
+ let bitmap;try{bitmap=await createImageBitmap(file);}catch{throw Error('Не удалось открыть фото. Сохраните его как PNG или JPEG и попробуйте снова.');}
+ const canvas=document.createElement('canvas');let blob;
+ for(const maxSide of [1200,1000,800,640]){
+  const scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+  canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
+  for(const quality of [.88,.75,.62,.5]){blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));if(blob?.type==='image/webp'&&blob.size<=750000)break;}
+  if(blob?.type==='image/webp'&&blob.size<=750000)break;
+  await new Promise(resolve=>setTimeout(resolve,0));
+ }
+ bitmap.close();
+ if(!blob||blob.type!=='image/webp'||blob.size>750000)throw Error('Не получилось подготовить фото. Попробуйте PNG или JPEG.');
  const bytes=new Uint8Array(await blob.arrayBuffer()),parts=[];
  for(let i=0;i<bytes.length;i+=32768){parts.push(String.fromCharCode(...bytes.subarray(i,i+32768)));if(i&&i%262144===0)await new Promise(resolve=>setTimeout(resolve,0));}
  return btoa(parts.join(''));
