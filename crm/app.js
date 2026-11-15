@@ -135,21 +135,47 @@ async function archiveProduct(id){
  if(!confirm(`Убрать «${product.name}» из CRM и с сайта? История продаж сохранится.`))return;
  try{await mutate('catalog.product.archive',{product_id:id});render();notify('Товар перемещен в архив');}catch(error){notify(error.message);}
 }
-async function imageData(file){
- if(!(file instanceof File)||!file.size)return '';
- if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Нужен PNG, JPEG или WebP');
- // Сжимаем исходный файл перед отправкой; лимит сервера относится к итоговому WebP.
- let bitmap;try{bitmap=await createImageBitmap(file);}catch{throw Error('Не удалось открыть фото. Сохраните его как PNG или JPEG и попробуйте снова.');}
- const canvas=document.createElement('canvas');let blob;
- for(const maxSide of [1200,1000,800,640]){
-  const scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
-  canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
-  for(const quality of [.88,.75,.62,.5]){blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));if(blob?.type==='image/webp'&&blob.size<=750000)break;}
-  if(blob?.type==='image/webp'&&blob.size<=750000)break;
-  await new Promise(resolve=>setTimeout(resolve,0));
+const preparedPhotos=new WeakMap();
+function imageCropBounds(bitmap){
+ const sample=document.createElement('canvas');sample.width=sample.height=160;
+ const ctx=sample.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,160,160);
+ const data=ctx.getImageData(0,0,160,160).data;
+ const corners=[[2,2],[157,2],[2,157],[157,157]].map(([x,y])=>[...data.slice((y*160+x)*4,(y*160+x)*4+4)]);
+ const transparent=corners.every(c=>c[3]<24),uniform=!transparent&&corners.every(c=>c[3]>245&&c.slice(0,3).every((v,i)=>Math.abs(v-corners[0][i])<14));
+ if(!transparent&&!uniform)return null;
+ let minX=160,minY=160,maxX=-1,maxY=-1,content=0;
+ for(let y=0;y<160;y++)for(let x=0;x<160;x++){
+  const i=(y*160+x)*4,foreground=transparent?data[i+3]>36:Math.max(Math.abs(data[i]-corners[0][0]),Math.abs(data[i+1]-corners[0][1]),Math.abs(data[i+2]-corners[0][2]))>32;
+  if(foreground){minX=Math.min(x,minX);minY=Math.min(y,minY);maxX=Math.max(x,maxX);maxY=Math.max(y,maxY);content++;}
  }
- bitmap.close();
- if(!blob||blob.type!=='image/webp'||blob.size>750000)throw Error('Не получилось подготовить фото. Попробуйте PNG или JPEG.');
+ if(content<160||maxX<minX||maxY<minY)return null;
+ const width=(maxX-minX+1)/160,height=(maxY-minY+1)/160;
+ if(width>.9&&height>.9)return null;
+ const margin=.07*Math.max(width,height),left=Math.max(0,minX/160-margin),top=Math.max(0,minY/160-margin),right=Math.min(1,(maxX+1)/160+margin),bottom=Math.min(1,(maxY+1)/160+margin);
+ return {x:Math.floor(left*bitmap.width),y:Math.floor(top*bitmap.height),w:Math.max(1,Math.ceil((right-left)*bitmap.width)),h:Math.max(1,Math.ceil((bottom-top)*bitmap.height))};
+}
+async function preparedPhoto(file,autoCrop){
+ if(!(file instanceof File)||!file.size)return null;
+ if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Нужен PNG, JPEG или WebP');
+ const key=autoCrop?'crop':'original',cached=preparedPhotos.get(file);
+ if(cached?.[key])return cached[key];
+ let bitmap;try{bitmap=await createImageBitmap(file);}catch{throw Error('Не удалось открыть фото. Сохраните его как PNG или JPEG и попробуйте снова.');}
+ try{
+  const crop=autoCrop?imageCropBounds(bitmap):null,source=crop||{x:0,y:0,w:bitmap.width,h:bitmap.height};
+  const canvas=document.createElement('canvas');let blob;
+  for(const maxSide of [1200,1000,800,640]){
+   const scale=Math.min(1,maxSide/Math.max(source.w,source.h));canvas.width=Math.max(1,Math.round(source.w*scale));canvas.height=Math.max(1,Math.round(source.h*scale));
+   canvas.getContext('2d').drawImage(bitmap,source.x,source.y,source.w,source.h,0,0,canvas.width,canvas.height);
+   for(const quality of [.88,.75,.62,.5]){blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));if(blob?.type==='image/webp'&&blob.size<=750000)break;}
+   if(blob?.type==='image/webp'&&blob.size<=750000)break;
+   await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  if(!blob||blob.type!=='image/webp'||blob.size>750000)throw Error('Не получилось подготовить фото. Попробуйте PNG или JPEG.');
+  preparedPhotos.set(file,{...cached,[key]:blob});return blob;
+ }finally{bitmap.close();}
+}
+async function imageData(file,autoCrop){
+ const blob=await preparedPhoto(file,autoCrop);if(!blob)return '';
  const bytes=new Uint8Array(await blob.arrayBuffer()),parts=[];
  for(let i=0;i<bytes.length;i+=32768){parts.push(String.fromCharCode(...bytes.subarray(i,i+32768)));if(i&&i%262144===0)await new Promise(resolve=>setTimeout(resolve,0));}
  return btoa(parts.join(''));
@@ -161,11 +187,11 @@ async function productSaveStage(message){
 }
 async function publishSiteProduct(id){
  if(!confirm('Проверили фото, описание, состав и правило склада? Товар появится на сайте после публикации.'))return;
- try{if(data.capabilities?.site_contract!=='products-20261114-v3')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.publish',{product_id:id});render();notify('Товар опубликован на сайте');}catch(e){notify(e.message);}
+ try{if(data.capabilities?.site_contract!=='products-20261115-photo-v4')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.publish',{product_id:id});render();notify('Товар опубликован на сайте');}catch(e){notify(e.message);}
 }
 async function unpublishSiteProduct(id){
  if(!confirm('Снять товар с сайта? Оформленные заказы сохранятся.'))return;
- try{if(data.capabilities?.site_contract!=='products-20261114-v3')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.unpublish',{product_id:id});render();notify('Товар снят с сайта');}catch(e){notify(e.message);}
+ try{if(data.capabilities?.site_contract!=='products-20261115-photo-v4')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.unpublish',{product_id:id});render();notify('Товар снят с сайта');}catch(e){notify(e.message);}
 }
 function productDialog(id=''){
  if(!live||!['admin','manager'].includes(data.employee.role))return;
@@ -186,10 +212,11 @@ function productDialog(id=''){
   select('stock_tracked','Учитывать остатки?', [['false','Нет'],['true','Да']])+
   input('min_stock','Минимальный остаток','number',p?.min_stock??0,'min="0" max="100000" step="0.001" inputmode="decimal"')+
   `<h3>Карточка сайта</h3><label for="site-name">Название на сайте (необязательно)</label><input id="site-name" name="site_name" maxlength="100" value="${esc(card?.site_name||'')}" placeholder="Как в CRM">`+
-  `<div class="site-preview size-${esc(card?.image_size||'medium')}" id="site-preview"><div class="site-preview-image">${imageUrl?`<img class="site-photo" src="${imageUrl}" alt="Фото товара">`:'<span>Фото пока не выбрано</span>'}</div><strong id="site-preview-name">${esc(card?.site_name||p?.name||'Новый товар')}</strong><span id="site-preview-price">${p?rub(p.price):'Цена'}</span><span class="site-preview-add">добавить</span></div><label for="site-photo">${imageUrl?'Заменить фото':'Фото товара'}</label><input id="site-photo" name="image" type="file" accept="image/png,image/jpeg,image/webp">`+
-  select('image_size','Размер фото на сайте',[['small','Компактный'],['medium','Обычный'],['large','Крупный']])+
-  `<label for="f-image_x">Положение фото по горизонтали</label><input id="f-image_x" name="image_x" type="range" min="-20" max="20" step="1" value="${esc(card?.image_x??0)}"><label for="f-image_y">Положение фото по вертикали</label><input id="f-image_y" name="image_y" type="range" min="-20" max="20" step="1" value="${esc(card?.image_y??0)}"><button type="button" id="reset-image-position">Выровнять фото по центру</button>`+
-  `<p class="muted">Предпросмотр размера. Сайт сохранит пропорции фотографии.</p>`+
+  `<label for="site-photo">${imageUrl?'Заменить фото':'Фото товара'}</label><input id="site-photo" name="image" type="file" accept="image/png,image/jpeg,image/webp"><label class="photo-auto-crop"><input id="photo-auto-crop" name="auto_crop" type="checkbox" checked> Убрать пустые однотонные поля у нового фото</label><p id="photo-prepare-status" class="muted" role="status"></p><p class="muted">Настройте оба вида до сохранения. Изменения видны сразу; снимок страницы повторяет настройки сайта.</p>`+
+  `<div class="photo-preview-pair"><section><h4>В каталоге</h4><div class="site-preview size-${esc(card?.image_size||'medium')}" id="site-preview"><div class="site-preview-image">${imageUrl?`<img class="site-photo" crossorigin="anonymous" src="${esc(imageUrl)}" alt="Фото в каталоге">`:'<span>Фото пока не выбрано</span>'}</div><strong id="site-preview-name">${esc(card?.site_name||p?.name||'Новый товар')}</strong><span id="site-preview-price">${p?rub(p.price):'Цена'}</span><span class="site-preview-add">добавить</span></div></section><section><h4>Открытая карточка</h4><div class="detail-preview"><div class="detail-preview-header"><strong id="detail-preview-name">${esc(card?.site_name||p?.name||'Новый товар')}</strong><span>♡</span></div><div class="detail-preview-image">${imageUrl?`<img class="site-photo" crossorigin="anonymous" src="${esc(imageUrl)}" alt="Фото в карточке">`:'<span>Фото пока не выбрано</span>'}</div><span>в корзину</span></div></section></div>`+
+  select('image_size','Размер в каталоге',[['small','Компактный'],['medium','Обычный'],['large','Крупный']])+
+  `<label for="f-image_zoom">Масштаб в каталоге <output id="image-zoom-value"></output></label><input id="f-image_zoom" name="image_zoom" type="range" min="0.5" max="6" step="0.1" value="${esc(card?.image_zoom||1)}"><label for="f-image_x">Каталог: левее / правее</label><input id="f-image_x" name="image_x" type="range" min="-100" max="100" step="1" value="${esc(card?.image_x??0)}"><label for="f-image_y">Каталог: выше / ниже</label><input id="f-image_y" name="image_y" type="range" min="-100" max="100" step="1" value="${esc(card?.image_y??0)}"><button type="button" id="reset-image-position">Сбросить положение в каталоге</button>`+
+  `<label for="f-detail_image_zoom">Масштаб в карточке <output id="detail-zoom-value"></output></label><input id="f-detail_image_zoom" name="detail_image_zoom" type="range" min="0.5" max="6" step="0.1" value="${esc(card?.detail_image_zoom||1)}"><label for="f-detail_image_x">Карточка: левее / правее</label><input id="f-detail_image_x" name="detail_image_x" type="range" min="-100" max="100" step="1" value="${esc(card?.detail_image_x??0)}"><label for="f-detail_image_y">Карточка: выше / ниже</label><input id="f-detail_image_y" name="detail_image_y" type="range" min="-100" max="100" step="1" value="${esc(card?.detail_image_y??0)}"><button type="button" id="reset-detail-position">Сбросить положение в карточке</button>`+
   `<label for="site-description">Описание</label><textarea id="site-description" name="description" maxlength="2000">${esc(card?.description||'')}</textarea>`+
   `<label for="site-ingredients">Состав и аллергены</label><textarea id="site-ingredients" name="ingredients" maxlength="2000">${esc(card?.ingredients||'')}</textarea>`+
   `<h3>Пищевая ценность</h3><p class="muted">КБЖУ на 100 г или 100 мл. Пустое поле не будет показано на сайте.</p>`+
@@ -204,10 +231,10 @@ function productDialog(id=''){
   if(!/^[а-яёa-z0-9][а-яёa-z0-9 -]{1,38}[а-яёa-z0-9]$/i.test(nextCategory))throw Error('Категория: 3–40 символов, буквы, цифры, пробел и дефис.');
   if(p&&v.unit!==p.unit)throw Error('Единицу существующего товара изменить нельзя.');
   if(p&&(v.stock_tracked==='true')!==p.stock_tracked)throw Error('Учёт остатков существующего товара изменить нельзя.');
-  if(data.capabilities?.site_contract!=='products-20261114-v3')throw Error('Опубликованная версия Apps Script устарела. В редакторе нажмите «Развернуть → Управление развертываниями → Изменить → Новая версия → Развернуть», затем переподключите CRM. Товар не изменён.');
+  if(data.capabilities?.site_contract!=='products-20261115-photo-v4')throw Error('Опубликованная версия Apps Script устарела. В редакторе нажмите «Развернуть → Управление развертываниями → Изменить → Новая версия → Развернуть», затем переподключите CRM. Товар не изменён.');
   const wantsSite=v.publish==='on';
   await productSaveStage('Проверяем данные и обрабатываем фото…');
-  const photo=await imageData(v.image);let media_id=card?.media_id||'';
+  const photo=await imageData(v.image,v.auto_crop==='on');let media_id=card?.media_id||'';
   if(wantsSite&&!legacy&&(!media_id&&!photo||!v.description.trim()||!v.ingredients.trim()))throw Error('Для публикации добавьте фото, описание и состав.');
   if(photo){await productSaveStage('Загружаем фото…');const upload=await api('catalog.media.upload',{image:photo},crypto.randomUUID());media_id=upload.media_id;}
   const details={name:v.name,category:nextCategory,unit:v.unit,price:v.price,cost:v.cost,stock_tracked:v.stock_tracked==='true',min_stock:v.min_stock};
@@ -223,8 +250,8 @@ function productDialog(id=''){
     savedId=created.id;
    }
   }
-  const siteDetails={product_id:savedId,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:legacy?'legacy':v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on,weight:v.weight,calories:v.calories,protein:v.protein,fat:v.fat,carbs:v.carbs,image_size:v.image_size,image_x:Number(v.image_x),image_y:Number(v.image_y)};
-  const siteChanged=!card||['site_name','description','ingredients','media_id','stock_mode','next_price','next_price_on','weight','calories','protein','fat','carbs','image_size','image_x','image_y'].some(key=>String(card[key]??(key==='image_size'?'medium':''))!==String(siteDetails[key]??''));
+  const siteDetails={product_id:savedId,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:legacy?'legacy':v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on,weight:v.weight,calories:v.calories,protein:v.protein,fat:v.fat,carbs:v.carbs,image_size:v.image_size,image_x:Number(v.image_x),image_y:Number(v.image_y),image_zoom:Number(v.image_zoom),detail_image_zoom:Number(v.detail_image_zoom),detail_image_x:Number(v.detail_image_x),detail_image_y:Number(v.detail_image_y)};
+  const siteChanged=!card||['site_name','description','ingredients','media_id','stock_mode','next_price','next_price_on','weight','calories','protein','fat','carbs','image_size','image_x','image_y','image_zoom','detail_image_zoom','detail_image_x','detail_image_y'].some(key=>String(card[key]??(key==='image_size'?'medium':''))!==String(siteDetails[key]??''));
   if(siteChanged){await productSaveStage('Сохраняем карточку сайта…');await mutate('catalog.site.save',siteDetails);}
   const currently=legacy?(!card||card.published===true):card?.published===true;
   if(wantsSite&&!currently){await productSaveStage('Публикуем товар на сайте…');await mutate('catalog.site.publish',{product_id:savedId});}
@@ -235,13 +262,20 @@ function productDialog(id=''){
  if(p){for(const name of ['unit','stock_tracked']){const select=$('#f-'+name);select.disabled=true;const hidden=document.createElement('input');hidden.type='hidden';hidden.name=name;hidden.value=select.value;select.after(hidden);}}
  if(!legacy)$('#f-stock_mode').value=card?.stock_mode||((p?.stock_tracked)?'finished':'manual');
  $('#f-image_size').value=card?.image_size||'medium';
- $('#f-image_size').onchange=e=>{$('#site-preview').className='site-preview size-'+e.target.value;};
- const position=()=>{const image=$('#site-preview .site-photo');if(image){image.style.setProperty('--image-x',$('#f-image_x').value+'%');image.style.setProperty('--image-y',$('#f-image_y').value+'%');}};
- $('#f-image_x').oninput=position;$('#f-image_y').oninput=position;$('#reset-image-position').onclick=()=>{$('#f-image_x').value=0;$('#f-image_y').value=0;position();};position();
- $('#site-name').oninput=e=>{$('#site-preview-name').textContent=e.target.value||$('#f-name').value||'Новый товар';};
- $('#f-name').oninput=e=>{if(!$('#site-name').value)$('#site-preview-name').textContent=e.target.value||'Новый товар';};
+ $('#f-image_size').onchange=e=>{$('#site-preview').className='site-preview size-'+e.target.value;position();};
+ let previewURL=null;
+ // Match the site's alpha-based fitting, including transparent PNGs.
+ const fitImage=img=>{if(!img.naturalWidth)return;try{const canvas=document.createElement('canvas');canvas.width=canvas.height=96;const ctx=canvas.getContext('2d',{willReadFrequently:true}),ratio=Math.min(96/img.naturalWidth,96/img.naturalHeight),w=img.naturalWidth*ratio,h=img.naturalHeight*ratio;ctx.drawImage(img,(96-w)/2,(96-h)/2,w,h);const pixels=ctx.getImageData(0,0,96,96).data;let minX=96,minY=96,maxX=-1,maxY=-1,opaque=0;for(let y=0;y<96;y++)for(let x=0;x<96;x++){let alpha=pixels[(y*96+x)*4+3];if(alpha>245)opaque++;if(alpha>32){minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);}}if(maxX<0||opaque>9000){img.dataset.fitScale=.82;img.dataset.fitX=0;img.dataset.fitY=0;}else{const width=(maxX-minX+1)/96,height=(maxY-minY+1)/96,scale=Math.max(.7,Math.min(1.12,.72/Math.max(width,height)));img.dataset.fitScale=scale;img.dataset.fitX=(48-(minX+maxX+1)/2)*scale/96*100;img.dataset.fitY=(48-(minY+maxY+1)/2)*scale/96*100;}}catch{img.dataset.fitScale=.82;img.dataset.fitX=0;img.dataset.fitY=0;}position();};
+ const position=()=>{for(const [selector,prefix] of [['#site-preview .site-photo',''],['.detail-preview .site-photo','detail_']]){const img=$(selector);if(!img)continue;const detail=!!prefix,size=$('#f-image_size').value,sizeFactor=detail?1:size==='small'?.86:size==='large'?1.08:1;img.style.setProperty('--preview-scale',Math.min(6,Number(img.dataset.fitScale||.82)*sizeFactor*Number($('#f-'+prefix+'image_zoom').value)));img.style.setProperty('--preview-x',(Number(img.dataset.fitX||0)+Number($('#f-'+prefix+'image_x').value))+'%');img.style.setProperty('--preview-y',(Number(img.dataset.fitY||0)+Number($('#f-'+prefix+'image_y').value))+'%');}$('#image-zoom-value').textContent=$('#f-image_zoom').value+'×';$('#detail-zoom-value').textContent=$('#f-detail_image_zoom').value+'×';};
+ for(const key of ['image_zoom','image_x','image_y','detail_image_zoom','detail_image_x','detail_image_y'])$('#f-'+key).oninput=position;
+ $('#reset-image-position').onclick=()=>{for(const key of ['image_x','image_y'])$('#f-'+key).value=0;$('#f-image_zoom').value=1;position();};
+ $('#reset-detail-position').onclick=()=>{for(const key of ['detail_image_x','detail_image_y'])$('#f-'+key).value=0;$('#f-detail_image_zoom').value=1;position();};
+ for(const img of document.querySelectorAll('.photo-preview-pair img')){img.onload=()=>fitImage(img);if(img.complete&&img.naturalWidth)fitImage(img);}position();
+ $('#site-name').oninput=e=>{const value=e.target.value||$('#f-name').value||'Новый товар';$('#site-preview-name').textContent=value;$('#detail-preview-name').textContent=value;};
+ $('#f-name').oninput=e=>{if(!$('#site-name').value){$('#site-preview-name').textContent=e.target.value||'Новый товар';$('#detail-preview-name').textContent=e.target.value||'Новый товар';}};
  $('#f-price').oninput=e=>{$('#site-preview-price').textContent=e.target.value?Number(e.target.value).toLocaleString('ru-RU')+' ₽':'Цена';};
- $('#site-photo').onchange=e=>{const file=e.target.files?.[0];if(!file)return;const preview=$('#site-preview .site-preview-image');preview.replaceChildren();const img=document.createElement('img');img.className='site-photo';img.style.setProperty('--image-x',$('#f-image_x').value+'%');img.style.setProperty('--image-y',$('#f-image_y').value+'%');img.alt='Предпросмотр';const url=URL.createObjectURL(file);img.src=url;img.onload=()=>URL.revokeObjectURL(url);preview.append(img);};
+ const previewFile=async()=>{const file=$('#site-photo').files?.[0];if(!file)return;const status=$('#photo-prepare-status');status.textContent='Подготавливаем фото…';try{const blob=await preparedPhoto(file,$('#photo-auto-crop').checked);if(file!==$('#site-photo').files?.[0])return;if(previewURL)URL.revokeObjectURL(previewURL);previewURL=URL.createObjectURL(blob);for(const selector of ['#site-preview .site-preview-image','.detail-preview-image']){const preview=$(selector);preview.replaceChildren();const img=document.createElement('img');img.className='site-photo';img.alt='Предпросмотр готового фото';img.onload=()=>fitImage(img);img.onerror=()=>notify('Не удалось показать выбранное фото');img.src=previewURL;preview.append(img);}status.textContent='Такой файл будет загружен на сайт';position();}catch(error){status.textContent=error.message;}};
+ $('#site-photo').onchange=previewFile;$('#photo-auto-crop').onchange=previewFile;
 }
 function renderAvailability(){
  const settings=data.site_availability,canEdit=live&&['admin','manager'].includes(data.employee.role);
