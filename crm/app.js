@@ -118,17 +118,21 @@ function renderProductAdmin(){
   const image=photo?`<img class="product-thumb" src="${photo}" alt="" loading="lazy">`:'<span class="product-thumb product-thumb-empty" aria-hidden="true"></span>';
   const published=legacy?(!card||card.published===true):card?.published===true;
   const state=published?'На сайте':card?'Снят с сайта':'Не на сайте';
+  const today=card?.today_enabled===false?'Сегодня выключен':p.stock_tracked&&card?.stock_mode==='finished'&&physicalAvailable(p)<=0?'Сегодня нет остатка':'Сегодня доступен';
+  const tomorrow=card?.tomorrow_enabled===false?'Завтра выключен':'Завтра разрешен';
   const edit=eligible?`<button class="product-edit" data-site-edit="${esc(p.id)}" aria-label="${card||legacy?'Редактировать':'Оформить'}: ${esc(p.name)}" title="${card||legacy?'Редактировать':'Оформить'}" ${canEdit?'':'disabled'}>${pencil}</button>`:'';
   const publish=eligible?(published?`<button class="product-state-action" data-site-unpublish="${esc(p.id)}" ${canEdit?'':'disabled'}>Снять с сайта</button>`:card?`<button class="product-state-action" data-site-publish="${esc(p.id)}" ${canEdit?'':'disabled'}>Опубликовать</button>`:''):'';
   const archive=eligible?`<button class="product-archive danger" data-product-archive="${esc(p.id)}" ${canEdit?'':'disabled'}>Удалить товар</button>`:'';
-  return `<article class="product-admin-row">${image}<div class="product-admin-main"><strong>${esc(p.name)}</strong><div class="product-admin-meta"><span>${rub(shown)}</span><span class="product-admin-status">${state}</span></div>${publish}${archive}</div>${edit}</article>`;
- }).join('')}</div></div>`;
+  return `<article class="product-admin-row">${image}<div class="product-admin-main"><strong>${esc(p.name)}</strong><div class="product-admin-meta"><span>${rub(shown)}</span><span class="product-admin-status">${state}</span><span>${today}</span><span>${tomorrow}</span></div>${publish}${archive}</div>${edit}</article>`;
+ }).join('')}</div></div><div class="panel"><h3>Добавки</h3><p class="muted">Назначьте добавки отдельным товарам через их редактор. Здесь меняется общая цена добавки для новых заказов.</p>${data.products.filter(p=>['ADD_001','ADD_002'].includes(p.id)).map(p=>`<div class="availability-row"><strong>${esc(p.name)} · ${rub(p.price)}</strong><button type="button" data-addon-edit="${esc(p.id)}" ${canEdit?'':'disabled'}>Редактировать цену</button></div>`).join('')}</div>`;
+ $('#content').querySelectorAll('[data-addon-edit]').forEach(b=>b.onclick=()=>addonDialog(b.dataset.addonEdit));
  $('#new-product').onclick=()=>productDialog();
  $('#content').querySelectorAll('[data-site-edit]').forEach(b=>b.onclick=()=>productDialog(b.dataset.siteEdit));
  $('#content').querySelectorAll('[data-site-publish]').forEach(b=>b.onclick=()=>publishSiteProduct(b.dataset.sitePublish));
  $('#content').querySelectorAll('[data-site-unpublish]').forEach(b=>b.onclick=()=>unpublishSiteProduct(b.dataset.siteUnpublish));
  $('#content').querySelectorAll('[data-product-archive]').forEach(b=>b.onclick=()=>archiveProduct(b.dataset.productArchive));
 }
+function addonDialog(id){const product=data.products.find(p=>p.id===id);if(!product)return;dialog('Цена добавки',`<p>${esc(product.name)}</p><label for="addon-price">Цена, ₽</label><input id="addon-price" name="price" type="text" inputmode="decimal" value="${esc(product.price/100)}" required>`,async v=>{const price=String(v.price).trim().replace(',','.');if(!/^(?:0|[1-9]\d{0,5})(?:\.\d{1,2})?$/.test(price)||Number(price)<=0)throw Error('Проверьте цену добавки');await mutate('catalog.addon.save',{product_id:id,price});});}
 async function archiveProduct(id){
  const product=data.products.find(p=>p.id===id);if(!product)return;
  if(Object.keys(cart).some(key=>key===id))return notify('Сначала уберите товар из текущей продажи');
@@ -187,11 +191,11 @@ async function productSaveStage(message){
 }
 async function publishSiteProduct(id){
  if(!confirm('Проверили фото, описание, состав и правило склада? Товар появится на сайте после публикации.'))return;
- try{if(data.capabilities?.site_contract!=='products-20261115-photo-v4')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.publish',{product_id:id});render();notify('Товар опубликован на сайте');}catch(e){notify(e.message);}
+ try{if(data.capabilities?.site_contract!=='products-20261115-rules-v1')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.publish',{product_id:id});render();notify('Товар опубликован на сайте');}catch(e){notify(e.message);}
 }
 async function unpublishSiteProduct(id){
  if(!confirm('Снять товар с сайта? Оформленные заказы сохранятся.'))return;
- try{if(data.capabilities?.site_contract!=='products-20261115-photo-v4')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.unpublish',{product_id:id});render();notify('Товар снят с сайта');}catch(e){notify(e.message);}
+ try{if(data.capabilities?.site_contract!=='products-20261115-rules-v1')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.unpublish',{product_id:id});render();notify('Товар снят с сайта');}catch(e){notify(e.message);}
 }
 function productDialog(id=''){
  if(!live||!['admin','manager'].includes(data.employee.role))return;
@@ -202,6 +206,8 @@ function productDialog(id=''){
  const categories=[...new Set(['Выпечка','Напитки','Десерты',...data.products.map(x=>x.category).filter(Boolean)])];
  const imageUrl=card?.media_id?`https://molinebymonk.ru/api/auth/catalog/media/${esc(card.media_id)}.webp`:MOLINE_LEGACY_IMAGES[id];
  const stock=p?.stock_tracked?'true':'false';
+ const addonChoices=[['syrup','Сиропы · ADD_002'],['milk','Альтернативное молоко · ADD_001'],['warm','Подогреть']];
+ const selectedAddons=new Set(card?.allowed_addons?String(card.allowed_addons).split(','):(['COF_004','COF_005','COF_006','COF_007','DRK_001','DRK_002'].includes(id)?['syrup']:id==='BAK_001'?['warm']:[]));
  const fields=`<h3>Товар CRM</h3>`+
   input('name','Название','text',p?.name||'','maxlength="100"')+
   select('category','Категория',categories.map(c=>[c,c]))+
@@ -221,17 +227,19 @@ function productDialog(id=''){
   `<label for="site-ingredients">Состав и аллергены</label><textarea id="site-ingredients" name="ingredients" maxlength="2000">${esc(card?.ingredients||'')}</textarea>`+
   `<h3>Пищевая ценность</h3><p class="muted">КБЖУ на 100 г или 100 мл. Пустое поле не будет показано на сайте.</p>`+
   `<label for="f-weight">Масса или объем порции</label><input id="f-weight" name="weight" maxlength="30" placeholder="70 г или 300 мл" value="${esc(card?.weight||'')}">`+
-  [['calories','Ккал'],['protein','Белки, г'],['fat','Жиры, г'],['carbs','Углеводы, г']].map(([key,label])=>`<label for="f-${key}">${label}</label><input id="f-${key}" name="${key}" type="number" min="0" max="9999" step="0.01" inputmode="decimal" value="${esc(card?.[key]??'')}">`).join('')+
+  [['calories','Ккал'],['protein','Белки, г'],['fat','Жиры, г'],['carbs','Углеводы, г']].map(([key,label])=>`<label for="f-${key}">${label}</label><input id="f-${key}" name="${key}" type="text" inputmode="decimal" autocomplete="off" placeholder="Например, 5,6" value="${esc(card?.[key]??'')}">`).join('')+
+  `<h3>Когда доступен товар</h3><label class="product-publish-choice"><input type="checkbox" name="today_enabled" ${card?.today_enabled===false?'':'checked'}> Разрешить заказ на сегодня, если есть остаток</label><label class="product-publish-choice"><input type="checkbox" name="tomorrow_enabled" ${card?.tomorrow_enabled===false?'':'checked'}> Разрешить заказ с завтрашнего дня</label><p class="muted">Когда остаток равен нулю, заказ на сегодня выключается автоматически. Завтрашний заказ доступен только при включенной второй галочке.</p><details class="product-addon-picker"><summary>Добавки к этому товару</summary>${addonChoices.map(([key,label])=>`<label><input type="checkbox" name="addon_${key}" ${selectedAddons.has(key)?'checked':''}> ${label}</label>`).join('')}</details>`+
   (legacy?'':select('stock_mode','Правило наличия на сайте',[['manual','Включать вручную'],['finished','Готовый остаток'],['recipe','По рецепту сборки'],['made_to_order','Готовим под заказ (лимит дня)']]))+
   `<label for="site-next-price">Новая цена, ₽ (необязательно)</label><input id="site-next-price" name="next_price" type="number" min="0.01" step="0.01" value="${esc(card?.next_price||'')}"><label for="site-next-date">Дата новой цены (по Москве)</label><input id="site-next-date" name="next_price_on" type="date" value="${esc(card?.next_price_on||'')}">`+
   `<label class="product-publish-choice"><input name="publish" type="checkbox" ${published||!p?'checked':''}> Показывать на сайте после сохранения</label><p class="muted">Можно сохранить черновик без публикации. Единица и учет остатков после создания фиксируются, история заказов сохраняется.</p>`;
  let savedId=id;
  dialog(p?'Редактировать товар':'Новый товар',fields+'<p id="form-progress" role="status" aria-live="polite"></p>',async v=>{
+  for(const key of ['calories','protein','fat','carbs']){const value=String(v[key]||'').trim().replace(',','.');if(value&&!/^\d{1,4}(?:\.\d{1,2})?$/.test(value)||Number(value)>9999)throw Error('КБЖУ: введите число от 0 до 9999 с точкой или запятой, до двух знаков после неё.');v[key]=value;}
   const nextCategory=(v.category_new||v.category).trim();
   if(!/^[а-яёa-z0-9][а-яёa-z0-9 -]{1,38}[а-яёa-z0-9]$/i.test(nextCategory))throw Error('Категория: 3–40 символов, буквы, цифры, пробел и дефис.');
   if(p&&v.unit!==p.unit)throw Error('Единицу существующего товара изменить нельзя.');
   if(p&&(v.stock_tracked==='true')!==p.stock_tracked)throw Error('Учёт остатков существующего товара изменить нельзя.');
-  if(data.capabilities?.site_contract!=='products-20261115-photo-v4')throw Error('Опубликованная версия Apps Script устарела. В редакторе нажмите «Развернуть → Управление развертываниями → Изменить → Новая версия → Развернуть», затем переподключите CRM. Товар не изменён.');
+  if(data.capabilities?.site_contract!=='products-20261115-rules-v1')throw Error('Опубликованная версия Apps Script устарела. В редакторе нажмите «Развернуть → Управление развертываниями → Изменить → Новая версия → Развернуть», затем переподключите CRM. Товар не изменён.');
   const wantsSite=v.publish==='on';
   await productSaveStage('Проверяем данные и обрабатываем фото…');
   const photo=await imageData(v.image,v.auto_crop==='on');let media_id=card?.media_id||'';
@@ -250,8 +258,8 @@ function productDialog(id=''){
     savedId=created.id;
    }
   }
-  const siteDetails={product_id:savedId,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:legacy?'legacy':v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on,weight:v.weight,calories:v.calories,protein:v.protein,fat:v.fat,carbs:v.carbs,image_size:v.image_size,image_x:Number(v.image_x),image_y:Number(v.image_y),image_zoom:Number(v.image_zoom),detail_image_zoom:Number(v.detail_image_zoom),detail_image_x:Number(v.detail_image_x),detail_image_y:Number(v.detail_image_y)};
-  const siteChanged=!card||['site_name','description','ingredients','media_id','stock_mode','next_price','next_price_on','weight','calories','protein','fat','carbs','image_size','image_x','image_y','image_zoom','detail_image_zoom','detail_image_x','detail_image_y'].some(key=>String(card[key]??(key==='image_size'?'medium':''))!==String(siteDetails[key]??''));
+  const siteDetails={today_enabled:v.today_enabled==='on',tomorrow_enabled:v.tomorrow_enabled==='on',allowed_addons:['syrup','milk','warm'].filter(key=>v['addon_'+key]==='on'),product_id:savedId,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:legacy?'legacy':v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on,weight:v.weight,calories:v.calories,protein:v.protein,fat:v.fat,carbs:v.carbs,image_size:v.image_size,image_x:Number(v.image_x),image_y:Number(v.image_y),image_zoom:Number(v.image_zoom),detail_image_zoom:Number(v.detail_image_zoom),detail_image_x:Number(v.detail_image_x),detail_image_y:Number(v.detail_image_y)};
+  const siteChanged=!card||['site_name','description','ingredients','media_id','stock_mode','next_price','next_price_on','weight','calories','protein','fat','carbs','image_size','image_x','image_y','image_zoom','detail_image_zoom','detail_image_x','detail_image_y','today_enabled','tomorrow_enabled','allowed_addons'].some(key=>String(key==='allowed_addons'?String(card?.allowed_addons||'').split(',').filter(x=>x&&x!=='none'):card[key]??(key==='image_size'?'medium':key==='today_enabled'?true:key==='tomorrow_enabled'?true:''))!==String(siteDetails[key]??''));
   if(siteChanged){await productSaveStage('Сохраняем карточку сайта…');await mutate('catalog.site.save',siteDetails);}
   const currently=legacy?(!card||card.published===true):card?.published===true;
   if(wantsSite&&!currently){await productSaveStage('Публикуем товар на сайте…');await mutate('catalog.site.publish',{product_id:savedId});}
