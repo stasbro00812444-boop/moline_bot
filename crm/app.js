@@ -135,21 +135,47 @@ async function archiveProduct(id){
  if(!confirm(`Убрать «${product.name}» из CRM и с сайта? История продаж сохранится.`))return;
  try{await mutate('catalog.product.archive',{product_id:id});render();notify('Товар перемещен в архив');}catch(error){notify(error.message);}
 }
-async function imageData(file){
- if(!(file instanceof File)||!file.size)return '';
- if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Нужен PNG, JPEG или WebP');
- // Сжимаем исходный файл перед отправкой; лимит сервера относится к итоговому WebP.
- let bitmap;try{bitmap=await createImageBitmap(file);}catch{throw Error('Не удалось открыть фото. Сохраните его как PNG или JPEG и попробуйте снова.');}
- const canvas=document.createElement('canvas');let blob;
- for(const maxSide of [1200,1000,800,640]){
-  const scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
-  canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
-  for(const quality of [.88,.75,.62,.5]){blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));if(blob?.type==='image/webp'&&blob.size<=750000)break;}
-  if(blob?.type==='image/webp'&&blob.size<=750000)break;
-  await new Promise(resolve=>setTimeout(resolve,0));
+const preparedPhotos=new WeakMap();
+function imageCropBounds(bitmap){
+ const sample=document.createElement('canvas');sample.width=sample.height=160;
+ const ctx=sample.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,160,160);
+ const data=ctx.getImageData(0,0,160,160).data;
+ const corners=[[2,2],[157,2],[2,157],[157,157]].map(([x,y])=>[...data.slice((y*160+x)*4,(y*160+x)*4+4)]);
+ const transparent=corners.every(c=>c[3]<24),uniform=!transparent&&corners.every(c=>c[3]>245&&c.slice(0,3).every((v,i)=>Math.abs(v-corners[0][i])<14));
+ if(!transparent&&!uniform)return null;
+ let minX=160,minY=160,maxX=-1,maxY=-1,content=0;
+ for(let y=0;y<160;y++)for(let x=0;x<160;x++){
+  const i=(y*160+x)*4,foreground=transparent?data[i+3]>36:Math.max(Math.abs(data[i]-corners[0][0]),Math.abs(data[i+1]-corners[0][1]),Math.abs(data[i+2]-corners[0][2]))>32;
+  if(foreground){minX=Math.min(x,minX);minY=Math.min(y,minY);maxX=Math.max(x,maxX);maxY=Math.max(y,maxY);content++;}
  }
- bitmap.close();
- if(!blob||blob.type!=='image/webp'||blob.size>750000)throw Error('Не получилось подготовить фото. Попробуйте PNG или JPEG.');
+ if(content<160||maxX<minX||maxY<minY)return null;
+ const width=(maxX-minX+1)/160,height=(maxY-minY+1)/160;
+ if(width>.9&&height>.9)return null;
+ const margin=.07*Math.max(width,height),left=Math.max(0,minX/160-margin),top=Math.max(0,minY/160-margin),right=Math.min(1,(maxX+1)/160+margin),bottom=Math.min(1,(maxY+1)/160+margin);
+ return {x:Math.floor(left*bitmap.width),y:Math.floor(top*bitmap.height),w:Math.max(1,Math.ceil((right-left)*bitmap.width)),h:Math.max(1,Math.ceil((bottom-top)*bitmap.height))};
+}
+async function preparedPhoto(file,autoCrop){
+ if(!(file instanceof File)||!file.size)return null;
+ if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Нужен PNG, JPEG или WebP');
+ const key=autoCrop?'crop':'original',cached=preparedPhotos.get(file);
+ if(cached?.[key])return cached[key];
+ let bitmap;try{bitmap=await createImageBitmap(file);}catch{throw Error('Не удалось открыть фото. Сохраните его как PNG или JPEG и попробуйте снова.');}
+ try{
+  const crop=autoCrop?imageCropBounds(bitmap):null,source=crop||{x:0,y:0,w:bitmap.width,h:bitmap.height};
+  const canvas=document.createElement('canvas');let blob;
+  for(const maxSide of [1200,1000,800,640]){
+   const scale=Math.min(1,maxSide/Math.max(source.w,source.h));canvas.width=Math.max(1,Math.round(source.w*scale));canvas.height=Math.max(1,Math.round(source.h*scale));
+   canvas.getContext('2d').drawImage(bitmap,source.x,source.y,source.w,source.h,0,0,canvas.width,canvas.height);
+   for(const quality of [.88,.75,.62,.5]){blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));if(blob?.type==='image/webp'&&blob.size<=750000)break;}
+   if(blob?.type==='image/webp'&&blob.size<=750000)break;
+   await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  if(!blob||blob.type!=='image/webp'||blob.size>750000)throw Error('Не получилось подготовить фото. Попробуйте PNG или JPEG.');
+  preparedPhotos.set(file,{...cached,[key]:blob});return blob;
+ }finally{bitmap.close();}
+}
+async function imageData(file,autoCrop){
+ const blob=await preparedPhoto(file,autoCrop);if(!blob)return '';
  const bytes=new Uint8Array(await blob.arrayBuffer()),parts=[];
  for(let i=0;i<bytes.length;i+=32768){parts.push(String.fromCharCode(...bytes.subarray(i,i+32768)));if(i&&i%262144===0)await new Promise(resolve=>setTimeout(resolve,0));}
  return btoa(parts.join(''));
@@ -186,7 +212,7 @@ function productDialog(id=''){
   select('stock_tracked','Учитывать остатки?', [['false','Нет'],['true','Да']])+
   input('min_stock','Минимальный остаток','number',p?.min_stock??0,'min="0" max="100000" step="0.001" inputmode="decimal"')+
   `<h3>Карточка сайта</h3><label for="site-name">Название на сайте (необязательно)</label><input id="site-name" name="site_name" maxlength="100" value="${esc(card?.site_name||'')}" placeholder="Как в CRM">`+
-  `<label for="site-photo">${imageUrl?'Заменить фото':'Фото товара'}</label><input id="site-photo" name="image" type="file" accept="image/png,image/jpeg,image/webp"><p class="muted">Настройте оба вида до сохранения. Изменения видны сразу; снимок страницы повторяет настройки сайта.</p>`+
+  `<label for="site-photo">${imageUrl?'Заменить фото':'Фото товара'}</label><input id="site-photo" name="image" type="file" accept="image/png,image/jpeg,image/webp"><label class="photo-auto-crop"><input id="photo-auto-crop" name="auto_crop" type="checkbox" checked> Убрать пустые однотонные поля у нового фото</label><p id="photo-prepare-status" class="muted" role="status"></p><p class="muted">Настройте оба вида до сохранения. Изменения видны сразу; снимок страницы повторяет настройки сайта.</p>`+
   `<div class="photo-preview-pair"><section><h4>В каталоге</h4><div class="site-preview size-${esc(card?.image_size||'medium')}" id="site-preview"><div class="site-preview-image">${imageUrl?`<img class="site-photo" src="${esc(imageUrl)}" alt="Фото в каталоге">`:'<span>Фото пока не выбрано</span>'}</div><strong id="site-preview-name">${esc(card?.site_name||p?.name||'Новый товар')}</strong><span id="site-preview-price">${p?rub(p.price):'Цена'}</span><span class="site-preview-add">добавить</span></div></section><section><h4>Открытая карточка</h4><div class="detail-preview"><div class="detail-preview-header"><strong id="detail-preview-name">${esc(card?.site_name||p?.name||'Новый товар')}</strong><span>♡</span></div><div class="detail-preview-image">${imageUrl?`<img class="site-photo" src="${esc(imageUrl)}" alt="Фото в карточке">`:'<span>Фото пока не выбрано</span>'}</div><span>в корзину</span></div></section></div>`+
   select('image_size','Размер в каталоге',[['small','Компактный'],['medium','Обычный'],['large','Крупный']])+
   `<label for="f-image_zoom">Масштаб в каталоге <output id="image-zoom-value"></output></label><input id="f-image_zoom" name="image_zoom" type="range" min="0.5" max="6" step="0.1" value="${esc(card?.image_zoom||1)}"><label for="f-image_x">Каталог: левее / правее</label><input id="f-image_x" name="image_x" type="range" min="-100" max="100" step="1" value="${esc(card?.image_x??0)}"><label for="f-image_y">Каталог: выше / ниже</label><input id="f-image_y" name="image_y" type="range" min="-100" max="100" step="1" value="${esc(card?.image_y??0)}"><button type="button" id="reset-image-position">Сбросить положение в каталоге</button>`+
@@ -208,7 +234,7 @@ function productDialog(id=''){
   if(data.capabilities?.site_contract!=='products-20261115-photo-v4')throw Error('Опубликованная версия Apps Script устарела. В редакторе нажмите «Развернуть → Управление развертываниями → Изменить → Новая версия → Развернуть», затем переподключите CRM. Товар не изменён.');
   const wantsSite=v.publish==='on';
   await productSaveStage('Проверяем данные и обрабатываем фото…');
-  const photo=await imageData(v.image);let media_id=card?.media_id||'';
+  const photo=await imageData(v.image,v.auto_crop==='on');let media_id=card?.media_id||'';
   if(wantsSite&&!legacy&&(!media_id&&!photo||!v.description.trim()||!v.ingredients.trim()))throw Error('Для публикации добавьте фото, описание и состав.');
   if(photo){await productSaveStage('Загружаем фото…');const upload=await api('catalog.media.upload',{image:photo},crypto.randomUUID());media_id=upload.media_id;}
   const details={name:v.name,category:nextCategory,unit:v.unit,price:v.price,cost:v.cost,stock_tracked:v.stock_tracked==='true',min_stock:v.min_stock};
@@ -248,7 +274,8 @@ function productDialog(id=''){
  $('#site-name').oninput=e=>{const value=e.target.value||$('#f-name').value||'Новый товар';$('#site-preview-name').textContent=value;$('#detail-preview-name').textContent=value;};
  $('#f-name').oninput=e=>{if(!$('#site-name').value){$('#site-preview-name').textContent=e.target.value||'Новый товар';$('#detail-preview-name').textContent=e.target.value||'Новый товар';}};
  $('#f-price').oninput=e=>{$('#site-preview-price').textContent=e.target.value?Number(e.target.value).toLocaleString('ru-RU')+' ₽':'Цена';};
- $('#site-photo').onchange=e=>{const file=e.target.files?.[0];if(!file)return;if(previewURL)URL.revokeObjectURL(previewURL);previewURL=URL.createObjectURL(file);for(const selector of ['#site-preview .site-preview-image','.detail-preview-image']){const preview=$(selector);preview.replaceChildren();const img=document.createElement('img');img.className='site-photo';img.alt='Предпросмотр';img.onload=()=>fitImage(img);img.onerror=()=>notify('Не удалось показать выбранное фото');img.src=previewURL;preview.append(img);}position();};
+ const previewFile=async()=>{const file=$('#site-photo').files?.[0];if(!file)return;const status=$('#photo-prepare-status');status.textContent='Подготавливаем фото…';try{const blob=await preparedPhoto(file,$('#photo-auto-crop').checked);if(file!==$('#site-photo').files?.[0])return;if(previewURL)URL.revokeObjectURL(previewURL);previewURL=URL.createObjectURL(blob);for(const selector of ['#site-preview .site-preview-image','.detail-preview-image']){const preview=$(selector);preview.replaceChildren();const img=document.createElement('img');img.className='site-photo';img.alt='Предпросмотр готового фото';img.onload=()=>fitImage(img);img.onerror=()=>notify('Не удалось показать выбранное фото');img.src=previewURL;preview.append(img);}status.textContent='Такой файл будет загружен на сайт';position();}catch(error){status.textContent=error.message;}};
+ $('#site-photo').onchange=previewFile;$('#photo-auto-crop').onchange=previewFile;
 }
 function renderAvailability(){
  const settings=data.site_availability,canEdit=live&&['admin','manager'].includes(data.employee.role);
