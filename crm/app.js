@@ -1,6 +1,18 @@
 'use strict';
 const $=s=>document.querySelector(s),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rub=n=>(Number(n||0)/100).toLocaleString('ru-RU',{maximumFractionDigits:2})+' ₽';
+const siteEditorContracts=new Set(['products-20261115-photo-v4','products-20261115-rules-v1']);
+const siteNutrients=[['calories','Ккал'],['protein','Белки, г'],['fat','Жиры, г'],['carbs','Углеводы, г']];
+function siteNutrient(raw,label){
+ const value=String(raw??'').trim();
+ if(!value)return null;
+ if(!/^\d{1,4}(?:[.,]\d{1,2})?$/.test(value)||Number(value.replace(',','.'))>9999)
+  throw Error(label+' — укажите число от 0 до 9999, до двух знаков после запятой.');
+ return Number(value.replace(',','.'));
+}
+function requireSiteEditor(){
+ if(!siteEditorContracts.has(data.capabilities?.site_contract))throw Error('CRM получила неподдерживаемую версию карточек. Проверьте развёртывание Apps Script и переподключитесь. Данные не отправлены.');
+}
 const today=()=>new Date(Date.now()+10800000).toISOString().slice(0,10);
 const DEFAULT_CRM_API='https://script.google.com/macros/s/AKfycbyzSdWYQZU_ofcyNg8uUUtYSlGymvCtVvkojTOIxUVNMNpDWuJ2Mi7UYZILGOD700wlsg/exec';
 function telegramData(){return window.Telegram?.WebApp?.initData||'';}
@@ -102,7 +114,7 @@ function short(id){return esc(String(id).slice(0,8));}function date(s){return ne
 function renderSales(){const sales=data.sales.filter(s=>s.location_id===locationId);$('#content').innerHTML=`<div class="toolbar"><span class="muted">Последние 300 документов · время Москвы</span><button onclick="refresh()">Обновить</button></div><div class="panel">${table(['Документ','Время','Состав','Сумма','Оплачено','Статус','Действия'],sales.map(s=>[short(s.id),date(s.created_at),esc(s.lines.map(l=>l.name+' × '+l.qty).join(', ')),rub(s.total),rub(s.paid),s.status==='refunded'?'Возвращён':s.paid<s.total?'Есть долг':'Продан',s.status==='sold'?`<button data-refund="${esc(s.id)}">Возврат</button>${s.total>s.paid?`<button data-pay="${esc(s.id)}">Принять оплату</button>`:''}`:'—']))}</div>`;$('#content').querySelectorAll('[data-refund]').forEach(b=>b.onclick=()=>refundDialog(b.dataset.refund));$('#content').querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>paymentDialog(b.dataset.pay));}
 function input(name,label,type='text',value='',extra=''){return `<label for="f-${name}">${label}</label><input id="f-${name}" name="${name}" type="${type}" value="${esc(value)}" ${extra} required>`;}
 function select(name,label,options){return `<label for="f-${name}">${label}</label><select id="f-${name}" name="${name}">${options.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`;}
-function dialog(title,fields,save){$('#submit').textContent='Сохранить';if(busy||pending)return notify('Есть незавершённая операция. Откройте настройки для повторной отправки.');$('#dialog-title').textContent=title;$('#fields').innerHTML=fields;$('#form-error').textContent='';$('#submit').disabled=false;$('#form').onsubmit=async e=>{e.preventDefault();if(busy)return;$('#submit').disabled=true;try{await save(Object.fromEntries(new FormData(e.target)));$('#dialog').close();render();notify('Сохранено');}catch(err){const node=$('#form-error');node.textContent=err.name==='AbortError'?'CRM не ответила за 40 секунд. Операция могла сохраниться. Проверьте список товаров или повторите неподтвержденную операцию в настройках.':err.message;node.scrollIntoView({block:'nearest'});}finally{$('#submit').disabled=false;$('#submit').textContent='Сохранить';}};$('#dialog').showModal();}
+function dialog(title,fields,save){$('#submit').textContent='Сохранить';if(busy||pending)return notify('Есть незавершённая операция. Откройте настройки для повторной отправки.');$('#dialog-title').textContent=title;$('#fields').innerHTML=fields;$('#form-error').textContent='';$('#form-progress').textContent='';$('#submit').disabled=false;$('#form').onsubmit=async e=>{e.preventDefault();if(busy)return;$('#submit').disabled=true;try{await save(Object.fromEntries(new FormData(e.target)));$('#dialog').close();render();notify('Сохранено');}catch(err){const node=$('#form-error');node.textContent=err.name==='AbortError'?'CRM не ответила за 40 секунд. Операция могла сохраниться. Проверьте список товаров или повторите неподтвержденную операцию в настройках.':err.message;node.scrollIntoView({block:'nearest'});}finally{$('#submit').disabled=false;$('#submit').textContent='Сохранить';}};$('#dialog').showModal();}
 function shiftDialog(){const shift=currentShift();if(shift)dialog('Закрытие смены',`<p class="muted">Ожидаемые наличные: ${rub(shift.expected_cash)}</p>`+input('actual_cash','Наличные по факту, ₽','number','', 'min="0" step="0.01"')+input('reason','Комментарий / причина расхождения','text','Без расхождений'),v=>mutate('shift.close',{location_id:locationId,...v}));else dialog('Открытие смены',input('opening_cash','Разменные наличные, ₽','number','0','min="0" step="0.01"'),v=>mutate('shift.open',{location_id:locationId,...v}));}
 function refundDialog(id){const order=(data.orders||[]).find(o=>o.sale_id===id&&o.source==='site-paid');if(order)return notify('Онлайн-возврат оформляется через банк');dialog('Полный возврат продажи',input('reason','Причина')+select('restock','Возвращать товар в остаток?',[['false','Нет — товар не возвращён в продажу'],['true','Да — товар можно снова продавать']]),v=>mutate('sale.refund',{location_id:locationId,sale_id:id,reason:v.reason,restock:v.restock==='true'}));}
 function paymentDialog(id){const s=data.sales.find(x=>x.id===id);dialog('Погашение долга',input('amount','Сумма, ₽','number',(s.total-s.paid)/100,'min="0.01" step="0.01"')+select('method','Способ',[['cash','Наличные'],['card','Терминал'],['transfer','Перевод']]),v=>mutate('payment.add',{location_id:locationId,sale_id:id,...v}));}
@@ -186,12 +198,10 @@ async function productSaveStage(message){
  await new Promise(resolve=>requestAnimationFrame(resolve));
 }
 async function publishSiteProduct(id){
- if(!confirm('Проверили фото, описание, состав и правило склада? Товар появится на сайте после публикации.'))return;
- try{if(data.capabilities?.site_contract!=='products-20261115-photo-v4')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.publish',{product_id:id});render();notify('Товар опубликован на сайте');}catch(e){notify(e.message);}
+ try{requireSiteEditor();if(!confirm('Проверили фото, описание, состав и правило склада? Товар появится на сайте после публикации.'))return;await mutate('catalog.site.publish',{product_id:id});render();notify('Товар опубликован на сайте');}catch(e){notify(e.message);}
 }
 async function unpublishSiteProduct(id){
- if(!confirm('Снять товар с сайта? Оформленные заказы сохранятся.'))return;
- try{if(data.capabilities?.site_contract!=='products-20261115-photo-v4')throw Error('Обновите опубликованное развертывание Apps Script и переподключите CRM.');await mutate('catalog.site.unpublish',{product_id:id});render();notify('Товар снят с сайта');}catch(e){notify(e.message);}
+ try{requireSiteEditor();if(!confirm('Снять товар с сайта? Оформленные заказы сохранятся.'))return;await mutate('catalog.site.unpublish',{product_id:id});render();notify('Товар снят с сайта');}catch(e){notify(e.message);}
 }
 function productDialog(id=''){
  if(!live||!['admin','manager'].includes(data.employee.role))return;
@@ -219,19 +229,19 @@ function productDialog(id=''){
   `<label for="f-detail_image_zoom">Масштаб в карточке <output id="detail-zoom-value"></output></label><input id="f-detail_image_zoom" name="detail_image_zoom" type="range" min="0.5" max="6" step="0.1" value="${esc(card?.detail_image_zoom||1)}"><label for="f-detail_image_x">Карточка: левее / правее</label><input id="f-detail_image_x" name="detail_image_x" type="range" min="-100" max="100" step="1" value="${esc(card?.detail_image_x??0)}"><label for="f-detail_image_y">Карточка: выше / ниже</label><input id="f-detail_image_y" name="detail_image_y" type="range" min="-100" max="100" step="1" value="${esc(card?.detail_image_y??0)}"><button type="button" id="reset-detail-position">Сбросить положение в карточке</button>`+
   `<label for="site-description">Описание</label><textarea id="site-description" name="description" maxlength="2000">${esc(card?.description||'')}</textarea>`+
   `<label for="site-ingredients">Состав и аллергены</label><textarea id="site-ingredients" name="ingredients" maxlength="2000">${esc(card?.ingredients||'')}</textarea>`+
-  `<h3>Пищевая ценность</h3><p class="muted">КБЖУ на 100 г или 100 мл. Пустое поле не будет показано на сайте.</p>`+
   `<label for="f-weight">Масса или объем порции</label><input id="f-weight" name="weight" maxlength="30" placeholder="70 г или 300 мл" value="${esc(card?.weight||'')}">`+
-  [['calories','Ккал'],['protein','Белки, г'],['fat','Жиры, г'],['carbs','Углеводы, г']].map(([key,label])=>`<label for="f-${key}">${label}</label><input id="f-${key}" name="${key}" type="number" min="0" max="9999" step="0.01" inputmode="decimal" value="${esc(card?.[key]??'')}">`).join('')+
+  `<fieldset class="nutrition-fields"><legend>Пищевая ценность</legend><p class="muted" id="nutrition-hint">Укажите КБЖУ на 100 г или 100 мл. Подойдут 5,6 и 5.6.</p><div class="nutrition-entry-grid">${siteNutrients.map(([key,label])=>`<label>${label}<input id="f-${key}" name="${key}" type="text" inputmode="decimal" maxlength="12" aria-describedby="nutrition-hint" value="${esc(card?.[key]??'')}"></label>`).join('')}</div><div id="nutrition-preview" aria-live="polite"></div></fieldset>`+
   (legacy?'':select('stock_mode','Правило наличия на сайте',[['manual','Включать вручную'],['finished','Готовый остаток'],['recipe','По рецепту сборки'],['made_to_order','Готовим под заказ (лимит дня)']]))+
   `<label for="site-next-price">Новая цена, ₽ (необязательно)</label><input id="site-next-price" name="next_price" type="number" min="0.01" step="0.01" value="${esc(card?.next_price||'')}"><label for="site-next-date">Дата новой цены (по Москве)</label><input id="site-next-date" name="next_price_on" type="date" value="${esc(card?.next_price_on||'')}">`+
-  `<label class="product-publish-choice"><input name="publish" type="checkbox" ${published||!p?'checked':''}> Показывать на сайте после сохранения</label><p class="muted">Можно сохранить черновик без публикации. Единица и учет остатков после создания фиксируются, история заказов сохраняется.</p>`;
+  `<label class="product-publish-choice"><input name="publish" type="checkbox" ${published?'checked':''}> Показывать на сайте после сохранения</label><p class="muted">Черновик можно дополнить и опубликовать позже. Единица и учёт остатков фиксируются при создании.</p>`;
  let savedId=id;
- dialog(p?'Редактировать товар':'Новый товар',fields+'<p id="form-progress" role="status" aria-live="polite"></p>',async v=>{
+ dialog(p?'Редактировать товар':'Новый товар',fields,async v=>{
   const nextCategory=(v.category_new||v.category).trim();
   if(!/^[а-яёa-z0-9][а-яёa-z0-9 -]{1,38}[а-яёa-z0-9]$/i.test(nextCategory))throw Error('Категория: 3–40 символов, буквы, цифры, пробел и дефис.');
   if(p&&v.unit!==p.unit)throw Error('Единицу существующего товара изменить нельзя.');
   if(p&&(v.stock_tracked==='true')!==p.stock_tracked)throw Error('Учёт остатков существующего товара изменить нельзя.');
-  if(data.capabilities?.site_contract!=='products-20261115-photo-v4')throw Error('Опубликованная версия Apps Script устарела. В редакторе нажмите «Развернуть → Управление развертываниями → Изменить → Новая версия → Развернуть», затем переподключите CRM. Товар не изменён.');
+  requireSiteEditor();
+  const nutrients=Object.fromEntries(siteNutrients.map(([key,label])=>[key,siteNutrient(v[key],label)]));
   const wantsSite=v.publish==='on';
   await productSaveStage('Проверяем данные и обрабатываем фото…');
   const photo=await imageData(v.image,v.auto_crop==='on');let media_id=card?.media_id||'';
@@ -250,7 +260,7 @@ function productDialog(id=''){
     savedId=created.id;
    }
   }
-  const siteDetails={product_id:savedId,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:legacy?'legacy':v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on,weight:v.weight,calories:v.calories,protein:v.protein,fat:v.fat,carbs:v.carbs,image_size:v.image_size,image_x:Number(v.image_x),image_y:Number(v.image_y),image_zoom:Number(v.image_zoom),detail_image_zoom:Number(v.detail_image_zoom),detail_image_x:Number(v.detail_image_x),detail_image_y:Number(v.detail_image_y)};
+  const siteDetails={product_id:savedId,site_name:v.site_name,description:v.description,ingredients:v.ingredients,media_id,stock_mode:legacy?'legacy':v.stock_mode,next_price:v.next_price,next_price_on:v.next_price_on,weight:v.weight,...nutrients,image_size:v.image_size,image_x:Number(v.image_x),image_y:Number(v.image_y),image_zoom:Number(v.image_zoom),detail_image_zoom:Number(v.detail_image_zoom),detail_image_x:Number(v.detail_image_x),detail_image_y:Number(v.detail_image_y)};
   const siteChanged=!card||['site_name','description','ingredients','media_id','stock_mode','next_price','next_price_on','weight','calories','protein','fat','carbs','image_size','image_x','image_y','image_zoom','detail_image_zoom','detail_image_x','detail_image_y'].some(key=>String(card[key]??(key==='image_size'?'medium':''))!==String(siteDetails[key]??''));
   if(siteChanged){await productSaveStage('Сохраняем карточку сайта…');await mutate('catalog.site.save',siteDetails);}
   const currently=legacy?(!card||card.published===true):card?.published===true;
@@ -276,6 +286,17 @@ function productDialog(id=''){
  $('#f-price').oninput=e=>{$('#site-preview-price').textContent=e.target.value?Number(e.target.value).toLocaleString('ru-RU')+' ₽':'Цена';};
  const previewFile=async()=>{const file=$('#site-photo').files?.[0];if(!file)return;const status=$('#photo-prepare-status');status.textContent='Подготавливаем фото…';try{const blob=await preparedPhoto(file,$('#photo-auto-crop').checked);if(file!==$('#site-photo').files?.[0])return;if(previewURL)URL.revokeObjectURL(previewURL);previewURL=URL.createObjectURL(blob);for(const selector of ['#site-preview .site-preview-image','.detail-preview-image']){const preview=$(selector);preview.replaceChildren();const img=document.createElement('img');img.className='site-photo';img.alt='Предпросмотр готового фото';img.onload=()=>fitImage(img);img.onerror=()=>notify('Не удалось показать выбранное фото');img.src=previewURL;preview.append(img);}status.textContent='Такой файл будет загружен на сайт';position();}catch(error){status.textContent=error.message;}};
  $('#site-photo').onchange=previewFile;$('#photo-auto-crop').onchange=previewFile;
+ function previewNutrition(){
+  const preview=$('#nutrition-preview'),values=siteNutrients.map(([key,label])=>{
+   const control=$('#f-'+key);
+   try{const number=siteNutrient(control.value,label);control.removeAttribute('aria-invalid');return [label,number];}
+   catch{control.setAttribute('aria-invalid','true');return [label,null];}
+  });
+  const volume=/мл|литр|(?:\d|\s)л(?:\s|$)/i.test($('#f-weight').value);
+  preview.innerHTML=values.some(([,number])=>number!==null)?`<strong>На ${volume?'100 мл':'100 г'} в карточке сайта</strong><dl>${values.map(([label,number])=>`<div><dt>${label}</dt><dd>${number===null?'—':number.toLocaleString('ru-RU')}</dd></div>`).join('')}</dl>`:'';
+ }
+ for(const name of ['weight',...siteNutrients.map(([key])=>key)])$('#f-'+name).addEventListener('input',previewNutrition);
+ previewNutrition();
 }
 function renderAvailability(){
  const settings=data.site_availability,canEdit=live&&['admin','manager'].includes(data.employee.role);
