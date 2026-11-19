@@ -24,12 +24,48 @@ let data={employee:{name:'Демонстрация',role:'admin'},locations:[{id
 function resetDemo(){demoEvents=[];demoProducts.forEach(p=>{if(p.stock_tracked)demoEvents.push({event_id:'seed'+p.id,created_at:new Date().toISOString(),actor_id:'demo',location_id:'CAFE',type:'stock.receive',payload:{product_id:p.id,delta:20}});});demoSnapshot();}
 function demoSnapshot(){const s=CRMCore.reduce(demoEvents);data={employee:{id:'demo',name:'Демонстрация',role:'admin'},locations:[{id:'CAFE',name:'Кофейня'},{id:'WORKSHOP',name:'Цех'}],products:demoProducts,partners:[{id:'DEMO_PARTNER',name:'Тестовый партнёр'}],sales:Object.values(s.sales).reverse(),shifts:Object.values(s.shifts).map(x=>({...x,expected_cash:CRMCore.expectedCash(s,x.id)})).reverse(),stock:s.stock};}
 function currentShift(){return data.shifts.find(x=>x.location_id===locationId&&x.status==='open');}
-function stockState(){return {stock:data.stock,orders:Object.fromEntries((data.orders||[]).map(o=>[o.id,o]))};}
-function physicalAvailable(p){return (data.stock[CRMCore.key(locationId,p.id)]||0)-CRMCore.reserved(stockState(),locationId,p.id);}
-function cartPlan(items=cart){return CRMCore.planStock(stockState(),locationId,Object.entries(items).map(([id,qty])=>{const p=data.products.find(p=>p.id===id);if(!p)throw Error('Товар удалён из каталога');return {...p,product_id:id,qty};}),data.assembly_recipes||{});}
-function cartStockUsage(items=cart){return Object.fromEntries(cartPlan(items).map(x=>[x.product_id,x.qty]));}
-function available(p){if(!p.stock_tracked)return null;let used={};try{used=cartStockUsage();}catch{}return Math.max(0,physicalAvailable(p)-(used[p.id]||0));}
-function fromClassic(id,items=cart){const p=data.products.find(p=>p.id===id);return data.assembly_recipes?.[id]?Math.max(0,(items[id]||0)-Math.max(0,physicalAvailable(p))):0;}
+const inventoryClock=new WeakMap();
+function stockIssue(code,id){
+ const error=new Error({snapshot_required:'Сначала обновите остатки',missing_product:'Товар отсутствует в каталоге',
+   invalid_recipe:'Проверьте рецепт сборки',wrong_location:'Выберите действующую точку'}[code]);
+ error.stockIssue={code,product_id:id,stock_id:id};
+ return error;
+}
+function inventoryAt(point){
+ const snapshot=data.inventory,start=snapshot&&inventoryClock.get(snapshot);
+ if(snapshot?.version!==1||typeof snapshot.revision!=='string'||!snapshot.revision||
+    !Number.isFinite(start)||!Number.isFinite(snapshot.valid_for_ms)||
+    performance.now()-start>=snapshot.valid_for_ms)return null;
+ return snapshot.locations?.[point]||null;
+}
+function readyStock(id,point=locationId){
+ if(demoMode)return Math.max(0,data.stock[CRMCore.key(point,id)]||0);
+ const quantity=inventoryAt(point)?.available?.[id];
+ if(!Number.isFinite(quantity)||quantity<0)throw stockIssue('snapshot_required',id);
+ return quantity;
+}
+function displayedStock(id,point=locationId){
+ try{return readyStock(id,point);}catch{return null;}
+}
+function cartPlan(items=cart){
+ if(!data.locations.some(x=>x.id===locationId))throw stockIssue('wrong_location');
+ return CRMCore.planAvailable(id=>readyStock(id),Object.entries(items).map(([id,qty])=>{
+   const product=data.products.find(p=>p.id===id);
+   if(!product)throw stockIssue('missing_product',id);
+   const recipe=data.assembly_recipes?.[id];
+   if(recipe&&!data.products.some(p=>p.id===recipe.base_product_id&&p.stock_tracked))throw stockIssue('invalid_recipe',id);
+   return {...product,product_id:id,qty};
+ }),data.assembly_recipes||{});
+}
+function available(p,used){
+ if(!p.stock_tracked)return null;
+ const free=displayedStock(p.id);
+ return free===null?null:Math.max(0,CRMCore.qty(free-(used[p.id]||0)));
+}
+function fromClassic(id,items=cart){
+ const ready=displayedStock(id);
+ return ready!==null&&data.assembly_recipes?.[id]?Math.max(0,(items[id]||0)-ready):0;
+}
 function notify(message){$('#toast').textContent=message;$('#toast').style.display='block';clearTimeout(notify.timer);notify.timer=setTimeout(()=>$('#toast').style.display='none',4500);}
 
 function mobileMenu(){return !!window.matchMedia?.('(max-width:760px)').matches;}
@@ -58,57 +94,227 @@ window.addEventListener('keydown',e=>{
 });
 window.matchMedia?.('(max-width:760px)').addEventListener('change',()=>setMenu(false,false));
 
+let cartObserver;
+function bindCartJump(){
+ const cartPanel=$('.cart'),jump=$('#jump-cart');if(!cartPanel)return;
+ jump.onclick=()=>{cartPanel.scrollIntoView({block:'start'});cartPanel.querySelector('h2').focus({preventScroll:true});};
+ cartObserver=new IntersectionObserver(([entry])=>{if(cartPanel.isConnected)jump.hidden=entry.isIntersecting||!Object.keys(cart).length;});
+ cartObserver.observe(cartPanel);
+}
+const listQueries=new Map();
+function bindListFilter(){
+ const config={stock:['Поиск по складу','tbody tr'],sales:['Найти документ','tbody tr'],orders:['Найти заказ','.order-card, .panel']};
+ const settings=config[page],toolbar=$('#content .toolbar');if(!settings||!toolbar)return;
+ const rows=[...document.querySelectorAll('#content '+settings[1])].filter(el=>page==='orders'||el.cells.length>1);
+ if(!rows.length)return;
+ const scope=page+'-'+locationId,input=document.createElement('input'),count=document.createElement('span');
+ input.type='search';input.placeholder=settings[0];input.setAttribute('aria-label',settings[0]);input.value=listQueries.get(scope)||'';
+ count.className='muted';count.setAttribute('role','status');
+ function filter(){
+  listQueries.set(scope,input.value);const term=input.value.trim().toLocaleLowerCase('ru');let visible=0;
+  for(const row of rows){row.hidden=!row.textContent.toLocaleLowerCase('ru').includes(term);if(!row.hidden)visible++}
+  count.textContent=term?'Найдено: '+visible+' из '+rows.length:'';
+ }
+ input.addEventListener('input',filter);toolbar.prepend(input,count);filter();
+}
 function render(){
-  $('#nav').innerHTML=Object.entries(labels).filter(([id])=>(id!=='availability'||!!data.site_availability)&&(id!=='products'||data.capabilities?.product_create===true)).map(([id,name])=>`<button data-page="${id}" class="${page===id?'active':''}">${name}</button>`).join('');
-  $('#nav').querySelectorAll('button').forEach(b=>{b.disabled=busy||(!live&&!demoMode&&b.dataset.page!=='settings');b.onclick=()=>{if(busy)return;page=b.dataset.page;setMenu(false,false);render();};});
+  const groups=[['Работа точки',['sale','orders','sales','shifts']],['Ассортимент',['stock','products','availability']],['Управление',['reports','settings']]];
+  const visible=id=>(id!=='availability'||!!data.site_availability)&&(id!=='products'||data.capabilities?.product_create===true);
+  const button=id=>`<button type="button" data-page="${id}" class="${id===page?'active':''}" ${id===page?'aria-current="page"':''}>${labels[id]}</button>`;
+  $('#nav').innerHTML=groups.map(([name,ids])=>'<section><h2>'+name+'</h2>'+ids.filter(visible).map(button).join('')+'</section>').join('');
+  $('#quick-nav').innerHTML=['sale','orders','stock'].map(button).join('');
+  document.querySelectorAll('[data-page]').forEach(b=>{b.disabled=busy||(!live&&!demoMode&&b.dataset.page!=='settings');b.onclick=()=>{if(busy)return;page=b.dataset.page;setMenu(false,false);render();$('#title').focus({preventScroll:true});window.scrollTo(0,0);};});
+  $('#quick-nav').hidden=!live&&!demoMode;
+  $('#jump-cart').hidden=true;cartObserver?.disconnect();
   $('#title').textContent=labels[page];$('#identity').textContent=data.employee.name+' · '+data.employee.role;
   $('#location').innerHTML=data.locations.map(l=>`<option value="${esc(l.id)}" ${l.id===locationId?'selected':''}>${esc(l.name)}</option>`).join('');
-  $('#location').disabled=busy;$('#shiftButton').disabled=busy||(!live&&!demoMode);$('#shiftButton').textContent=currentShift()?'Закрыть смену':'Открыть смену';
+  $('#location').disabled=busy||!!pending;$('#shiftButton').disabled=busy||!!pending||!canSell()||(!live&&!demoMode);$('#shiftButton').textContent=currentShift()?'Закрыть смену':'Открыть смену';
   $('#mode').className='notice'+(live?' live':'');$('#mode').textContent=live?'Рабочий режим · Google Sheets подключены · '+data.products.length+' позиций.':demoMode?'ДЕМОНСТРАЦИЯ · Все товары, цены и остатки здесь тестовые. Действия не записываются в вашу таблицу и сбросятся при перезагрузке.':'Вход в CRM · Подключите свою таблицу. Рабочий каталог появится после проверки доступа.';
-  ({sale:renderSale,sales:renderSales,stock:renderStock,products:renderProductAdmin,availability:renderAvailability,shifts:renderShifts,reports:renderReports,orders:renderOrders,settings:renderSettings}[page])();
+  ({sale:renderSale,sales:renderSales,stock:renderStock,products:renderProductAdmin,availability:renderAvailability,shifts:renderShifts,reports:renderReports,orders:renderOrders,settings:renderSettings}[page])();bindListFilter();
 }
-$('#location').onchange=e=>{if(busy)return;locationId=e.target.value;cart={};render();};
+$('#location').onchange=e=>{if(busy||pending){e.target.value=locationId;return;}locationId=e.target.value;clearSaleCart();render();};
 function renderSale(){
- $('#content').innerHTML=`<div class="sale-layout"><div><div class="toolbar"><input id="search" placeholder="Поиск по названию" aria-label="Поиск" value="${esc(search)}"><button onclick="refresh()">Обновить</button></div><div id="categories" class="chips"></div><div id="products" class="products"></div></div><div class="cart"><h2>Новая продажа</h2><div class="muted">${currentShift()?'Смена открыта':'Сначала откройте смену'} · внутренний документ</div><div id="cart-lines"></div><div class="total"><span>Итого</span><span id="total"></span></div><select id="payment" aria-label="Способ расчёта"><option value="cash">Наличные</option><option value="card">Терминал</option><option value="transfer">Перевод</option><option value="unpaid">В долг партнёру</option></select><select id="partner" aria-label="Партнёр"><option value="">Без партнёра</option>${data.partners.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select><button class="primary" id="sell" onclick="sell()">Зарегистрировать продажу</button><p class="key-note">Оплата принимается отдельно. Этот документ не является фискальным чеком.</p></div></div>`;
- $('#search').oninput=e=>{search=e.target.value;renderProducts();};renderProducts();renderCart();
+ $('#content').innerHTML=`<div class="sale-layout"><div><div class="toolbar"><input id="search" placeholder="Поиск по названию" aria-label="Поиск" value="${esc(search)}"><button id="sale-refresh" onclick="refresh()">Обновить остатки</button></div><section id="sale-feedback" class="sale-feedback" hidden><div id="sale-feedback-message" role="status" aria-live="polite"></div><div id="sale-feedback-actions" class="sale-feedback-actions"></div></section><div id="categories" class="chips"></div><div id="products" class="products"></div></div><div class="cart"><h2 tabindex="-1">Новая продажа</h2><div class="muted">${!canSell()?'Только просмотр':currentShift()?'Смена открыта':'Сначала откройте смену'} · внутренний документ</div><div id="cart-lines"></div><div class="total"><span>Итого</span><span id="total"></span></div><select id="payment" aria-label="Способ расчёта"><option value="cash">Наличные</option><option value="card">Терминал</option><option value="transfer">Перевод</option><option value="unpaid">В долг партнёру</option></select><select id="partner" aria-label="Партнёр"><option value="">Без партнёра</option>${data.partners.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select><button class="primary" id="sell" onclick="sell()">Зарегистрировать продажу</button><p class="key-note">Оплата принимается отдельно. Этот документ не является фискальным чеком.</p></div></div>`;
+ $('#search').oninput=e=>{search=e.target.value;renderProducts();};renderProducts();renderCart();renderSaleFeedback();bindCartJump();
 }
+document.addEventListener('error',event=>{if(event.target.matches?.('.sale-product-photo'))event.target.hidden=true;},true);
 function renderProducts(){
  const categories=['',...new Set(data.products.map(p=>p.category))];$('#categories').innerHTML=categories.map(c=>`<button class="${category===c?'active':''}">${esc(c||'Все позиции')}</button>`).join('');$('#categories').querySelectorAll('button').forEach((b,i)=>b.onclick=()=>{category=categories[i];renderProducts();});
  const list=data.products.filter(p=>(!category||p.category===category)&&p.name.toLowerCase().includes(search.toLowerCase()));
  const cards=Object.fromEntries((data.site_cards||[]).map(c=>[c.product_id,c]));
- $('#products').innerHTML=list.length?list.map(p=>{const media=cards[p.id]?.media_id;const photo=/^[a-f0-9]{64}$/.test(media||'')?`https://molinebymonk.ru/api/auth/catalog/media/${media}.webp`:MOLINE_LEGACY_IMAGES[p.id];return `<button class="product" data-id="${esc(p.id)}">${photo?`<img class="sale-product-photo" src="${esc(photo)}" alt="" loading="lazy">`:'<span class="sale-product-photo sale-product-placeholder" aria-hidden="true"></span>'}<span class="cat">${esc(p.category)}</span><strong>${esc(p.name)}</strong><span class="bottom"><span>${rub(p.price)}</span><span class="muted">${p.stock_tracked?available(p)+' '+esc(p.unit):'без склада'}</span></span></button>`;}).join(''):'<div class="empty">Нет товаров. В рабочем режиме каталог заполняется на листе «Товары».</div>';
- $('#products').querySelectorAll('button').forEach(b=>b.onclick=()=>add(b.dataset.id,1));
+ let usage={};
+ try{usage=Object.fromEntries(cartPlan().map(item=>[item.product_id,item.qty]));}catch{}
+ $('#products').innerHTML=list.length?list.map(p=>{const free=available(p,usage),media=cards[p.id]?.media_id;const photo=/^[a-f0-9]{64}$/.test(media||'')?`https://molinebymonk.ru/api/auth/catalog/media/${media}.webp`:MOLINE_LEGACY_IMAGES[p.id];return `<button class="product" data-id="${esc(p.id)}">${photo?`<img class="sale-product-photo" src="${esc(photo)}" alt="" loading="lazy">`:'<span class="sale-product-photo sale-product-placeholder" aria-hidden="true"></span>'}<span class="cat">${esc(p.category)}</span><strong>${esc(p.name)}</strong><span class="bottom"><span>${rub(p.price)}</span><span class="muted">${p.stock_tracked?(free===null?'Обновите остатки':free+(data.assembly_recipes?.[p.id]?' готовых':' '+esc(p.unit))):'без склада'}</span></span></button>`;}).join(''):'<div class="empty">Нет товаров. В рабочем режиме каталог заполняется на листе «Товары».</div>';
+ $('#products').querySelectorAll('button').forEach(b=>b.onclick=()=>add(b.dataset.id,1,b.querySelector('strong').textContent));
 }
-function confirmClassic(product,amount,accept){
- const recipe=data.assembly_recipes[product.id],base=data.products.find(p=>p.id===recipe.base_product_id);
- $('#dialog-title').textContent='Использовать классический?';
- $('#fields').innerHTML=`<p>Готовых «${esc(product.name)}» не хватает.</p><p>Использовать ${amount*recipe.base_qty} шт «${esc(base?.name||'Круассан классический')}»?</p><p class="muted">При удалении из корзины основа освободится обратно.</p><button type="button" id="classic-no">Нет</button>`;
- $('#form-error').textContent='';$('#submit').disabled=false;$('#submit').textContent='Да';
+function canSell(){return ['admin','manager','cashier'].includes(data.employee.role);}
+let saleFeedback=null,reviewedUsage=null;
+function clearSaleCart(){cart={};reviewedUsage=null;saleFeedback=null;}
+function productName(id){return data.products.find(p=>p.id===id)?.name||id||'';}
+function pointName(){return data.locations.find(x=>x.id===locationId)?.name||locationId||'точка не выбрана';}
+function usageKey(plan){return JSON.stringify(plan.map(i=>[i.product_id,i.qty]).sort((a,b)=>a[0].localeCompare(b[0])));}
+function showSaleFeedback(message,actions=[],title='Продажа · '+pointName(),reveal=true){
+ saleFeedback={title,message,actions};
+ renderSaleFeedback(reveal);
+}
+function renderSaleFeedback(reveal=false){
+ const panel=$('#sale-feedback');
+ if(!panel)return;
+ const current=saleFeedback||(pending?{
+   title:'Продажа · '+pointName(),
+   message:'CRM не подтвердила операцию. Проверьте результат с тем же ID.',
+   actions:[['Проверить операцию',retryPending]],
+ }:null);
+ panel.hidden=!current;
+ $('#sale-refresh').hidden=!!current?.actions.some(([,action])=>action===refresh);
+ if(!current)return;
+ $('#sale-feedback-message').innerHTML=(current.title?'<strong>'+esc(current.title)+'</strong>':'')+'<p>'+esc(current.message)+'</p>';
+ $('#sale-feedback-actions').replaceChildren(...current.actions.map(([label,action])=>{
+   const button=document.createElement('button');
+   button.type='button';button.textContent=label;button.onclick=action;
+   button.disabled=busy||(action===refresh&&refreshing);
+   return button;
+ }));
+ if(reveal)panel.scrollIntoView({block:'nearest'});
+}
+function chooseSalePoint(){const control=$('#location');control.focus();control.scrollIntoView({block:'nearest'});}
+function focusCart(){const lines=$('#cart-lines');lines.scrollIntoView({block:'nearest'});lines.querySelector('button')?.focus();}
+function explainSale(error,id,label,phase='add'){
+ const detail=error.stockIssue,code=detail?.code||error.code;
+ const name=label||productName(id||detail?.product_id);
+ const title=(phase==='add'&&name?'Не добавлен товар «'+name+'»':name?'Продажа · '+name:'Продажа')+' · '+pointName();
+ const refreshAction=['Обновить остатки',refresh],pointAction=['Выбрать точку',chooseSalePoint],quantityAction=['Проверить количество',focusCart];
+ let message,actions=[];
+ switch(code){
+  case 'busy':message='Выполняется операция. Дождитесь ответа CRM.';break;
+  case 'pending':
+   message='CRM не подтвердила операцию. Проверьте результат с тем же ID.';
+   actions=[['Проверить операцию',retryPending]];break;
+  case 'permission':
+   message='Ваша роль разрешает просмотр. Для продажи нужны права кассира, менеджера или администратора.';break;
+  case 'snapshot_required':
+   message='Доступные остатки устарели или ещё не получены. Обновите данные и повторите действие.';
+   actions=[refreshAction];break;
+  case 'wrong_location':
+   message='Эта точка отсутствует в актуальных данных CRM. Выберите действующую точку.';
+   actions=[pointAction,refreshAction];break;
+  case 'missing_product':
+   message='Позиции нет в актуальном каталоге. Обновите список товаров и уберите позицию из корзины, если она там осталась.';
+   actions=[refreshAction,...(Object.keys(cart).length?[quantityAction]:[])];break;
+  case 'invalid_recipe':
+   message='Проверьте рецепт сборки и учёт остатков основы у позиции «'+productName(detail?.product_id||id)+'».';
+   actions=[refreshAction];break;
+  case 'invalid_quantity':
+   message='Проверьте количество. Товары со сборкой учитываются целыми штуками.';
+   actions=Object.keys(cart).length?[quantityAction]:[];break;
+  case 'ready_shortage':
+  case 'base_shortage': {
+   const stockId=detail.stock_id,base=code==='base_shortage';
+   const held=phase==='add'?inventoryAt(locationId):null;
+   const online=held?.online_reserved?.[stockId]||0,total=held?.reserved?.[stockId]||0;
+   const {available,needed}=detail;
+   message=(base?'Не хватает основы для сборки «'+productName(detail.product_id)+'». ':'')+
+     (stockId!==id?'«'+productName(stockId)+'». ':'')+'Доступно '+available+', требуется '+needed+'.';
+   if(online>0)message+=' Зарезервировано онлайн: '+online+'.';
+   if(total>online)message+=' В других резервах: '+CRMCore.qty(total-online)+'.';
+   if(phase==='add'&&available===0&&!total&&!base&&!(data.stock[CRMCore.key(locationId,stockId)]>0))
+     message+=' На этой точке готового товара нет.';
+   actions=[refreshAction];
+   const alternatives=data.locations.filter(l=>l.id!==locationId&&(displayedStock(stockId,l.id)||0)>0);
+   if(alternatives.length){
+     message+=' Есть в наличии на точке «'+alternatives.map(l=>l.name).join('», «')+'».';
+     actions.push(pointAction);
+   }
+   if(Object.keys(cart).length)actions.push(quantityAction);
+   break;
+  }
+  default:
+   message=error.confirmed&&error.message?error.message:'Не удалось проверить действие. Обновите остатки и повторите.';
+   actions=[refreshAction,...(Object.keys(cart).length?[quantityAction]:[])];
+ }
+ showSaleFeedback(message,actions,title);
+}
+function saleError(code){return Object.assign(new Error(code),{code});}
+function confirmAssembly(product,amount,accept){
+ const recipe=data.assembly_recipes[product.id],base=productName(recipe.base_product_id);
+ $('#dialog-title').textContent='Использовать основу для сборки?';
+ $('#fields').innerHTML='<p>Позиция «'+esc(product.name)+'» · '+esc(pointName())+'.</p><p>Использовать '+
+  CRMCore.qty(amount*recipe.base_qty)+' шт «'+esc(base)+'»?</p><button type="button" id="classic-no">Не добавлять</button>';
+ $('#form-error').textContent='';$('#form-progress').textContent='';$('#submit').disabled=false;$('#submit').textContent='Добавить';
  $('#classic-no').onclick=()=>$('#dialog').close();
- $('#form').onsubmit=e=>{e.preventDefault();if(busy||pending)return;$('#dialog').close();accept();};
+ $('#form').onsubmit=e=>{e.preventDefault();$('#dialog').close();accept();};
  $('#dialog').showModal();
 }
-function add(id,n){
- if(busy||pending)return notify('Сначала завершите или повторите текущую операцию');
- if($('#dialog').open)return;
- const p=data.products.find(x=>x.id===id);if(!p)return;
- const next={...cart},q=(cart[id]||0)+n;if(q<=0)delete next[id];else next[id]=q;
- const commit=()=>{cart=next;renderProducts();renderCart();};
- // Removing an item always releases its temporary use of the classic bank.
- if(n<0){commit();return;}
- try{cartPlan(next);}catch(err){return notify('Недостаточно готовых круассанов или классической основы');}
- const addedBase=fromClassic(id,next)-fromClassic(id,cart);
- if(addedBase>0)return confirmClassic(p,addedBase,commit);
- commit();
+function add(id,n,label,confirmedUsage){
+ if(busy||pending)return explainSale(saleError(busy?'busy':'pending'),id,label);
+ if($('#dialog').open){$('#form-progress').textContent='Сначала закройте текущее окно.';return;}
+ if(!canSell())return explainSale(saleError('permission'),id,label);
+ if(!data.locations.some(point=>point.id===locationId))return explainSale(saleError('wrong_location'),id,label);
+ if(n!==1&&n!==-1)return explainSale(saleError('invalid_quantity'),id,label);
+ const next={...cart},q=(cart[id]||0)+n;
+ if(q<=0)delete next[id];else next[id]=q;
+ let keepApproval=!Object.keys(cart).length;
+ if(!keepApproval){try{keepApproval=reviewedUsage===usageKey(cartPlan());}catch{}}
+ let usage=null;
+ if(n<0){
+   if(keepApproval){try{usage=usageKey(cartPlan(next));}catch{}}
+ }else{
+   const product=data.products.find(x=>x.id===id);
+   if(!product)return explainSale(saleError('missing_product'),id,label);
+   try{usage=usageKey(cartPlan(next));}catch(error){return explainSale(error,id,label);}
+   const addedBase=fromClassic(id,next)-fromClassic(id,cart);
+   if(addedBase>0&&confirmedUsage!==usage)
+     return confirmAssembly(product,addedBase,()=>add(id,n,label,usage));
+ }
+ cart=next;reviewedUsage=keepApproval?usage:null;saleFeedback=null;
+ renderProducts();renderCart();renderSaleFeedback();
 }
 function renderCart(){
- const lines=Object.entries(cart);let plan=[],problem='';try{plan=cartPlan();}catch(err){problem='Остатки изменились. Уменьшите количество или обновите корзину.';}
- $('#cart-lines').innerHTML=lines.length?lines.map(([id,q])=>{const p=data.products.find(x=>x.id===id);if(!p)return '<p>Товар удалён из каталога</p>';const fromBase=fromClassic(id);return `<div class="cart-row"><div class="line"><span>${esc(p.name)}</span><strong>${rub(p.price*q)}</strong></div>${fromBase?`<p class="muted">${q-fromBase?`${q-fromBase} готовых · `:''}${fromBase} из классического</p>`:''}<div class="stepper"><button data-id="${esc(id)}" data-n="-1">−</button><span>${q} ${esc(p.unit)}</span><button data-id="${esc(id)}" data-n="1">+</button></div></div>`;}).join(''):'<div class="empty">Выберите позиции слева.<br>Здесь появится состав продажи.</div>';
- if(problem)$('#cart-lines').innerHTML+=`<p class="danger">${esc(problem)}</p>`;
+ const lines=Object.entries(cart);let problem=false;
+ try{cartPlan();}catch{problem=true;}
+ $('#cart-lines').innerHTML=lines.length?lines.map(([id,q])=>{
+   const p=data.products.find(x=>x.id===id),fromBase=p?fromClassic(id):0,name=esc(p?.name||id);
+   const step=(n,caption)=>'<button type="button" data-id="'+esc(id)+'" data-n="'+n+'" aria-label="'+caption+' количество '+name+'">'+(n<0?'−':'+')+'</button>';
+   return '<div class="cart-row"><div class="line"><span>'+name+'</span><strong>'+(p?rub(p.price*q):'Удалён из каталога')+
+    '</strong></div>'+(fromBase?'<p class="muted">'+fromBase+' по рецепту</p>':'')+
+    '<div class="stepper">'+step(-1,'Уменьшить')+'<span>'+q+' '+esc(p?.unit||'шт')+'</span>'+step(1,'Увеличить')+'</div></div>';
+ }).join(''):'<div class="empty">Добавьте товар из каталога. Здесь появятся количество и сумма.</div>';
+ if(problem&&lines.length)$('#cart-lines').insertAdjacentHTML('beforeend','<p class="danger">Проверьте остатки и состав корзины перед продажей.</p>');
  $('#cart-lines').querySelectorAll('button').forEach(b=>b.onclick=()=>add(b.dataset.id,Number(b.dataset.n)));
- $('#total').textContent=rub(lines.reduce((a,[id,q])=>a+(data.products.find(x=>x.id===id)?.price||0)*q,0));$('#sell').disabled=busy||!lines.length||!currentShift()||!!problem;
+ $('#total').textContent=rub(lines.reduce((a,[id,q])=>a+(data.products.find(x=>x.id===id)?.price||0)*q,0));
+ const jump=$('#jump-cart');jump.textContent='К корзине · '+$('#total').textContent;
+ const box=$('.cart').getBoundingClientRect();jump.hidden=!lines.length||(box.top<innerHeight && box.bottom>0);
+ $('#sell').disabled=busy||!!pending||!canSell()||!lines.length||!currentShift();
 }
-async function sell(){if(busy)return;let usage;try{usage=cartPlan();}catch{return notify('Остатки изменились. Проверьте корзину');}const d={location_id:locationId,lines:Object.entries(cart).map(([product_id,qty])=>({product_id,qty})),expected_stock_usage:usage,method:$('#payment').value,partner_id:$('#partner').value};if(!d.lines.length)return;if(d.method==='unpaid'&&!d.partner_id)return notify('Выберите партнёра');try{await mutate('sale.create',d);cart={};render();notify('Продажа сохранена');}catch(e){notify(e.message);}}
+async function sell(){
+ if(busy||pending)return explainSale(saleError(busy?'busy':'pending'),null,'','sell');
+ if(!canSell())return explainSale(saleError('permission'),null,'','sell');
+ if(!currentShift()||!Object.keys(cart).length)return;
+ let usage;
+ try{usage=cartPlan();}catch(error){return explainSale(error,null,'','sell');}
+ const key=usageKey(usage);
+ if(reviewedUsage!==key){
+   const list=usage.map(l=>'<li>'+esc(productName(l.product_id))+' · '+l.qty+'</li>').join('');
+   return dialog('Проверьте списание со склада',list?'<ul>'+list+'</ul>':'<p>Позиции без списания со склада.</p>',()=>{
+     if(usageKey(cartPlan())!==key)throw Error('Списание изменилось. Закройте окно и обновите остатки.');
+     reviewedUsage=key;saleFeedback=null;
+   });
+ }
+ const d={location_id:locationId,lines:Object.entries(cart).map(([product_id,qty])=>({product_id,qty})),
+   expected_stock_usage:usage,method:$('#payment').value,partner_id:$('#partner').value};
+ if(d.method==='unpaid'&&!d.partner_id)return showSaleFeedback('Выберите партнёра для продажи в долг.',[['Выбрать партнёра',()=>$('#partner').focus()]]);
+ showSaleFeedback('Отправляем продажу. Дождитесь ответа CRM.',[],'Продажа · '+pointName(),false);
+ try{
+   const operation=mutate('sale.create',d);
+   $('#location').disabled=true;renderCart();
+   await operation;
+   clearSaleCart();render();notify('Продажа сохранена');
+ }catch(error){
+   explainSale(pending?saleError('pending'):error,null,'','sell');
+   $('#location').disabled=!!pending;
+   renderCart();
+ }
+}
 function table(headers,rows){return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}">Пока нет записей</td></tr>`}</tbody></table></div>`;}
 function short(id){return esc(String(id).slice(0,8));}function date(s){return new Date(s).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
 function renderSales(){const sales=data.sales.filter(s=>s.location_id===locationId);$('#content').innerHTML=`<div class="toolbar"><span class="muted">Последние 300 документов · время Москвы</span><button onclick="refresh()">Обновить</button></div><div class="panel">${table(['Документ','Время','Состав','Сумма','Оплачено','Статус','Действия'],sales.map(s=>[short(s.id),date(s.created_at),esc(s.lines.map(l=>l.name+' × '+l.qty).join(', ')),rub(s.total),rub(s.paid),s.status==='refunded'?'Возвращён':s.paid<s.total?'Есть долг':'Продан',s.status==='sold'?`<button data-refund="${esc(s.id)}">Возврат</button>${s.total>s.paid?`<button data-pay="${esc(s.id)}">Принять оплату</button>`:''}`:'—']))}</div>`;$('#content').querySelectorAll('[data-refund]').forEach(b=>b.onclick=()=>refundDialog(b.dataset.refund));$('#content').querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>paymentDialog(b.dataset.pay));}
@@ -118,7 +324,7 @@ function dialog(title,fields,save){$('#submit').textContent='Сохранить'
 function shiftDialog(){const shift=currentShift();if(shift)dialog('Закрытие смены',`<p class="muted">Ожидаемые наличные: ${rub(shift.expected_cash)}</p>`+input('actual_cash','Наличные по факту, ₽','number','', 'min="0" step="0.01"')+input('reason','Комментарий / причина расхождения','text','Без расхождений'),v=>mutate('shift.close',{location_id:locationId,...v}));else dialog('Открытие смены',input('opening_cash','Разменные наличные, ₽','number','0','min="0" step="0.01"'),v=>mutate('shift.open',{location_id:locationId,...v}));}
 function refundDialog(id){const order=(data.orders||[]).find(o=>o.sale_id===id&&o.source==='site-paid');if(order)return notify('Онлайн-возврат оформляется через банк');dialog('Полный возврат продажи',input('reason','Причина')+select('restock','Возвращать товар в остаток?',[['false','Нет — товар не возвращён в продажу'],['true','Да — товар можно снова продавать']]),v=>mutate('sale.refund',{location_id:locationId,sale_id:id,reason:v.reason,restock:v.restock==='true'}));}
 function paymentDialog(id){const s=data.sales.find(x=>x.id===id);dialog('Погашение долга',input('amount','Сумма, ₽','number',(s.total-s.paid)/100,'min="0.01" step="0.01"')+select('method','Способ',[['cash','Наличные'],['card','Терминал'],['transfer','Перевод']]),v=>mutate('payment.add',{location_id:locationId,sale_id:id,...v}));}
-function renderStock(){const list=data.products.filter(p=>p.stock_tracked);$('#content').innerHTML=`<div class="toolbar"><button onclick="stockDialog('stock.receive')">+ Приход</button><button onclick="stockDialog('stock.writeoff')">Списание</button><button onclick="stockDialog('stock.count')">Инвентаризация</button><button onclick="stockDialog('stock.transfer')">Перемещение</button><button onclick="refresh()">Обновить</button></div><div class="panel">${table(['Позиция','Категория','Готовых свободно','Минимум','Состояние'],list.map(p=>[esc(p.name),esc(p.category),physicalAvailable(p)+' '+esc(p.unit),p.min_stock||0,physicalAvailable(p)<Number(p.min_stock)?'<span class="badge low">Мало</span>':'<span class="badge">Достаточно</span>']))}</div>`;}
+function renderStock(){const list=data.products.filter(p=>p.stock_tracked);$('#content').innerHTML=`<div class="toolbar"><button onclick="stockDialog('stock.receive')">+ Приход</button><button onclick="stockDialog('stock.writeoff')">Списание</button><button onclick="stockDialog('stock.count')">Инвентаризация</button><button onclick="stockDialog('stock.transfer')">Перемещение</button><button onclick="refresh()">Обновить</button></div><div class="panel">${table(['Позиция','Категория','Готовых свободно','Минимум','Состояние'],list.map(p=>[esc(p.name),esc(p.category),(displayedStock(p.id)===null?'—':displayedStock(p.id)+' '+esc(p.unit)),p.min_stock||0,displayedStock(p.id)===null?'Обновите остатки':displayedStock(p.id)<Number(p.min_stock)?'<span class="badge low">Мало</span>':'<span class="badge">Достаточно</span>']))}</div>`;}
 function renderProductAdmin(){
  const canEdit=live&&['admin','manager'].includes(data.employee.role);
  const cards=Object.fromEntries((data.site_cards||[]).map(p=>[p.product_id,p]));
@@ -318,13 +524,16 @@ function stockDialog(action){if(!data.products.some(p=>p.stock_tracked))return n
 function renderShifts(){$('#content').innerHTML=`<div class="toolbar"><button onclick="shiftDialog()">${currentShift()?'Закрыть смену':'Открыть смену'}</button><button onclick="cashDialog('cash.in')">Внести наличные</button><button onclick="cashDialog('cash.out')">Изъять наличные</button><button onclick="refresh()">Обновить</button></div><div class="panel">${table(['Смена','Открытие','Закрытие','Начальные','По учёту','Факт','Разница'],data.shifts.filter(s=>s.location_id===locationId).map(s=>[short(s.id),date(s.opened_at),s.closed_at?date(s.closed_at):'<span class="badge">Открыта</span>',rub(s.opening_cash),rub(s.expected_cash),s.status==='closed'?rub(s.actual_cash):'—',s.status==='closed'?rub(s.difference):'—']))}</div>`;}
 function cashDialog(action){dialog(action==='cash.in'?'Внесение наличных':'Изъятие наличных',input('amount','Сумма, ₽','number','','min="0.01" step="0.01"')+input('reason','Основание'),v=>mutate(action,{location_id:locationId,...v}));}
 function renderReports(){$('#content').innerHTML=`<div class="toolbar"><input id="from" type="date" value="${today()}" aria-label="Начало периода"><input id="to" type="date" value="${today()}" aria-label="Конец периода"><button class="primary" onclick="loadReport()">Показать отчёт</button></div><div id="report"><div class="empty">Выберите период. Выручка и поступления считаются отдельно; долг показан на текущий момент.</div></div>`;loadReport();}
-async function loadReport(){const from=$('#from').value,to=$('#to').value;if(!from||!to||from>to)return notify('Проверьте даты');try{const r=live?await api('report',{location_id:locationId,from,to}):CRMCore.report(CRMCore.reduce(demoEvents),locationId,from,to);if(page!=='reports')return;$('#report').innerHTML=`<div class="metrics">${[['Выручка за период',rub(r.revenue)],['Поступления − возвраты',rub(r.receipts)],['Продаж / возвратов',r.sale_count+' / '+r.refund_count],['Текущий долг партнёров',rub(r.debt)]].map(([l,v])=>`<div class="metric"><span class="muted">${l}</span><strong>${v}</strong></div>`).join('')}</div><div class="panel"><h2>Что входит в отчёт</h2><p>Продажи до возвратов: ${rub(r.gross)}. Возвраты: ${rub(r.refunds)}. Наличными принято за вычетом возвратов: ${rub(r.cash)}. Списаний: ${r.writeoffs}.</p><p>Прибыль пока не рассчитывается: для неё нужны подтверждённая себестоимость, расходы и правила списания ингредиентов.</p></div>`;}catch(e){notify(e.message);}}
+let reportRevision=0;
+async function loadReport(){const rev=++reportRevision,target=$('#report'),point=locationId;
+ const current=()=>rev===reportRevision&&target.isConnected&&point===locationId;
+ const from=$('#from').value,to=$('#to').value;if(!from||!to||from>to)return notify('Проверьте даты');try{const r=live?await api('report',{location_id:locationId,from,to}):CRMCore.report(CRMCore.reduce(demoEvents),locationId,from,to);if(!current())return;target.innerHTML=`<div class="metrics">${[['Выручка за период',rub(r.revenue)],['Поступления − возвраты',rub(r.receipts)],['Продаж / возвратов',r.sale_count+' / '+r.refund_count],['Текущий долг партнёров',rub(r.debt)]].map(([l,v])=>`<div class="metric"><span class="muted">${l}</span><strong>${v}</strong></div>`).join('')}</div><div class="panel"><h2>Что входит в отчёт</h2><p>Продажи до возвратов: ${rub(r.gross)}. Возвраты: ${rub(r.refunds)}. Наличными принято за вычетом возвратов: ${rub(r.cash)}. Списаний: ${r.writeoffs}.</p><p>Прибыль пока не рассчитывается: для неё нужны подтверждённая себестоимость, расходы и правила списания ингредиентов.</p></div>`;}catch(e){if(current())target.textContent=e.message;}}
 const orderLabels={new:'Новый',accepted:'Принят · резерв',ready:'Готов',fulfilled:'Выдан',cancelled:'Отменён'};
 function renderOrders(){
  const orders=(data.orders||[]).filter(o=>o.location_id===locationId);
  $('#content').innerHTML=`<div class="toolbar"><button onclick="refresh()">Обновить заказы</button></div>`+orders.map(o=>{
   const online=o.source==='site-paid',paid=o.payment_status==='paid',refunded=o.payment_status==='refunded';
-  return `<article class="panel"><h2>Заказ ${o.source==='site-paid'?esc(o.external_id.slice(-6).toUpperCase()):short(o.id)} · ${esc(orderLabels[o.status]||o.status)}</h2>${online?`<p class="badge">${refunded?'Оплата возвращена':paid?'Оплачен онлайн':'Проверяем оплату'}</p>`:''}${o.pilot?'<p class="muted">Тест оплаты · без приготовления</p>':''}<p>${date(o.created_at)} · ${esc(o.due_at)} · ${o.mode==='delivery'?'Доставка':'Самовывоз'}</p><p>${esc(o.customer.name)} · ${esc(o.customer.phone)}<br>${esc(o.customer.address||'')}</p><p>${o.lines.map(l=>esc(l.name)+' × '+l.qty).join('<br>')}</p><p>${esc(o.comment||'')}</p><strong>${rub(o.total)}</strong><div class="toolbar">${o.status==='new'&&(!online||paid)?`<button data-order="${esc(o.id)}" data-status="accepted">${o.pilot?'Принять тест':'Принять и зарезервировать'}</button>`:''}${o.status==='accepted'&&(!online||paid)?`<button data-order="${esc(o.id)}" data-status="ready">Готов</button>`:''}${o.status==='ready'&&(!online||paid)?`<button data-fulfill="${esc(o.id)}">${online?'Подтвердить выдачу':'Выдать и учесть оплату'}</button>`:''}${['new','accepted','ready'].includes(o.status)?`<button data-order="${esc(o.id)}" data-status="cancelled">Отменить</button>`:''}</div>${online&&o.status==='cancelled'&&paid?'<p class="muted">Заказ отменен. Возврат денег оформляется отдельно в банке.</p>':''}</article>`;
+  return `<article class="panel"><h2>Заказ ${o.source==='site-paid'?esc(o.external_id.slice(-6).toUpperCase()):short(o.id)} · ${esc(orderLabels[o.status]||o.status)}</h2>${online?`<p class="badge">${refunded?'Оплата возвращена':paid?'Оплачен онлайн':'Проверяем оплату'}</p>`:''}${o.pilot?'<p class="muted">Тест оплаты · без приготовления</p>':''}<p>${date(o.created_at)} · ${esc(o.due_at)} · ${o.mode==='delivery'?'Доставка':'Самовывоз'}</p><p>${esc(o.customer?.name||'Контакт не указан')} · ${esc(o.customer?.phone)}<br>${esc(o.customer?.address||'')}</p><p>${o.lines.map(l=>esc(l.name)+' × '+l.qty).join('<br>')}</p><p>${esc(o.comment||'')}</p><strong>${rub(o.total)}</strong><div class="toolbar">${o.status==='new'&&(!online||paid)?`<button data-order="${esc(o.id)}" data-status="accepted">${o.pilot?'Принять тест':'Принять и зарезервировать'}</button>`:''}${o.status==='accepted'&&(!online||paid)?`<button data-order="${esc(o.id)}" data-status="ready">Готов</button>`:''}${o.status==='ready'&&(!online||paid)?`<button data-fulfill="${esc(o.id)}">${online?'Подтвердить выдачу':'Выдать и учесть оплату'}</button>`:''}${['new','accepted','ready'].includes(o.status)?`<button data-order="${esc(o.id)}" data-status="cancelled">Отменить</button>`:''}</div>${online&&o.status==='cancelled'&&paid?'<p class="muted">Заказ отменен. Возврат денег оформляется отдельно в банке.</p>':''}</article>`;
  }).join('');
  if(!orders.length)$('#content').innerHTML+='<div class="panel">Пока нет заказов</div>';
  $('#content').querySelectorAll('[data-order]').forEach(b=>b.onclick=()=>{
@@ -338,7 +547,7 @@ function renderOrders(){
  });
 }
 function renderSettings(){$('#content').innerHTML=`<div class="split"><div class="panel"><h2>Подключение</h2><p>${telegramData()?'Telegram передал данные аккаунта. Проверяем доступ сотрудника автоматически — личный ключ не требуется.':'Адрес CRM уже указан. Для входа из обычного браузера введите личный ключ.'}</p><label for="api">Адрес API / HTTPS-прокси</label><input id="api" type="url" style="width:100%" value="${esc(apiUrl)}" placeholder="https://ваш-сервер/crm-api"><label for="token" ${telegramData()?'hidden':''}>Личный ключ доступа</label><input id="token" type="${telegramData()?'hidden':'password'}" style="width:100%" autocomplete="off"><p class="key-note">${telegramData()?'Доступ определяется по Telegram ID и роли в CRM.':'Ключ хранится только в памяти этой вкладки. Через рабочего бота доступен автоматический вход.'}</p><p id="connection-error" class="danger" role="alert">${esc(connectionError)}</p><button id="connect-button" class="primary" onclick="connect()">${telegramData()?'Повторить вход через Telegram':'Подключить'}</button><button onclick="disconnect()">Открыть демонстрацию</button></div><div class="panel"><h2>Состояние первой версии</h2><p>Готовая основа: продажи и полные возвраты, долг и погашение, смены, наличные, склад готовых изделий и отчёты.</p><p>Заказы с сайта: приём, резервирование, готовность, выдача и отмена. Следующие этапы: авторизация партнёров, техкарты, партии и сроки годности.</p><p>Модули подключаются к вашей таблице после установки Apps Script.</p>${pending?'<p class="danger">Есть операция без подтверждения. Повторите её с тем же ID, чтобы проверить результат без дубля.</p><button onclick="retryPending()">Повторить операцию</button>':''}</div></div>`;}
-async function api(action,d,requestId){if(!apiUrl)throw Error('Не указан адрес API');const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),40000);try{const res=await fetch(apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,data:d,request_id:requestId,accessToken,initData:telegramData()}),cache:'no-store',signal:ctrl.signal});if(!res.ok)throw Error('API вернул HTTP '+res.status);const json=await res.json();if(!json.ok){const err=new Error(json.error||'Ошибка операции');err.confirmed=!json.uncertain;throw err;}return json.data;}finally{clearTimeout(timer);}}
+async function api(action,d,requestId,expectedEmployee){if(!apiUrl)throw Error('Не указан адрес API');const started=performance.now(),ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),40000);try{const res=await fetch(apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,data:d,request_id:requestId,expected_employee:expectedEmployee,accessToken,initData:telegramData()}),cache:'no-store',signal:ctrl.signal});if(!res.ok)throw Error('API вернул HTTP '+res.status);const json=await res.json();if(!json.ok){const err=new Error(json.error||'Ошибка операции');err.confirmed=action==='sale.create'?json.uncertain===false:!json.uncertain;err.stockIssue=json.stock_issue;throw err;}const inventory=json.data?.inventory;if(inventory&&typeof inventory==='object')inventoryClock.set(inventory,started);return json.data;}finally{clearTimeout(timer);}}
 async function connect(automatic=false){
  if(busy)return;
  if(pending)return notify('Сначала повторите неподтверждённую операцию');
@@ -349,27 +558,153 @@ async function connect(automatic=false){
  try{
   const next=await api('bootstrap',{});
   if(!next||!Array.isArray(next.products)||!Array.isArray(next.locations)||!next.employee)throw Error('Скрипт вернул неполные данные CRM');
-  data=next;live=true;demoMode=false;localStorage.setItem('crmApiUrl',apiUrl);locationId=data.locations[0]?.id||'';cart={};category='';search='';page='sale';
+  listQueries.clear();data=next;live=true;demoMode=false;localStorage.setItem('crmApiUrl',apiUrl);locationId=data.locations.some(l=>l.id===locationId)?locationId:data.locations[0]?.id||'';clearSaleCart();category='';search='';page='sale';
+  await restoreSale();
   notify('Таблица подключена · '+data.products.length+' позиций');
  }catch(e){
   connectionError=e.message==='Failed to fetch'?'Браузер не смог связаться со скриптом. Проверьте адрес /exec, доступ к развёртыванию и соединение.':e.name==='AbortError'?'Скрипт не ответил за 40 секунд. Попробуйте подключиться ещё раз.':e.message;
   page='settings';notify(connectionError);
  }finally{busy=false;render();}
 }
-function disconnect(){if(busy)return;if(pending)return notify('Сначала повторите неподтверждённую операцию');live=false;demoMode=true;connectionError='';accessToken='';cart={};locationId='CAFE';category='';search='';page='sale';resetDemo();render();}
-async function refresh(){if(busy)return;if(live)try{data=await api('bootstrap',{});render();}catch(e){notify(e.message);}else render();}
+function disconnect(){if(busy)return;if(pending)return notify('Сначала повторите неподтверждённую операцию');listQueries.clear();live=false;demoMode=true;connectionError='';accessToken='';clearSaleCart();locationId='CAFE';category='';search='';page='sale';resetDemo();render();}
+let refreshing=false;
+async function refresh(){
+ if(busy||refreshing)return;
+ if(!live){render();return;}
+ const previous=data,endpoint=apiUrl;
+ refreshing=true;
+ const button=$('#sale-refresh');
+ if(button){button.disabled=true;button.textContent='Обновляем…';}
+ renderSaleFeedback();
+ try{
+   const next=await api('bootstrap',{});
+   if(live&&!busy&&previous===data&&apiUrl===endpoint){
+     const method=$('#payment')?.value,partner=$('#partner')?.value;
+     data=next;
+     if(page==='sale'&&!pending)saleFeedback={message:'Остатки обновлены. Проверьте позицию ещё раз.',actions:[]};
+     render();
+     if(page==='sale'&&method){$('#payment').value=method;$('#partner').value=partner||'';}
+   }
+ }catch(e){
+   if(page==='sale'&&!pending)showSaleFeedback('Не удалось обновить остатки. Проверьте соединение и повторите.',[['Обновить остатки',refresh]]);
+   else notify(e.message);
+ }finally{
+   refreshing=false;
+   const current=$('#sale-refresh');
+   if(current){current.disabled=false;current.textContent='Обновить остатки';}
+   renderSaleFeedback();
+ }
+}
 function applyResponse(action,response){
  if(action==='catalog.availability'){
   if(!response?.site_availability)throw Error('CRM не подтвердила наличие. Проверьте состояние повторно.');
   data={...data,site_availability:response.site_availability};
  }else data=response;
 }
-async function mutate(action,d){if(busy)throw Error('Дождитесь завершения операции');if(pending)throw Error('Повторите неподтвержденную операцию в настройках');busy=true;if(!$('#dialog').open)document.body.classList.add('loading');try{if(live){pending={action,data:d,id:crypto.randomUUID()};try{applyResponse(action,await api(action,d,pending.id));pending=null;}catch(e){if(e.confirmed)pending=null;throw e;}}else demoMutate(action,d);}finally{busy=false;document.body.classList.remove('loading');}}
-async function retryPending(){if(!pending||busy)return;busy=true;try{applyResponse(pending.action,await api(pending.action,pending.data,pending.id));pending=null;cart={};$('#dialog').close();render();notify('Операция подтверждена');}catch(e){if(e.confirmed)pending=null;notify(e.message);}finally{busy=false;}}
+let recoveryKey='';
+async function digest(value){
+ const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));
+ return Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function storedSale(){
+ const raw=localStorage.getItem(recoveryKey);if(raw===null)return null;
+ const r=JSON.parse(raw);
+ if(r.owner!==data.employee.id||typeof r.body!=='string'||r.hash!==await digest(JSON.stringify([r.owner,r.point,r.id,r.body])))throw Error('Запись восстановления повреждена. Сверьте журнал с менеджером.');
+ const body=JSON.parse(r.body);
+ if(body.location_id!==r.point||!data.locations.some(l=>l.id===r.point))throw Error('Исходная точка недоступна. Нужна сверка журнала.');
+ return {id:r.id,action:'sale.create',data:body,owner:r.owner,hash:r.hash};
+}
+function lockSale(fn){
+ if(!recoveryKey||!navigator.locks)throw Error('Защищённое хранилище кассы недоступно. Откройте CRM в поддерживаемом браузере.');
+ return navigator.locks.request(recoveryKey,{ifAvailable:true},lock=>{
+   if(!lock)throw Error('Другая вкладка проверяет продажу. Дождитесь результата.');
+   return fn();
+ });
+}
+async function verifyRecoveryScope(){
+ const key='moline-sale-v1:'+await digest(JSON.stringify([apiUrl,data.employee.id]));
+ if(key!==recoveryKey)throw Error('Сотрудник или подключение изменились. Откройте CRM снова.');
+}
+async function beginSale(body){
+ await verifyRecoveryScope();
+ if(data.capabilities?.sale_receipt!==1)throw Error('Обновите подключение CRM: сервер не поддерживает проверку продажи.');
+ await lockSale(async()=>{
+   const old=await storedSale();
+   if(old){pending=old;locationId=old.data.location_id;render();throw Error('Сначала проверьте предыдущую продажу');}
+   const r={owner:data.employee.id,point:body.location_id,id:crypto.randomUUID(),body:JSON.stringify(body)};
+   r.hash=await digest(JSON.stringify([r.owner,r.point,r.id,r.body]));
+   localStorage.setItem(recoveryKey,JSON.stringify(r));
+   pending=await storedSale();
+   try{const response=await api('sale.create',pending.data,pending.id,r.owner);
+    if(response?.employee?.id!==r.owner||!Array.isArray(response.sales))throw Error('Неполный ответ кассы');
+    applyResponse('sale.create',response);
+   }
+   catch(e){if(e.confirmed){localStorage.removeItem(recoveryKey);pending=null;}throw e;}
+   localStorage.removeItem(recoveryKey);pending=null;
+ });
+}
+async function restoreSale(){
+ recoveryKey='moline-sale-v1:'+await digest(JSON.stringify([apiUrl,data.employee.id]));
+ pending=await storedSale();if(!pending)return;
+ locationId=pending.data.location_id;
+ await recoverSale(false,true);
+}
+async function recoverSale(retry,connecting=false){
+ if(!pending||(!connecting&&busy))return;
+ const op=pending;busy=true;
+ try{
+  await lockSale(async()=>{
+   await verifyRecoveryScope();
+   const saved=await storedSale();
+   if(saved && saved.hash!==op.hash){pending=saved;locationId=saved.data.location_id;throw Error('В другой вкладке начата следующая продажа. Проверьте её результат.');}
+   const result=await api('sale.receipt',op.data,op.id,op.owner);
+   if(result?.status==='committed' && result.request_id===op.id){
+    const snapshot=await api('bootstrap',{});
+    if(snapshot?.employee?.id!==op.owner||!Array.isArray(snapshot.sales))throw Error('Не удалось подтвердить сотрудника');
+    applyResponse(op.action,snapshot);
+   }else if(result?.status==='missing' && saved && !retry){
+    saleFeedback={message:'В журнале пока нет этой продажи. Можно отправить исходную продажу с тем же ID.',actions:[['Отправить исходную продажу',()=>recoverSale(true)],['Проверить операцию',retryPending]]};return;
+   }else if(result?.status==='missing' && saved && retry){
+    const response=await api(op.action,op.data,op.id,op.owner);
+    if(response?.employee?.id!==op.owner||!Array.isArray(response.sales))throw Error('Не удалось подтвердить сотрудника');
+    applyResponse(op.action,response);
+   }else throw Error('Требуется сверка документа с менеджером.');
+   if(saved)localStorage.removeItem(recoveryKey);
+   pending=null;clearSaleCart();
+   saleFeedback={message:'Операция подтверждена. Документ доступен в разделе «Документы».',actions:[]};notify('Операция подтверждена');
+  });
+ }catch(e){saleFeedback={message:'Результат не подтверждён. '+e.message,actions:[['Проверить операцию',retryPending]]};}
+ finally{busy=connecting;render();}
+}
+
+async function mutate(action,d){if(busy)throw Error('Дождитесь завершения операции');if(pending)throw Error('Повторите неподтвержденную операцию в настройках');busy=true;if(page!=='sale'&&!$('#dialog').open)document.body.classList.add('loading');try{if(live && action==="sale.create"){await beginSale(d);return;}if(live){pending={action,data:d,id:crypto.randomUUID()};try{applyResponse(action,await api(action,d,pending.id));pending=null;}catch(e){if(e.confirmed)pending=null;throw e;}}else demoMutate(action,d);}finally{busy=false;document.body.classList.remove('loading');}}
+async function retryPending(){
+ if(!pending||busy)return;
+ if(pending.action==='sale.create'){await recoverSale(false);return;}
+ const operation=pending;
+ busy=true;
+ showSaleFeedback('Проверяем операцию с прежним ID.',[],'Продажа · '+pointName(),false);
+ let message='';
+ try{
+   applyResponse(operation.action,await api(operation.action,operation.data,operation.id));
+   pending=null;saleFeedback=null;
+   if(operation.action==='sale.create')clearSaleCart();
+   $('#dialog').close();
+   message='Операция подтверждена';
+ }catch(error){
+   if(error.confirmed)pending=null;
+   if(page==='sale')explainSale(pending?saleError('pending'):error,null,'','sell');
+   else {saleFeedback=null;message=pending?'Ответ ещё не получен. Оставьте вкладку открытой и проверьте операцию снова.':error.message;}
+ }finally{
+   busy=false;
+   render();
+   if(message)notify(message);
+ }
+}
 function demoMutate(type,d){const s=CRMCore.reduce(demoEvents),sh=currentShift(),check=CRMCore.check,m=CRMCore.money,q=CRMCore.qty,p={},id='demo-'+(++demoCounter);const needShift=()=>check(sh,'Сначала откройте смену');
  if(type==='shift.open'){check(!sh,'Смена уже открыта');p.id=id;p.opening_cash=m(d.opening_cash);check(p.opening_cash>=0,'Неверная сумма');}
  else if(type==='shift.close'){needShift();p.shift_id=sh.id;p.actual_cash=m(d.actual_cash);check(p.actual_cash>=0,'Неверная сумма');p.expected_cash=CRMCore.expectedCash(s,sh.id);p.comment=d.reason;}
- else if(type==='sale.create'){needShift();p.id=id;p.shift_id=sh.id;p.partner_id=d.partner_id;p.lines=d.lines.map(l=>{const x=data.products.find(x=>x.id===l.product_id);check(!x.stock_tracked||l.qty<=available(x),'Недостаточно остатка');return {product_id:x.id,name:x.name,qty:l.qty,price:x.price,cost:x.cost,stock_tracked:x.stock_tracked,line_total:Math.round(l.qty*x.price)};});p.total=p.lines.reduce((a,l)=>a+l.line_total,0);p.payment=d.method==='unpaid'?null:{method:d.method,amount:p.total};}
+ else if(type==='sale.create'){needShift();p.id=id;p.shift_id=sh.id;p.partner_id=d.partner_id;p.stock_usage=cartPlan(Object.fromEntries(d.lines.map(l=>[l.product_id,l.qty])));p.lines=d.lines.map(l=>{const x=data.products.find(x=>x.id===l.product_id);return {product_id:x.id,name:x.name,qty:l.qty,price:x.price,cost:x.cost,stock_tracked:x.stock_tracked,line_total:Math.round(l.qty*x.price)};});p.total=p.lines.reduce((a,l)=>a+l.line_total,0);p.payment=d.method==='unpaid'?null:{method:d.method,amount:p.total};}
  else if(type==='payment.add'){needShift();const sale=s.sales[d.sale_id];p.shift_id=sh.id;p.sale_id=sale.id;p.method=d.method;p.amount=m(d.amount);check(p.amount>0&&p.amount<=sale.total-sale.paid,'Проверьте сумму');}
  else if(type==='sale.refund'){needShift();const sale=s.sales[d.sale_id];check(sale.status==='sold','Возврат уже выполнен');p.sale_id=sale.id;p.shift_id=sh.id;p.restock=d.restock;p.reason=d.reason;const sums={};s.payments.filter(x=>x.sale_id===sale.id).forEach(x=>sums[x.method]=(sums[x.method]||0)+x.amount);p.payments=Object.keys(sums).map(method=>({method,amount:sums[method]}));check((sums.cash||0)<=CRMCore.expectedCash(s,sh.id),'Недостаточно наличных для возврата');}
  else if(type.startsWith('stock.')){p.product_id=d.product_id;p.reason=d.reason;const n=q(d.qty),stock=s.stock[CRMCore.key(locationId,d.product_id)]||0;check(n>=0&&(type==='stock.count'||n>0),'Проверьте количество');p.delta=type==='stock.count'?q(n-stock):type==='stock.receive'?n:-n;check(stock+p.delta>=0,'Недостаточно остатка');if(type==='stock.transfer')p.to_location=d.to_location;}
@@ -394,7 +729,7 @@ let refreshingOrders=false;
 setInterval(async()=>{
  if(!live||page!=='orders'||busy||pending||document.hidden||$('#dialog').open||refreshingOrders)return;
  refreshingOrders=true;
- try{const next=await api('bootstrap',{});if(live&&page==='orders'&&!busy&&!pending&&!$('#dialog').open){data=next;renderOrders();}}
+ try{const previous=data,next=await api('bootstrap',{});if(live&&page==='orders'&&data===previous&&!busy&&!pending&&!$('#dialog').open){data=next;renderOrders();}}
  catch{}finally{refreshingOrders=false;}
 },20000);
 

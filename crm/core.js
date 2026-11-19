@@ -44,25 +44,43 @@ var CRMCore = (function () {
       s.events.push(e);
     }); return s;
   }
-  function reserved(s,location,product,except) {
-    return qty(Object.values(s.orders||{}).filter(o=>o.id!==except&&o.location_id===location&&['accepted','ready'].includes(o.status)).reduce((a,o)=>a+(o.stock_usage||o.lines.filter(l=>l.stock_tracked).map(l=>({product_id:l.product_id,qty:l.qty}))).filter(l=>l.product_id===product).reduce((n,l)=>n+l.qty,0),0));
+  function stockError(code,id,stockId,needed,available,message) {
+    var error=new Error(message);
+    error.stockIssue={code:code,product_id:id,stock_id:stockId,needed:needed,available:available};
+    return error;
   }
-  function planStock(s,location,lines,recipes,except) {
-    var usage={},left={};
-    function remaining(id){if(left[id]===undefined)left[id]=qty((s.stock[key(location,id)]||0)-reserved(s,location,id,except));return left[id];}
-    function take(id,n){n=qty(n);check(n>=0&&remaining(id)>=n,'Недостаточно остатка: '+id);left[id]=qty(left[id]-n);usage[id]=qty((usage[id]||0)+n);}
+  // The browser supplies stock already made available by the server. The same
+  // allocator is used under ScriptLock with freshly computed availability.
+  function planAvailable(available,lines,recipes) {
+    var usage=Object.create(null),left=Object.create(null);
+    function remaining(id){
+      if(left[id]===undefined)left[id]=qty(available(id));
+      return left[id];
+    }
+    function take(id,n,productId){
+      var free=remaining(id);
+      if(free<n)throw stockError('base_shortage',productId,id,n,Math.max(0,free),'Недостаточно остатка основы: '+id);
+      left[id]=qty(free-n);
+      usage[id]=qty((usage[id]||0)+n);
+    }
     // Allocate finished products before any recipe consumes their shared base.
     var shortages=[];
-    lines.filter(l=>l.stock_tracked).forEach(l=>{
-      var r=recipes[l.product_id],mode=l.stock_mode||'auto';
-      check(['auto','ready','base'].includes(mode),'Неверный способ сборки');
-      check(mode!=='base'||r,'Для товара нет рецепта сборки');
-      var ready=mode==='base'?0:Math.min(l.qty,Math.max(0,remaining(l.product_id)));
-      if(ready)take(l.product_id,ready);
-      var missing=qty(l.qty-ready);
-      if(missing){check(r&&mode!=='ready','Недостаточно остатка готового товара: '+l.product_id);shortages.push({recipe:r,qty:missing});}
+    lines.forEach(l=>{
+      var id=l.product_id,r=recipes[id],mode=l.stock_mode||'auto',requested=qty(l.qty);
+      if(requested<=0||r&&!Number.isInteger(requested))
+        throw stockError('invalid_quantity',id,id,requested,0,'Проверьте количество: '+id);
+      if(!['auto','ready','base'].includes(mode)||(mode==='base'&&!r)||
+         (r&&(!l.stock_tracked||!Number.isFinite(r.base_qty)||r.base_qty<=0)))
+        throw stockError('invalid_recipe',id,id,requested,0,'Проверьте рецепт сборки: '+id);
+      if(!l.stock_tracked)return;
+      var ready=mode==='base'?0:Math.min(requested,Math.max(0,remaining(id)));
+      if(ready)take(id,ready,id);
+      var missing=qty(requested-ready);
+      if(!missing)return;
+      if(!r||mode==='ready')throw stockError('ready_shortage',id,id,requested,ready,'Недостаточно остатка готового товара: '+id);
+      shortages.push({productId:id,recipe:r,qty:missing});
     });
-    shortages.forEach(x=>take(x.recipe.base_product_id,qty(x.qty*x.recipe.base_qty)));
+    shortages.forEach(x=>take(x.recipe.base_product_id,qty(x.qty*x.recipe.base_qty),x.productId));
     return Object.keys(usage).map(id=>({product_id:id,qty:usage[id]}));
   }
   function expectedCash(s, shiftId) {
@@ -78,7 +96,7 @@ var CRMCore = (function () {
     var gross=sales.reduce(function(a,e){return a+e.payload.total;},0), refunded=returns.reduce(function(a,e){return a+s.sales[e.payload.sale_id].total;},0);
     return {from:from,to:to,gross:gross,refunds:refunded,revenue:gross-refunded,sale_count:sales.length,refund_count:returns.length,receipts:receipts.reduce(function(a,p){return a+p.amount;},0),cash:receipts.filter(function(p){return p.method==='cash';}).reduce(function(a,p){return a+p.amount;},0),debt:Object.values(s.sales).filter(function(x){return x.status==='sold'&&(!location||x.location_id===location);}).reduce(function(a,x){return a+x.total-x.paid;},0),writeoffs:events.filter(function(e){return e.type==='stock.writeoff';}).length};
   }
-  return {check:check,money:money,qty:qty,key:key,reduce:reduce,reserved:reserved,planStock:planStock,expectedCash:expectedCash,report:report};
+  return {check:check,money:money,qty:qty,key:key,reduce:reduce,planAvailable:planAvailable,expectedCash:expectedCash,report:report};
 })();
 if(typeof module!=='undefined')module.exports=CRMCore;
 
