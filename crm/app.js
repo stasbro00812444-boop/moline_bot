@@ -339,7 +339,7 @@ function renderProductAdmin(){
   const edit=eligible?`<button class="product-edit" data-site-edit="${esc(p.id)}" aria-label="${card||legacy?'Редактировать':'Оформить'}: ${esc(p.name)}" title="${card||legacy?'Редактировать':'Оформить'}" ${canEdit?'':'disabled'}>${pencil}</button>`:'';
   const publish=eligible?(published?`<button class="product-state-action" data-site-unpublish="${esc(p.id)}" ${canEdit?'':'disabled'}>Снять с сайта</button>`:card?`<button class="product-state-action" data-site-publish="${esc(p.id)}" ${canEdit?'':'disabled'}>Опубликовать</button>`:''):'';
   const archive=eligible?`<button class="product-archive danger" data-product-archive="${esc(p.id)}" ${canEdit?'':'disabled'}>Удалить товар</button>`:'';
-  return `<article class="product-admin-row">${image}<div class="product-admin-main"><strong>${esc(p.name)}</strong><div class="product-admin-meta"><span>${rub(shown)}</span><span class="product-admin-status">${state}</span></div>${publish}${archive}</div>${edit}</article>`;
+  return `<article class="product-admin-row">${image}<div class="product-admin-main"><strong>${esc(p.name)}</strong><div class="product-admin-meta"><span>${rub(shown)}</span><span class="product-admin-status">${state}</span></div>${p.stock_tracked&&live?shiftProduct(p):''}${publish}${archive}</div>${edit}</article>`;
  }).join('')}</div></div>`;
  $('#new-product').onclick=()=>productDialog();
  $('#content').querySelectorAll('[data-site-edit]').forEach(b=>b.onclick=()=>productDialog(b.dataset.siteEdit));
@@ -347,6 +347,26 @@ function renderProductAdmin(){
  $('#content').querySelectorAll('[data-site-unpublish]').forEach(b=>b.onclick=()=>unpublishSiteProduct(b.dataset.siteUnpublish));
  $('#content').querySelectorAll('[data-product-archive]').forEach(b=>b.onclick=()=>archiveProduct(b.dataset.productArchive));
 }
+function shiftProduct(p){
+ const inventory=data.inventory?.locations?.[locationId];
+ if(!inventory)return '';
+ const stock=data.stock[locationId+':'+p.id]||0,held=inventory.reserved[p.id]||0;
+ const dates=data.bake?.[p.id]||[];
+ return `<div class="shift-product"><p>В наличии <b>${stock}</b> · В резерве <b>${held}</b> · Свободно сегодня <b>${inventory.available[p.id]??0}</b></p>
+ ${inventory.carry?.[p.id]?`<p>Осталось с прошлых смен: ${inventory.carry[p.id]} шт. · ожидает решения цеха</p>`:''}
+ ${held>stock-(inventory.carry?.[p.id]||0)?`<p>Не хватает ${held-stock+(inventory.carry?.[p.id]||0)} шт. для выдачи</p>`:''}
+ <p>Предзаказ: ${esc(dates.find(x=>x.open)?.date||'дата не открыта')}</p>
+ <button data-batch="${esc(p.id)}">Внести партию</button>
+ ${locationId==='CAFE'&&p.category.toLowerCase()==='выпечка'?`<button data-bake="${esc(p.id)}">План выпечки</button>`:''}</div>`;
+}
+document.addEventListener('click',e=>{
+ const batch=e.target.closest('[data-batch]'),plan=e.target.closest('[data-bake]');
+ if(!batch&&!plan)return;
+ const id=batch?.dataset.batch||plan.dataset.bake,p=data.products.find(x=>x.id===id);
+ if(batch)return dialog('Внести партию · '+p.name,input('qty','Испечено, шт.','number','','min="1" step="1" required'),v=>mutate('stock.receive',{location_id:locationId,product_id:id,qty:Number(v.qty),reason:'Утренняя партия'}));
+ const rows=data.bake?.[id]||[];
+ dialog('План выпечки · '+p.name,'<p>Сохраните план, чтобы продавать готовый остаток по этой позиции. Лимит задаётся отдельно на каждую дату.</p>'+rows.map(x=>`<p>${esc(x.date)} · план ${x.capacity} · оплачено ${x.promised} · свободно ${x.free}</p>`).join('')+input('date','Дата получения','date','','required')+input('capacity','Лимит в штуках (0 — закрыть)','number','','min="0" step="1" required'),v=>mutate('bake.plan',{location_id:locationId,product_id:id,date:v.date,capacity:Number(v.capacity)}));
+});
 async function archiveProduct(id){
  const product=data.products.find(p=>p.id===id);if(!product)return;
  if(Object.keys(cart).some(key=>key===id))return notify('Сначала уберите товар из текущей продажи');
@@ -533,9 +553,14 @@ function renderOrders(){
  const orders=(data.orders||[]).filter(o=>o.location_id===locationId);
  $('#content').innerHTML=`<div class="toolbar"><button onclick="refresh()">Обновить заказы</button></div>`+orders.map(o=>{
   const online=o.source==='site-paid',paid=o.payment_status==='paid',refunded=o.payment_status==='refunded';
-  return `<article class="panel"><h2>Заказ ${o.source==='site-paid'?esc(o.external_id.slice(-6).toUpperCase()):short(o.id)} · ${esc(orderLabels[o.status]||o.status)}</h2>${online?`<p class="badge">${refunded?'Оплата возвращена':paid?'Оплачен онлайн':'Проверяем оплату'}</p>`:''}${o.pilot?'<p class="muted">Тест оплаты · без приготовления</p>':''}<p>${date(o.created_at)} · ${esc(o.due_at)} · ${o.mode==='delivery'?'Доставка':'Самовывоз'}</p><p>${esc(o.customer?.name||'Контакт не указан')} · ${esc(o.customer?.phone)}<br>${esc(o.customer?.address||'')}</p><p>${o.lines.map(l=>esc(l.name)+' × '+l.qty).join('<br>')}</p><p>${esc(o.comment||'')}</p><strong>${rub(o.total)}</strong><div class="toolbar">${o.status==='new'&&(!online||paid)?`<button data-order="${esc(o.id)}" data-status="accepted">${o.pilot?'Принять тест':'Принять и зарезервировать'}</button>`:''}${o.status==='accepted'&&(!online||paid)?`<button data-order="${esc(o.id)}" data-status="ready">Готов</button>`:''}${o.status==='ready'&&(!online||paid)?`<button data-fulfill="${esc(o.id)}">${online?'Подтвердить выдачу':'Выдать и учесть оплату'}</button>`:''}${['new','accepted','ready'].includes(o.status)?`<button data-order="${esc(o.id)}" data-status="cancelled">Отменить</button>`:''}</div>${online&&o.status==='cancelled'&&paid?'<p class="muted">Заказ отменен. Возврат денег оформляется отдельно в банке.</p>':''}</article>`;
+  return `<article class="panel"><h2>Заказ ${o.source==='site-paid'?esc(o.external_id.slice(-6).toUpperCase()):short(o.id)} · ${esc(orderLabels[o.status]||o.status)}</h2>${online?`<p class="badge">${refunded?'Оплата возвращена':paid?'Оплачен онлайн':'Проверяем оплату'}</p>`:''}${o.pilot?'<p class="muted">Тест оплаты · без приготовления</p>':''}<p>${date(o.created_at)} · ${esc(o.due_at)} · ${o.mode==='delivery'?'Доставка':'Самовывоз'}</p><p>${esc(o.customer?.name||'Контакт не указан')} · ${esc(o.customer?.phone)}<br>${esc(o.customer?.address||'')}</p><p>${o.lines.map(l=>esc(l.name)+' × '+l.qty).join('<br>')}</p><p>${esc(o.comment||'')}</p><strong>${rub(o.total)}</strong><div class="toolbar">${o.status==='new'&&(!online||paid)?`<button data-order="${esc(o.id)}" data-status="accepted">${o.pilot?'Принять тест':online?'Принять в работу':'Принять и зарезервировать'}</button>`:''}${o.status==='accepted'&&(!online||paid)?`<button data-order="${esc(o.id)}" data-status="ready">Готов</button>`:''}${o.status==='ready'&&(!online||paid)?`<button data-fulfill="${esc(o.id)}">${online?'Подтвердить выдачу':'Выдать и учесть оплату'}</button>`:''}${['new','accepted','ready'].includes(o.status)?`<button data-order="${esc(o.id)}" data-status="cancelled">Отменить</button>`:''}</div>${online&&o.status==='cancelled'&&paid?'<p class="muted">Заказ отменен. Возврат денег оформляется отдельно в банке.</p>':''}</article>`;
  }).join('');
- if(!orders.length)$('#content').innerHTML+='<div class="panel">Пока нет заказов</div>';
+ for(const hold of data.pending_holds||[]){const minutes=Math.max(0,Math.floor((Date.now()-Date.parse(hold.created))/60000));$('#content').insertAdjacentHTML('beforeend',`<article class="panel"><strong>Резерв № ${esc(hold.id.slice(-6))}</strong><p>${Date.now()>=hold.expires?'Требуется сверка с банком':'Ожидает оплаты'} · ${minutes} мин · получение ${esc(hold.date)}</p><button data-reconcile="${esc(hold.id)}">Сверить с банком</button></article>`);}
+ if(!orders.length&&!data.pending_holds?.length)$('#content').innerHTML+='<div class="panel">Пока нет заказов</div>';
+ $('#content').querySelectorAll('[data-reconcile]').forEach(b=>b.onclick=async()=>{
+   b.disabled=true;try{await api('hold.reconcile',{id:b.dataset.reconcile},crypto.randomUUID());await refresh();notify('Сверка запрошена. До ответа банка резерв сохраняется.');}
+   catch(e){notify(e.message);}finally{b.disabled=false;}
+ });
  $('#content').querySelectorAll('[data-order]').forEach(b=>b.onclick=()=>{
   const o=orders.find(o=>o.id===b.dataset.order),cancel=b.dataset.status==='cancelled';
   const fields=cancel?input('reason','Причина отмены')+(o?.payment_status==='paid'?'<p>Отмена заказа не возвращает деньги. Возврат оформляется отдельно в банке.</p>':''):'<p>Подтвердить изменение заказа?</p>';
