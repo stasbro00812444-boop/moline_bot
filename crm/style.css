@@ -152,24 +152,12 @@ body{--paper:#faf8f3;--ink:#332f31;--accent:#e8b7c5;background:var(--paper);colo
 @media(prefers-reduced-motion:no-preference){#content>.panel,#content>.split,#content>.sale-layout{animation:work-enter .16s ease-out}button:active:not(:disabled){scale:.98}@keyframes work-enter{from{opacity:.8;transform:translateY(3px)}to{opacity:1;transform:none}}}
 
 /* Рабочее место смены */
-body { background: #faf8f3; color: #352e2c; }
-#workspace > header { border-bottom: 1px solid #d8cfc3; padding-bottom: 16px; }
-.header-title h1 { font: normal clamp(32px, 4vw, 48px)/1.1 Georgia, serif; }
-.header-title .eyebrow { color: #715d59; }
-.panel h2, .dialog-heading h2 { font: normal 26px/1.2 Georgia, serif; }
-#sidebar .brand { font: bold italic 32px/1 Georgia, serif; letter-spacing: 0; }
-#sidebar { background: #f2ece3; }
-#nav button.active, #quick-nav button.active, button.primary, .shift-product [data-batch] {
-  background: #e8b7c5; border-color: #c992a4; color: #38252d;
-}
-#content .panel, #content .cart { background-color: #fffefa; }
+#workspace > header { padding-bottom: 16px; }
 .product-admin-row { align-items: start; padding-block: 20px; }
-.product-admin-main strong { font-size: 17px; }
 .shift-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
-.shift-counts dt { font-size: 13px; color: #655751; }
+.shift-counts dt { font-size: 13px; color: #675d57; }
 .shift-counts dd { margin: 2px 0 0; font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.shift-counts div:last-child dd { color: #405e3c; }
-.shift-product { background: #f5f0e7; border-radius: 12px; padding: 16px; margin: 12px 0; }
+.shift-product { background: #f7f5f2; border-radius: 12px; padding: 16px; margin: 12px 0; }
 .shift-product button { margin: 2px 4px 4px 0; }
 @media (max-width: 600px) {
   #workspace > header { padding-bottom: 10px; }
