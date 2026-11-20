@@ -1,0 +1,1 @@
+const MOLINE_LEGACY_IMAGES={BAK_001:'../menu/classic.webp'};
