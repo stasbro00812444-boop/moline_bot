@@ -122,7 +122,7 @@ function render(){
   const visible=id=>(id!=='availability'||!!data.site_availability)&&(id!=='products'||data.capabilities?.product_create===true);
   const button=id=>`<button type="button" data-page="${id}" class="${id===page?'active':''}" ${id===page?'aria-current="page"':''}>${labels[id]}</button>`;
   $('#nav').innerHTML=groups.map(([name,ids])=>'<section><h2>'+name+'</h2>'+ids.filter(visible).map(button).join('')+'</section>').join('');
-  $('#quick-nav').innerHTML=['sale','orders','stock'].map(button).join('');
+  $('#quick-nav').innerHTML=['sale','orders','products','stock'].map(button).join('');
   document.querySelectorAll('[data-page]').forEach(b=>{b.disabled=busy||(!live&&!demoMode&&b.dataset.page!=='settings');b.onclick=()=>{if(busy)return;page=b.dataset.page;setMenu(false,false);render();$('#title').focus({preventScroll:true});window.scrollTo(0,0);};});
   $('#quick-nav').hidden=!live&&!demoMode;
   $('#jump-cart').hidden=true;cartObserver?.disconnect();
@@ -352,7 +352,11 @@ function shiftProduct(p){
  if(!inventory)return '';
  const stock=data.stock[locationId+':'+p.id]||0,held=inventory.reserved[p.id]||0;
  const dates=data.bake?.[p.id]||[];
- return `<div class="shift-product"><p>В наличии <b>${stock}</b> · В резерве <b>${held}</b> · Свободно сегодня <b>${inventory.available[p.id]??0}</b></p>
+ return `<div class="shift-product"><dl class="shift-counts">
+   <div><dt>В наличии</dt><dd>${stock}</dd></div>
+   <div><dt>В резерве</dt><dd>${held}</dd></div>
+   <div><dt>Свободно сегодня</dt><dd>${inventory.available[p.id]??0}</dd></div>
+ </dl>
  ${inventory.carry?.[p.id]?`<p>Осталось с прошлых смен: ${inventory.carry[p.id]} шт. · ожидает решения цеха</p>`:''}
  ${held>stock-(inventory.carry?.[p.id]||0)?`<p>Не хватает ${held-stock+(inventory.carry?.[p.id]||0)} шт. для выдачи</p>`:''}
  <p>Предзаказ: ${esc(dates.find(x=>x.open)?.date||'дата не открыта')}</p>
